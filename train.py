@@ -22,4 +22,4 @@ y = np.random.rand(1, 10, 3)
 
 out = model(x)
 
-print(out)
+print(out.shape)
