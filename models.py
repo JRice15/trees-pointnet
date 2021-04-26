@@ -126,9 +126,56 @@ def pointnet_transform(x_in, kind):
 
     return x_out, trans_matrix
 
-    
 
-def pointnet(npoints, nattributes, reg_weight=0.001):
+def seg_output_flow(local_features, global_feature, outchannels):
+    """
+    Basic segmentation output flow
+    Returns:
+        per-point feature vectors: (B,N,outchannels)
+    """
+    # concat local and global
+    global_feature = layers.Reshape((1,1,1024), name="expand_global_feature_reshape")(x)
+    global_feature = layers.Lambda(
+        lambda feature: tf.tile(feature, [1, npoints, 1, 1]),
+        name="global_feature_tile")(global_feature)
+    
+    full_features = layers.Concatenate(axis=-1)([local_features, global_feature])
+
+    # print("shape of local, global, full:", local_features.shape, global_feature.shape, full_features.shape)
+
+    # output flow
+    x = full_features
+    x = pointnet_conv(512, 1, name="outmlp_conv1")(x)
+    x = pointnet_conv(256, 1, name="outmlp_conv2")(x)
+    x = pointnet_conv(128, 1, name="outmlp_conv3")(x)
+    x = pointnet_conv(128, 1, name="outmlp_conv4")(x)
+
+    x = pointnet_conv(outchannels, 1, name="outmlp_conv_final", 
+                      bn=False, activation=False)(x)
+    x = layers.Reshape((npoints, outchannels), name="output_squeeze")(x)
+    
+    return x
+
+def cls_output_flow(global_feature, outchannels, dropout=0.3):
+    """
+    Basic whole-scene classification output flow
+    returns:
+        global feature vector: (B,outchannels)
+    """
+    x = global_feature
+
+    x = pointnet_dense(512, "outmlp_dense1")(x)
+    if dropout > 0:
+        x = layers.Dropout(dropout)(x)
+    x = pointnet_dense(256, "outmlp_dense2")(x)
+    if dropout > 0:
+        x = layers.Dropout(dropout)(x)
+    x = pointnet_dense(outchannels, "outmlp_dense1")(x)
+
+    return x
+
+
+def pointnet(mode, npoints, nattributes, reg_weight=0.001):
     """
     args:
         npoints: number of points per patch
@@ -170,27 +217,14 @@ def pointnet(npoints, nattributes, reg_weight=0.001):
 
     global_feature = x
 
-    # concat local and global
-    global_feature = layers.Reshape((1,1,1024), name="expand_global_feature_reshape")(x)
-    global_feature = layers.Lambda(
-        lambda feature: tf.tile(feature, [1, npoints, 1, 1]),
-        name="global_feature_tile")(global_feature)
+    # if mode == "pointwise-treetop":
+    #     x = seg_output_flow(local_features, global_feature)
+    # elif mode == "":
+    #     x = cls_output_flow(global_feature)
+    # else:
+    #     raise ValueError("Unknown mode '{}' for pointnet output flow".format(mode))
     
-    full_features = layers.Concatenate(axis=-1)([local_features, global_feature])
-
-    print("local, global, full:", local_features.shape, global_feature.shape, full_features.shape)
-
-    # output flow
-    x = full_features
-    x = pointnet_conv(512, 1, name="outmlp_conv1")(x)
-    x = pointnet_conv(256, 1, name="outmlp_conv2")(x)
-    x = pointnet_conv(128, 1, name="outmlp_conv3")(x)
-    x = pointnet_conv(128, 1, name="outmlp_conv4")(x)
-
-    x = pointnet_conv(50, 1, name="outmlp_conv_final", 
-                      bn=False, activation=False)(x)
-    x = layers.Reshape((npoints, 50), name="output_squeeze")(x)
-    output = x
+    output = layers.Dense(1)(global_feature)
 
     model = Model(inpt, output)
 

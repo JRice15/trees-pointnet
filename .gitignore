@@ -130,5 +130,11 @@ dmypy.json
 
 
 
+.DS_Store
+
+
+# data
+data/
+
 # model outputs
 model.png
