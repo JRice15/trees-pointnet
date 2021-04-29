@@ -67,17 +67,14 @@ def pointnet_conv(outchannels, kernel_size, name, bn=True, activation=True):
 def pointnet_dense(outchannels, name, bn=True, activation=True):
     """
     returns callable pipeline of dense, batchnorm, and relu
-    input: (B,N,1,K)
+    input: (B,N,K)
     """
     def op(x):
-        x = layers.TimeDistributed(
-                layers.Dense(outchannels, kernel_initializer="glorot_normal"),
-                name=name)(x)
+        x = layers.Dense(outchannels, kernel_initializer="glorot_normal", name=name)(x)
         if bn:
-            x = layers.TimeDistributed(
-                    layers.BatchNormalization(), name=name+"_bn")(x)
+            x = layers.BatchNormalization(name=name+"_bn")(x)
         if activation:
-            x = layers.TimeDistributed(layers.ReLU(), name=name+"_relu")(x)
+            x = layers.ReLU(name=name+"_relu")(x)
         return x
     return op
 
@@ -94,25 +91,23 @@ def pointnet_transform(x_in, kind):
     assert kind in ("input", "feature")
     prefix = kind + "_transform_"
 
+    batchsize, ragged_npoints, _, nattributes = x_in.shape
+
     x = x_in
 
     x = pointnet_conv(64, kernel_size=1, name=prefix+"conv1")(x)
     x = pointnet_conv(128, kernel_size=1, name=prefix+"conv2")(x)
     x = pointnet_conv(1024, kernel_size=1, name=prefix+"conv3")(x)
 
-    print(x.shape)
+    x = customlayers.ReduceDims(axis=2)(x) # (B,N,K)
+    x = layers.GlobalMaxPool1D(name=prefix+"maxpool")(x) # (B,K)
 
-    x = layers.MaxPool2D((npoints, 1), name=prefix+"maxpool")(x)
-    x = layers.Flatten(name=prefix+"flatten")(x)
-
-    x = layers.Dense(512, name=prefix+"dense1")(x)
-    x = layers.Dense(256, name=prefix+"dense2")(x)
+    x = pointnet_dense(512, name=prefix+"dense1")(x)
+    x = pointnet_dense(256, name=prefix+"dense2")(x)
 
     trans_matrix = TNet(256, nattributes, name=prefix+"tnet")(x)
     
-    if not inputkind:
-        # squeeze out size-1 dimension
-        x_in = layers.Reshape((npoints, nattributes), name=prefix+"squeeze")(x_in)
+    x_in = layers.Reshape((npoints, nattributes), name=prefix+"squeeze")(x_in)
     
     # apply transformation matrix
     x_out = MatMul(name=prefix+"matmul")([x_in, trans_matrix])
@@ -183,8 +178,7 @@ def pointnet(mode, nattributes, reg_weight=0.001):
     x, inpt_trans_matrix = pointnet_transform(x, kind="input")
 
     # add channels
-    # x = layers.Reshape((npoints, nattributes, 1), name="add_channels_reshape")(x)
-    x = customlayers.ExpandDims(axis=-1)(x)
+    x = customlayers.ExpandDims(axis=2)(x)
 
     # mlp 1
     x = pointnet_conv(64, (1,nattributes), name="mlp1_conv1")(x)
