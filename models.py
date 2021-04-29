@@ -50,7 +50,6 @@ def pointnet_conv(outchannels, kernel_size, name, bn=True, activation=True):
     input: (B,N,1,K)
     """
     def op(x):
-        print("conv:", x.shape)
         x = layers.TimeDistributed(
                 layers.Conv1D(outchannels, kernel_size=kernel_size, padding="valid",
                     kernel_initializer="glorot_normal", name=name+"_inner"), name=name)(x)
@@ -117,7 +116,7 @@ def pointnet_transform(x_in, kind):
 
 def seg_output_flow(local_features, global_feature, outchannels):
     """
-    Basic segmentation output flow
+    Base segmentation output flow
     Returns:
         per-point feature vectors: (B,N,outchannels)
     """
@@ -146,7 +145,7 @@ def seg_output_flow(local_features, global_feature, outchannels):
 
 def cls_output_flow(global_feature, outchannels, dropout=0.3):
     """
-    Basic whole-scene classification output flow
+    Base global classification output flow
     returns:
         global feature vector: (B,outchannels)
     """
@@ -172,14 +171,10 @@ def pointnet(mode, nattributes, reg_weight=0.001):
     inpt = layers.Input((None, nattributes), ragged=True) # (B,N,K)
 
     x = inpt
-
-    # add channels
     x = customlayers.ExpandDims(axis=2, name="add_channels_1")(x) # (B,N,1,K)
 
     # input transform
     x, inpt_trans_matrix = pointnet_transform(x, kind="input") # (B,N,K)
-
-    # add channels
     x = customlayers.ExpandDims(axis=2, name="add_channels_2")(x) # (B,N,1,K)
 
     # mlp 1
@@ -188,9 +183,7 @@ def pointnet(mode, nattributes, reg_weight=0.001):
 
     # feature transform
     x, feat_trans_matrix = pointnet_transform(x, kind="feature") # (B,N,K)
-
-    # expand dims
-    x = customlayers.ExpandDims(axis=2, name="add_channels_3")(x)
+    x = customlayers.ExpandDims(axis=2, name="add_channels_3")(x) # (B,N,1,K)
 
     local_features = x
 
@@ -199,14 +192,13 @@ def pointnet(mode, nattributes, reg_weight=0.001):
     x = pointnet_conv(128, 1, name="mlp2_conv2")(x)
     x = pointnet_conv(1024, 1, name="mlp2_conv3")(x)
 
-    # remove size-1 dim
-    x = customlayers.ReduceDims(axis=2, name="remove_channels")(x)
-
-    # symmetric function: max pool
-    x = layers.GlobalMaxPool1D(name="global_feature_maxpool")(x)
+    # symmetric function: max pooling
+    x = customlayers.ReduceDims(axis=2, name="remove_channels")(x) # (B,N,K)
+    x = layers.GlobalMaxPool1D(name="global_feature_maxpool")(x) # (B,K)
 
     global_feature = x
 
+    # # output flow
     # if mode == "pointwise-treetop":
     #     x = seg_output_flow(local_features, global_feature)
     # elif mode == "":
@@ -223,7 +215,7 @@ def pointnet(mode, nattributes, reg_weight=0.001):
     ortho_diff = tf.matmul(feat_trans_matrix,
                     tf.transpose(feat_trans_matrix, perm=[0,2,1]))
     ortho_diff -= tf.constant(np.eye(dims), dtype=tf.float32)
-    ortho_loss = reg_weight * tf.norm(ortho_diff, ord='euclidean')
+    ortho_loss = reg_weight * tf.nn.l2_loss(ortho_diff)
     model.add_loss(ortho_loss)
     model.add_metric(ortho_loss, name="ortho_loss", aggregation="mean")
 

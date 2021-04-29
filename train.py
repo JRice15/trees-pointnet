@@ -17,6 +17,7 @@ print("Keras version:", keras.__version__)
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--mode")
+parser.add_argument("--epochs",type=int,default=100)
 parser.add_argument("--dist-weight",type=float,help="pointnet-treetop mode: weight on distance vs sum loss")
 args = parser.parse_args()
 pprint(vars(args))
@@ -33,6 +34,7 @@ def loss(a, b):
 model.compile(
     # loss=get_loss(args.mode), 
     loss=keras.losses.mse,
+    metrics=["mse"],
     # loss=loss,
     optimizer=Adam()
 )
@@ -54,7 +56,7 @@ y = tf.constant(y)
 # x = np.random.random((1,10,3))
 # y = np.random.random((1,1))
 
-model.fit(x, y)
+model.fit(x, y, epochs=args.epochs)
 
 out = model(x)
 
