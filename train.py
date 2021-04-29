@@ -19,10 +19,10 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--mode",required=True)
 parser.add_argument("--dist-weight",type=float,help="pointnet-treetop mode: weight on distance vs sum loss")
 args = parser.parse_args()
+pprint(vars(args))
 
 
-
-model = pointnet(args.mode, 10, 3)
+model = pointnet(args.mode, 3)
 # model.summary()
 keras.utils.plot_model(model)
 
@@ -32,19 +32,22 @@ model.compile(
     optimizer=Adam()
 )
 
-# x = [
-#     [[1, 2, 3], [2, 3, 4], [3, 4, 5]],
-#     [[1, 2, 3], [2, 3, 4]],
-#     [[1, 2, 3], [2, 3, 4], [3, 4, 5], [4, 5, 6], [5, 6, 7]],
-# ]
-# y = [
-#     [1, 2, 3],
-#     [1, 2],
-#     [1, 2, 3, 4, 5],
-# ]
+x = [
+    [[1, 2, 3], [2, 3, 4], [3, 4, 5]],
+    [[1, 2, 3], [2, 3, 4]],
+    [[1, 2, 3], [2, 3, 4], [3, 4, 5], [4, 5, 6], [5, 6, 7]],
+]
+y = [
+    [1, 2, 3],
+    [1, 2],
+    [1, 2, 3, 4, 5],
+]
 
-x = np.random.random((1,10,3))
-y = np.random.random((1,1))
+x = tf.ragged.constant(x)
+y = tf.ragged.constant(y)
+
+# x = np.random.random((1,10,3))
+# y = np.random.random((1,1))
 
 model.fit(x, y)
 
