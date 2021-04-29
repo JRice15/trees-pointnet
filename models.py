@@ -53,13 +53,13 @@ def pointnet_conv(outchannels, kernel_size, name, bn=True, activation=True):
         print("conv:", x.shape)
         x = layers.TimeDistributed(
                 layers.Conv1D(outchannels, kernel_size=kernel_size, padding="valid",
-                    kernel_initializer="glorot_normal"), name=name)(x)
+                    kernel_initializer="glorot_normal", name=name+"_inner"), name=name)(x)
         if bn:
             x = layers.TimeDistributed(
-                    layers.BatchNormalization(), name=name+"_bn")(x)
+                    layers.BatchNormalization(name=name+"_bn_inner"), name=name+"_bn")(x)
         if activation:
             x = layers.TimeDistributed(
-                    layers.ReLU(), name=name+"_relu")(x)
+                    layers.ReLU(name=name+"_relu_inner"), name=name+"_relu")(x)
         return x
     return op
 
@@ -107,10 +107,10 @@ def pointnet_transform(x_in, kind):
 
     trans_matrix = TNet(256, nattributes, name=prefix+"tnet")(x)
     
-    x_in = layers.Reshape((npoints, nattributes), name=prefix+"squeeze")(x_in)
+    x_in = customlayers.ReduceDims(axis=2)(x_in)
     
     # apply transformation matrix
-    x_out = MatMul(name=prefix+"matmul")([x_in, trans_matrix])
+    x_out = customlayers.MatMul(3, name=prefix+"matmul")([x_in, trans_matrix])
 
     return x_out, trans_matrix
 
@@ -172,24 +172,25 @@ def pointnet(mode, nattributes, reg_weight=0.001):
     inpt = layers.Input((None, nattributes), ragged=True) # (B,N,K)
 
     x = inpt
-    x = customlayers.ExpandDims(axis=2)(x) # (B,N,1,K)
-
-    # input transform
-    x, inpt_trans_matrix = pointnet_transform(x, kind="input")
 
     # add channels
-    x = customlayers.ExpandDims(axis=2)(x)
+    x = customlayers.ExpandDims(axis=2, name="add_channels_1")(x) # (B,N,1,K)
+
+    # input transform
+    x, inpt_trans_matrix = pointnet_transform(x, kind="input") # (B,N,K)
+
+    # add channels
+    x = customlayers.ExpandDims(axis=2, name="add_channels_2")(x) # (B,N,1,K)
 
     # mlp 1
-    x = pointnet_conv(64, (1,nattributes), name="mlp1_conv1")(x)
+    x = pointnet_conv(64, 1, name="mlp1_conv1")(x)
     x = pointnet_conv(64, 1, name="mlp1_conv2")(x)
 
     # feature transform
-    x, feat_trans_matrix = pointnet_transform(x, kind="feature")
+    x, feat_trans_matrix = pointnet_transform(x, kind="feature") # (B,N,K)
 
     # expand dims
-    batchsize, npoints, nattributes = x.shape
-    x = layers.Reshape((npoints, 1, nattributes), name="expand_dims_reshape")(x)
+    x = customlayers.ExpandDims(axis=2, name="add_channels_3")(x)
 
     local_features = x
 
@@ -199,7 +200,7 @@ def pointnet(mode, nattributes, reg_weight=0.001):
     x = pointnet_conv(1024, 1, name="mlp2_conv3")(x)
 
     # remove size-1 dim
-    x = layers.Reshape((npoints, 1024), name="premaxpool_reshape")(x)
+    x = customlayers.ReduceDims(axis=2, name="remove_channels")(x)
 
     # symmetric function: max pool
     x = layers.GlobalMaxPool1D(name="global_feature_maxpool")(x)
@@ -213,7 +214,7 @@ def pointnet(mode, nattributes, reg_weight=0.001):
     # else:
     #     raise ValueError("Unknown mode '{}' for pointnet output flow".format(mode))
     
-    output = layers.Dense(1)(global_feature)
+    output = layers.Dense(3, name="output")(global_feature)
 
     model = Model(inpt, output)
 

@@ -16,19 +16,24 @@ print("TF version:", tf.__version__)
 print("Keras version:", keras.__version__)
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--mode",required=True)
+parser.add_argument("--mode")
 parser.add_argument("--dist-weight",type=float,help="pointnet-treetop mode: weight on distance vs sum loss")
 args = parser.parse_args()
 pprint(vars(args))
 
 
 model = pointnet(args.mode, 3)
-# model.summary()
+model.summary()
 keras.utils.plot_model(model)
+
+
+def loss(a, b):
+    return K.sum(a - b)
 
 model.compile(
     # loss=get_loss(args.mode), 
     loss=keras.losses.mse,
+    # loss=loss,
     optimizer=Adam()
 )
 
@@ -39,12 +44,12 @@ x = [
 ]
 y = [
     [1, 2, 3],
-    [1, 2],
-    [1, 2, 3, 4, 5],
+    [1, 2, 3],
+    [1, 2, 3],
 ]
 
-x = tf.ragged.constant(x)
-y = tf.ragged.constant(y)
+x = tf.ragged.constant(x, ragged_rank=1)
+y = tf.constant(y)
 
 # x = np.random.random((1,10,3))
 # y = np.random.random((1,1))
