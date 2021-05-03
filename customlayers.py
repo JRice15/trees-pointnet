@@ -15,8 +15,8 @@ class MatMul(keras.layers.Layer):
 
     def __init__(self, batchsize, **kwargs):
         super().__init__(**kwargs)
-        self.batchsize = batchsize
         self._supports_ragged_inputs = True
+        self.batchsize = batchsize
 
     def call(self, xs):
         a, b = xs
@@ -31,6 +31,7 @@ class MatMul(keras.layers.Layer):
         values = tf.concat(vals, axis=0)
         lens = tf.stack([tf.shape(v, out_type=tf.int64)[0] for v in vals])
         out = tf.RaggedTensor.from_row_lengths(values, lens)
+        # print(out.shape)
         return out
 
 

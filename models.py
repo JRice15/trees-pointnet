@@ -22,7 +22,7 @@ class TNet(keras.layers.Layer):
             trainable=True
         )
         self.b = tf.Variable(
-            initial_value=np.eye(out_channels, out_channels, dtype=np.float32).flatten(),
+            initial_value=K.flatten(K.eye(out_channels, dtype=tf.float32)),
             trainable=True
         )
         self.reshape = layers.Reshape((out_channels, out_channels), name=self.name+"_reshape")
@@ -78,7 +78,7 @@ def pointnet_dense(outchannels, name, bn=True, activation=True):
     return op
 
 
-def pointnet_transform(x_in, kind):
+def pointnet_transform(x_in, batchsize, kind):
     """
     args:
         x_in: (B,N,1,K)
@@ -109,7 +109,8 @@ def pointnet_transform(x_in, kind):
     x_in = customlayers.ReduceDims(axis=2)(x_in)
     
     # apply transformation matrix
-    x_out = customlayers.MatMul(3, name=prefix+"matmul")([x_in, trans_matrix])
+    x_out = customlayers.MatMul(batchsize=batchsize, 
+                name=prefix+"matmul")([x_in, trans_matrix])
 
     return x_out, trans_matrix
 
@@ -121,10 +122,10 @@ def seg_output_flow(local_features, global_feature, outchannels):
         per-point feature vectors: (B,N,outchannels)
     """
     # concat local and global
-    global_feature = layers.Reshape((1,1,1024), name="expand_global_feature_reshape")(x)
-    global_feature = layers.Lambda(
-        lambda feature: tf.tile(feature, [1, npoints, 1, 1]),
-        name="global_feature_tile")(global_feature)
+    global_feature = layers.Reshape((1,1,1024), name="expand_global_feature_reshape")(global_feature)
+    # global_feature = layers.Lambda(
+    #     lambda feature: tf.tile(feature, [1, npoints, 1, 1]),
+    #     name="global_feature_tile")(global_feature)
     
     full_features = layers.Concatenate(axis=-1)([local_features, global_feature])
 
@@ -139,7 +140,8 @@ def seg_output_flow(local_features, global_feature, outchannels):
 
     x = pointnet_conv(outchannels, 1, name="outmlp_conv_final", 
                       bn=False, activation=False)(x)
-    x = layers.Reshape((npoints, outchannels), name="output_squeeze")(x)
+    # x = layers.Reshape((npoints, outchannels), name="output_squeeze")(x)
+    x = customlayers.ReduceDims(axis=2, name="outmlp_squeeze")(x)
     
     return x
 
@@ -157,24 +159,27 @@ def cls_output_flow(global_feature, outchannels, dropout=0.3):
     x = pointnet_dense(256, "outmlp_dense2")(x)
     if dropout > 0:
         x = layers.Dropout(dropout)(x)
-    x = pointnet_dense(outchannels, "outmlp_dense1")(x)
+
+    x = pointnet_dense(outchannels, "outmlp_dense3", bn=False, 
+            activation=False)(x)
 
     return x
 
 
-def pointnet(mode, nattributes, reg_weight=0.001):
+def pointnet(mode, nattributes, output_features, batchsize, reg_weight=0.001):
     """
     args:
         nattributes: number of attributes per point (x,y,z, r,g,b, etc)
+        output_features: num features per output point
     """
 
-    inpt = layers.Input((None, nattributes), ragged=True) # (B,N,K)
+    inpt = layers.Input((None, nattributes), ragged=True, batch_size=batchsize) # (B,N,K)
 
     x = inpt
     x = customlayers.ExpandDims(axis=2, name="add_channels_1")(x) # (B,N,1,K)
 
     # input transform
-    x, inpt_trans_matrix = pointnet_transform(x, kind="input") # (B,N,K)
+    x, inpt_trans_matrix = pointnet_transform(x, batchsize=batchsize, kind="input") # (B,N,K)
     x = customlayers.ExpandDims(axis=2, name="add_channels_2")(x) # (B,N,1,K)
 
     # mlp 1
@@ -182,7 +187,7 @@ def pointnet(mode, nattributes, reg_weight=0.001):
     x = pointnet_conv(64, 1, name="mlp1_conv2")(x)
 
     # feature transform
-    x, feat_trans_matrix = pointnet_transform(x, kind="feature") # (B,N,K)
+    x, feat_trans_matrix = pointnet_transform(x, batchsize=batchsize, kind="feature") # (B,N,K)
     x = customlayers.ExpandDims(axis=2, name="add_channels_3")(x) # (B,N,1,K)
 
     local_features = x
@@ -198,23 +203,21 @@ def pointnet(mode, nattributes, reg_weight=0.001):
 
     global_feature = x
 
-    # # output flow
-    # if mode == "pointwise-treetop":
-    #     x = seg_output_flow(local_features, global_feature)
-    # elif mode == "":
-    #     x = cls_output_flow(global_feature)
-    # else:
-    #     raise ValueError("Unknown mode '{}' for pointnet output flow".format(mode))
+    # output flow
+    if mode == "seg":
+        x = seg_output_flow(local_features, global_feature, output_features)
+    elif mode == "cls":
+        x = cls_output_flow(global_feature, output_features)
+    else:
+        raise ValueError("Unknown mode '{}' for pointnet output flow".format(mode))
     
-    output = layers.Dense(3, name="output")(global_feature)
-
-    model = Model(inpt, output)
+    model = Model(inpt, x)
 
     # feature transformation matrix orthogonality loss
     dims = feat_trans_matrix.shape[1]
     ortho_diff = tf.matmul(feat_trans_matrix,
                     tf.transpose(feat_trans_matrix, perm=[0,2,1]))
-    ortho_diff -= tf.constant(np.eye(dims), dtype=tf.float32)
+    ortho_diff -= tf.constant(tf.eye(dims), dtype=tf.float32)
     ortho_loss = reg_weight * tf.nn.l2_loss(ortho_diff)
     model.add_loss(ortho_loss)
     model.add_metric(ortho_loss, name="ortho_loss", aggregation="mean")
