@@ -1,3 +1,5 @@
+import atexit
+
 import h5py
 import keras
 import numpy as np
@@ -15,6 +17,8 @@ class Dataset(keras.utils.Sequence):
     def __init__(self, batchsize, split_low=None, split_high=None):
         self.batchsize = batchsize
         self.file = h5py.File("data/patches.h5", "r")
+        atexit.register(self.close) # close file on completion
+
         self.max_points = self.file["lidar"].attrs["max_points"]
         self.max_trees = self.file["gt"].attrs["max_trees"]
 
@@ -52,7 +56,10 @@ class Dataset(keras.utils.Sequence):
         np.random.shuffle(self.ids)
 
     def close_file(self):
-        self.file.close()
+        try:
+            self.file.close()
+        except:
+            pass # already closed, that's fine
 
 
 def make_generators(batchsize, val_split=0.1, test_split=0.1):

@@ -166,20 +166,20 @@ def cls_output_flow(global_feature, outchannels, dropout=0.3):
     return x
 
 
-def pointnet(mode, nattributes, output_features, batchsize, reg_weight=0.001):
+def pointnet(args, nattributes, output_features, reg_weight=0.001):
     """
     args:
         nattributes: number of attributes per point (x,y,z, r,g,b, etc)
         output_features: num features per output point
     """
 
-    inpt = layers.Input((None, nattributes), ragged=True, batch_size=batchsize) # (B,N,K)
+    inpt = layers.Input((None, nattributes), ragged=True, batch_size=args.batchsize) # (B,N,K)
 
     x = inpt
     x = customlayers.ExpandDims(axis=2, name="add_channels_1")(x) # (B,N,1,K)
 
     # input transform
-    x, inpt_trans_matrix = pointnet_transform(x, batchsize=batchsize, kind="input") # (B,N,K)
+    x, inpt_trans_matrix = pointnet_transform(x, batchsize=args.batchsize, kind="input") # (B,N,K)
     x = customlayers.ExpandDims(axis=2, name="add_channels_2")(x) # (B,N,1,K)
 
     # mlp 1
@@ -187,7 +187,7 @@ def pointnet(mode, nattributes, output_features, batchsize, reg_weight=0.001):
     x = pointnet_conv(64, 1, name="mlp1_conv2")(x)
 
     # feature transform
-    x, feat_trans_matrix = pointnet_transform(x, batchsize=batchsize, kind="feature") # (B,N,K)
+    x, feat_trans_matrix = pointnet_transform(x, batchsize=args.batchsize, kind="feature") # (B,N,K)
     x = customlayers.ExpandDims(axis=2, name="add_channels_3")(x) # (B,N,1,K)
 
     local_features = x
@@ -204,14 +204,18 @@ def pointnet(mode, nattributes, output_features, batchsize, reg_weight=0.001):
     global_feature = x
 
     # output flow
-    if mode == "seg":
-        x = seg_output_flow(local_features, global_feature, output_features)
-    elif mode == "cls":
-        x = cls_output_flow(global_feature, output_features)
-    else:
-        raise ValueError("Unknown mode '{}' for pointnet output flow".format(mode))
+    if args.output_type == "seg":
+        output = seg_output_flow(local_features, global_feature, output_features)
+    elif args.output_type == "cls":
+        output = cls_output_flow(global_feature, output_features)
     
-    model = Model(inpt, x)
+    if args.mode == "pointwise-treetop":
+        # add input xy locations to each point
+        output = layers.TimeDistributed(
+                layers.Activation("sigmoid"), name="pwtt-sigmoid")(output) # limit to 0 to 1
+        output = layers.Concatenate(axis=-1, name="pwtt-concat_inpt")([inpt, output])
+
+    model = Model(inpt, output)
 
     # feature transformation matrix orthogonality loss
     dims = feat_trans_matrix.shape[1]
