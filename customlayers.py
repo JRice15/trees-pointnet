@@ -1,13 +1,12 @@
-import keras
 import numpy as np
 import tensorflow as tf
-from keras import Model
-from keras import backend as K
-from keras import layers
+from tensorflow.keras import Model
+from tensorflow.keras import backend as K
+from tensorflow.keras import layers
 
 
 
-class MatMul(keras.layers.Layer):
+class MatMul(layers.Layer):
     """
     matrix multiply batch of ragged tensors with a batch of transformation
     matrices. a surprisingly tricky thing to do

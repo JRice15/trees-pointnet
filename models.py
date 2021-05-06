@@ -1,9 +1,9 @@
-import keras
 import numpy as np
 import tensorflow as tf
-from keras import Model
-from keras import backend as K
-from keras import layers
+from tensorflow.keras import Model
+from tensorflow.keras import backend as K
+from tensorflow.keras import layers
+from tensorflow import keras
 import customlayers
 
 

@@ -1,59 +1,70 @@
 import atexit
 
 import h5py
-import keras
 import numpy as np
 import tensorflow as tf
-from keras import Model
-from keras import backend as K
-from keras import layers
+from tensorflow.keras import Model
+from tensorflow.keras import backend as K
+from tensorflow.keras import layers
+from tensorflow import keras
 
 
-class Dataset(keras.utils.Sequence):
+class LidarPatchGen(keras.utils.Sequence):
     """
     loads data from 'data/patches.h5'
     """
 
-    def __init__(self, batchsize, split_low=None, split_high=None):
-        self.batchsize = batchsize
+    def __init__(self, mode, batch_size, split_low=None, split_high=None):
+        self.batch_size = batch_size
         self.file = h5py.File("data/patches.h5", "r")
-        atexit.register(self.close) # close file on completion
+        atexit.register(self.close_file) # close file on completion
+        self.init_data(split_low, split_high)
+        self.y_counts_only = False
+        # if mode == "count":
+        #     self.y_counts_only = True
 
+    def init_data(self, split_low, split_high):
         self.max_points = self.file["lidar"].attrs["max_points"]
         self.max_trees = self.file["gt"].attrs["max_trees"]
-
-        all_ids = np.array(self.file.keys())
-        num_ids = len(all_ids)
+        all_ids = list(self.file['lidar'].keys())
+        self.num_ids = len(all_ids)
         if split_low is None:
-            split_high = round(split_high * num_ids)
-            self.ids = ids[:split_high]
+            split_high = round(split_high * self.num_ids)
+            self.ids = all_ids[:split_high]
         elif split_high is None:
-            split_low = round(split_low * num_ids)
-            self.ids = ids[split_low:]
+            split_low = round(split_low * self.num_ids)
+            self.ids = all_ids[split_low:]
         else:
-            split_high = round(split_high * num_ids)
-            split_low = round(split_low * num_ids)
-            self.ids = ids[split_low:split_high]
+            split_high = round(split_high * self.num_ids)
+            split_low = round(split_low * self.num_ids)
+            self.ids = all_ids[split_low:split_high]
         np.random.shuffle(self.ids)
-
 
     def __len__(self):
-        return len(self.ids) / self.batchsize
+        return self.num_ids // self.batch_size
 
-    def __getitem__(self):
-        X = np.zeros((batch_size,self.max_points,3))
-        Y = np.zeros((batch_size,self.max_points,2))
-        for i in range(batchsize):
-            
+    def __getitem__(self, idx):
+        end_idx = idx + self.batch_size
+        x = []
+        y = []
+        for i in self.ids[idx:end_idx]:
+            x.append(self.file['lidar/'+i][:])
+            if self.y_counts_only:
+                y.append(self.file['gt/'+i].shape[0])
+            else:
+                y.append(self.file['gt/'+i][:])
+        idx = (idx + self.batch_size) % self.num_ids
+        if idx < self.batch_size:
+            # it looped around to the beginning, meaning the last loop might not have gotten enough pts
+            np.random.shuffle(self.ids)
+            for i in self.ids[0:idx]:
+                x.append(self.file['lidar/'+i][:])
+                if self.y_counts_only:
+                    y.append(self.file['gt/'+i].shape[0])
+                else:
+                    y.append(self.file['gt/'+i][:])
+        return x, y
 
-    def x_shape(self):
-        return (self.max_points, 3)
-
-    def y_shape(self):
-        return (self.max_trees, 2)
-
-    def on_epoch_end(self):
-        np.random.shuffle(self.ids)
 
     def close_file(self):
         try:
@@ -62,14 +73,24 @@ class Dataset(keras.utils.Sequence):
             pass # already closed, that's fine
 
 
-def make_generators(batchsize, val_split=0.1, test_split=0.1):
+
+
+
+
+
+
+def make_data_generators(mode, batchsize, val_split=0.1, test_split=0.1):
     """returns train, val, test dataset generators"""
     val_low = -val_split - test_split
     test_low = -test_split
     
-    train_gen = Dataset(batchsize, None, val_low)
-    val_gen = Dataset(batchsize, val_low, test_low)
-    test_gen = Dataset(batchsize, test_low, None)
+    train_gen = LidarPatchGen(mode, batchsize, None, val_low)
+    val_gen = LidarPatchGen(mode, batchsize, val_low, test_low)
+    test_gen = LidarPatchGen(mode, batchsize, test_low, None)
 
     return train_gen, val_gen, test_gen
 
+
+
+if __name__ == "__main__":
+    tr, v, te = make_data_generators("count", 32)
