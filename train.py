@@ -1,5 +1,7 @@
 import argparse
 from pprint import pprint
+import time
+
 
 import h5py
 import numpy as np
@@ -12,7 +14,7 @@ from tensorflow import keras
 
 from losses import get_loss
 from models import pointnet
-from dataset import make_data_generators
+import data_loading
 
 print("TF version:", tf.__version__)
 print("Keras version:", keras.__version__)
@@ -20,7 +22,7 @@ print("Keras version:", keras.__version__)
 parser = argparse.ArgumentParser()
 parser.add_argument("--mode",required=True)
 parser.add_argument("--epochs",type=int,default=100)
-parser.add_argument("--batchsize",type=int,default=3)
+parser.add_argument("--batchsize",type=int,default=16)
 parser.add_argument("--dist-weight",type=float,default=0.5,help="pointnet-treetop mode: weight on distance vs sum loss")
 args = parser.parse_args()
 pprint(vars(args))
@@ -51,62 +53,86 @@ loss, metrics = get_loss(args)
 model.compile(
     loss=loss, 
     metrics=metrics,
-    optimizer=Adam(0.0001)
+    optimizer=Adam(0.003)
 )
 
-# x = [
-#     [[1, 2, 3], [2, 3, 4], [3, 4, 5]],
-#     [[1, 2, 3], [2, 3, 4]],
-#     [[1, 2, 3], [2, 3, 4], [3, 4, 5], [4, 5, 6], [5, 6, 7]],
-# ]
-# x = tf.ragged.constant(x, ragged_rank=1, dtype=tf.float32)
+# get data generators
 
-# y = [
-#     [[1, 2], [-100, -100]],
-#     [[3, 3], [3, 3]],
-#     [[2, 2], [4, 4]]
-# ] # cls
-# y = tf.constant(y, dtype=tf.float32)
-
-# y = [
-#     [2], 
-#     [1], 
-#     [3],
-# ]
-# y = tf.constant(y, dtype=tf.float32)
-
-# # below code is not supported until tf2.5 probably
-# if args.output_type == "seg":
-#     y = [
-#         [[1, 2, 3], [2, 3, 4], [3, 4, 5]],
-#         [[1, 2, 3], [2, 3, 4]],
-#         [[1, 2, 3], [2, 3, 4], [3, 4, 5], [4, 5, 6], [5, 6, 7]],
-#     ] # seg
-#     y = tf.ragged.constant(y, ragged_rank=1, dtype=tf.float32)
+train_gen, val_gen, test_gen = data_loading.make_data_generators(args.mode, 
+                                    args.batchsize, val_split=0.1, test_split=0.1)
 
 
-train_gen, val_gen, test_gen = make_data_generators(args.mode, args.batchsize, val_split=0.1, test_split=0.1)
 
-# they dont support sequences as val data for some reason
-valx, valy = [], []
-for i in range(len(val_gen)):
-    x, y = val_gen[i]
-    print(x)
-    print(y)
-    valx += [np.array(i).astype(np.float32) for i in x]
-    valy += y
-
-print(valx)
-valx = tf.ragged.constant([tf.constant(i) for i in valx], ragged_rank=1)
-
-valy = tf.constant(valy)
+# model.fit(
+#     # x=data_loading.generator_wrapper(args.mode, args.batchsize)(),
+#     # x=data_loading.dataset_wrapper(args.mode, args.batchsize),
+#     x=train_gen,
+#     epochs=args.epochs,
+#     batch_size=args.batchsize,
+# )
+# exit()
 
 
-model.fit(
-    x=train_gen, 
-    validation_data=(valx, valy),
-    epochs=args.epochs, 
-    batch_size=args.batchsize
-)
+"""
+adapted from https://keras.io/guides/writing_a_training_loop_from_scratch/
+"""
+
+@tf.function
+def train_step(x, y):
+    with tf.GradientTape() as tape:
+        logits = model(x, training=True)
+        loss_values = model.loss(y, logits)
+        loss_values += model.losses
+    grads = tape.gradient(loss_values, model.trainable_weights)
+    model.optimizer.apply_gradients(zip(grads, model.trainable_weights))
+    for m in model.metrics:
+        m.update_state(y, logits)
+    return loss_values
+
+@tf.function
+def test_step(x, y):
+    logits = model(x, training=False)
+    loss_values = model.loss(y, logits)
+    loss_values += np.sum(model.losses)
+    for m in model.metrics:
+        m.update_state(y, logits)
+    return loss_values
+
+def eval_metrics():
+    metric_vals = [m.result() for m in model.metrics]
+    return ", ".join(["{} {:.5f}".format(name, val) for name, val in zip(model.metrics_names, metric_vals)])
+
+for epoch in range(args.epochs):
+    print("Epoch {}".format(epoch))
+    start_time = time.time()
+
+    pre = time.time()
+    # Iterate over the batches of the dataset.
+    for step, (x_batch_train, y_batch_train) in enumerate(train_gen):
+        t1 = time.time()
+        print("  > other:", t1-pre)
+        # loss_values = train_step(x_batch_train, y_batch_train)
+        losses = model.train_on_batch(x_batch_train, y_batch_train)
+        print("  > step time:", time.time()-t1)
+
+        pre = time.time()
+        # Log every n batches.
+        # if step % 20 == 0:
+        #     print("   {:>3d} -- loss {:.5f}, {}".format(step, np.mean(loss_values), eval_metrics()))
+
+    # Train metrics
+    print("Train -- loss {:.5f}, {}".format(np.mean(loss_values), eval_metrics()))
+    for m in model.metrics:
+        m.reset_states()
+        
+    # Validation
+    for x_batch_val, y_batch_val in val_gen:
+        val_loss = test_step(x_batch_val, y_batch_val)
+    print("Val   -- loss {:.5f}, {}".format(np.mean(val_loss), eval_metrics()))
+    for m in model.metrics:
+        m.reset_states()
+
+    print("  Time taken: %.2fs" % (time.time() - start_time))
+
 
 

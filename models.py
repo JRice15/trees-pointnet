@@ -5,7 +5,7 @@ from tensorflow.keras import backend as K
 from tensorflow.keras import layers
 from tensorflow import keras
 import customlayers
-
+from data_loading import make_data_generators
 
 class TNet(keras.layers.Layer):
     """
@@ -228,6 +228,28 @@ def pointnet(args, nattributes, output_features, reg_weight=0.001):
 
 
     return model
+
+
+
+
+if __name__ == "__main__":
+
+    class args:
+        output_type = "cls"
+        mode = "count"
+        batchsize = 5
+
+    model = pointnet(args, 3, 1)
+
+    traingen, _, _ = make_data_generators(args.mode, args.batchsize)
+
+    x, y = traingen[3]
+
+    model.compile()
+
+    out = model.predict(x)
+
+    print(out)
 
 
 

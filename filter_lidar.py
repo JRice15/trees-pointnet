@@ -15,7 +15,7 @@ import pdal
 import shapely
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--bounds",required=True,help="shp file to crop points to")
+parser.add_argument("--bounds",help="shp file to crop points to")
 args = parser.parse_args()
 
 gt = gpd.read_file("data/SaMo_trees.csv")
@@ -34,39 +34,74 @@ gt = pd.DataFrame()
 gt["X"] = x
 gt["Y"] = y
 
+gt = gt.to_numpy()
+
+print("GT:")
 print(gt)
 
 OUTPUT_COLUMS = ["X", "Y", "HeightAboveGround"]
 
-shp = gpd.read_file(args.bounds).to_crs("EPSG:3857")
 
-wkts = [i.wkt for i in shp["geometry"]]
+def read_with_bounds():
+    shp = gpd.read_file(args.bounds).to_crs("EPSG:3857")
+    wkts = [i.wkt for i in shp["geometry"]]
 
-# # NOTE this code below makes a WKT form polygon array, but PDAL segfaults using it for some reason
-# # turn list of wkt polygons into one string of a wkt polygon array
-# wkts = [re.sub(r"POLYGON \(\(", "(", i) for i in wkts]
-# wkts = [re.sub(r"\)\)", ")", i) for i in wkts]
-# coords = "POLYGON (" + ", ".join(wkts) + ")"
+    # # NOTE this code below makes a WKT form polygon array, but PDAL segfaults using it for some reason
+    # # turn list of wkt polygons into one string of a wkt polygon array
+    # wkts = [re.sub(r"POLYGON \(\(", "(", i) for i in wkts]
+    # wkts = [re.sub(r"\)\)", ")", i) for i in wkts]
+    # coords = "POLYGON (" + ", ".join(wkts) + ")"
 
 
-# load the las, find the points inside each polygon
+    # load the las, find the points inside each polygon
 
-filtered_points = None
-for i in range(len(shp)):
-    # get polygons in wkt form
-    coords = wkts[i]
+    filtered_points = None
+    for i in range(len(shp)):
+        # get polygons in wkt form
+        coords = wkts[i]
 
-    # print(coords)
+        # print(coords)
 
+        pipeline_json = [
+            "data/SaMo_testregion4.las",
+            {
+                "type": "filters.hag_nn"
+            },
+            # {
+            #     "type": "filters.crop",
+            #     "polygon": coords
+            # }
+        ]
+
+        pipeline = pdal.Pipeline(json.dumps(pipeline_json))
+        pipeline.execute()
+
+        assert len(pipeline.arrays) == 1
+
+        arr = pipeline.arrays[0][OUTPUT_COLUMS]
+
+        print(str(i) + ":", len(arr), "points")
+
+        if filtered_points is None:
+            filtered_points = arr
+        else:
+            filtered_points = np.concatenate([filtered_points, arr])
+
+        # print(filtered_points)
+        # print(filtered_points.dtype)
+    return filtered_points
+
+
+def read_without_bounds():
     pipeline_json = [
         "data/SaMo_testregion4.las",
         {
             "type": "filters.hag_nn"
         },
-        {
-            "type": "filters.crop",
-            "polygon": coords
-        }
+        # {
+        #     "type": "filters.crop",
+        #     "polygon": coords
+        # }
     ]
 
     pipeline = pdal.Pipeline(json.dumps(pipeline_json))
@@ -74,58 +109,62 @@ for i in range(len(shp)):
 
     assert len(pipeline.arrays) == 1
 
-    arr = pipeline.arrays[0][OUTPUT_COLUMS]
+    return pipeline.arrays[0][OUTPUT_COLUMS]
 
-    print(str(i) + ":", len(arr), "points")
 
-    if filtered_points is None:
-        filtered_points = arr
-    else:
-        filtered_points = np.concatenate([filtered_points, arr])
+if args.bounds is None:
+    print("no bounds provided, reading all points")
+    points = read_without_bounds()
+else:
+    points = read_with_bounds()
 
-    # print(filtered_points)
-    # print(filtered_points.dtype)
+x = points["X"]
+y = points["Y"]
+z = points["HeightAboveGround"]
+points = np.vstack([x, y, z]).T.astype(np.float32)
+
 
 print()
-print(len(filtered_points), "total points")
+print(len(points), "total points")
 
 print("  Min, Max, Max-Min")
-for i in OUTPUT_COLUMS:
-    print(i, filtered_points[i].min(), filtered_points[i].max(), 
-        filtered_points[i].max() - filtered_points[i].min())
+cols = ["X", "Y", "Z"]
+for i in range(3):
+    print(cols[i], points[:,i].min(), points[:,i].max(), 
+        points[:,i].max() - points[:,i].min())
 
 
-xmin = filtered_points["X"].min()
-xmax = filtered_points["X"].max()
+xmin = points[:,0].min()
+xmax = points[:,0].max()
 
-ymin = filtered_points["Y"].min()
-ymax = filtered_points["Y"].max()
+ymin = points[:,1].min()
+ymax = points[:,1].max()
 
 
 print("Making patches")
 # the units here are lat/lon degrees
-PATCH_SIZE = 10
-OVERLAP = 1
+PATCH_SIZE = 25
+OVERLAP = 5
 
 patches = []
 patch_gts = []
 
 y = ymin
 while y < ymax:
+    row = points[
+        (points[:,1] >= y) & (points[:,1] < y + PATCH_SIZE)
+    ]
+    gt_row = gt[
+        (gt[:,1] >= y) & (gt[:,1] < y + PATCH_SIZE)
+    ]
     x = xmin
     while x < xmax:
         # print(x, y)
-        patch = filtered_points[
-                    (filtered_points["X"] >= x) &
-                    (filtered_points["X"] < x + PATCH_SIZE) &
-                    (filtered_points["Y"] >= y) &
-                    (filtered_points["Y"] < y + PATCH_SIZE)
+        patch = row[
+                    (row[:,0] >= x) & (row[:,0] < x + PATCH_SIZE)
                 ]
-        patch_gt = gt[
-                    (gt["X"] >= x) &
-                    (gt["X"] < x + PATCH_SIZE) &
-                    (gt["Y"] >= y) &
-                    (gt["Y"] < y + PATCH_SIZE)
+        patch_gt = gt_row[
+                    (gt_row[:,0] >= x) & (gt_row[:,0] < x + PATCH_SIZE)
                 ]
         if len(patch) > 20:
             patches.append(patch)
@@ -139,8 +178,10 @@ print("min, max points in patches:", min(p_lens), max(p_lens))
 gt_lens = [len(i) for i in patch_gts]
 print("min, max gt trees in patches:", min(gt_lens), max(gt_lens))
 
-# plt.hist(lens)
-# plt.show()
+plt.hist(p_lens)
+plt.show()
+plt.hist(gt_lens)
+plt.show()
 
 
 with h5py.File('data/patches.h5', 'w') as hf:
