@@ -26,7 +26,9 @@ class LidarPatchGen(keras.utils.Sequence):
 
     def init_data(self, split_low, split_high):
         self.max_points = self.file["lidar"].attrs["max_points"]
+        self.min_points = self.file["lidar"].attrs["min_points"]
         self.max_trees = self.file["gt"].attrs["max_trees"]
+        self.min_trees = self.file["gt"].attrs["min_trees"]
         all_ids = list(self.file['lidar'].keys())
         self.num_ids = len(all_ids)
         if split_low is None:
@@ -57,6 +59,7 @@ class LidarPatchGen(keras.utils.Sequence):
                 y.append(self.file['gt/'+i][:])
         x = [i.tolist() for i in x]
         x = tf.ragged.constant(x, ragged_rank=1, inner_shape=(3,), dtype=tf.float32)
+        # x = [i[:self.min_trees] for i in x]
         # x = tf.constant(x, dtype=tf.float32)
         y = tf.constant(y, dtype=tf.float32)
         print("  > batch time:", time.time() - t1)
