@@ -47,7 +47,6 @@ class LidarPatchGen(keras.utils.Sequence):
         return self.num_ids // self.batch_size
 
     def __getitem__(self, idx):
-        t1 = time.time()
         end_idx = idx + self.batch_size
         x = []
         y = []
@@ -58,11 +57,10 @@ class LidarPatchGen(keras.utils.Sequence):
             else:
                 y.append(self.file['gt/'+i][:])
         x = [i.tolist() for i in x]
-        x = tf.ragged.constant(x, ragged_rank=1, inner_shape=(3,), dtype=tf.float32)
-        # x = [i[:self.min_trees] for i in x]
-        # x = tf.constant(x, dtype=tf.float32)
+        # x = tf.ragged.constant(x, ragged_rank=1, inner_shape=(3,), dtype=tf.float32)
+        x = [i[:self.min_points] for i in x]
+        x = tf.constant(x, dtype=tf.float32)
         y = tf.constant(y, dtype=tf.float32)
-        print("  > batch time:", time.time() - t1)
         return x, y
 
     def on_epoch_end(self):

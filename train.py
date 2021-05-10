@@ -102,23 +102,31 @@ def eval_metrics():
     metric_vals = [m.result() for m in model.metrics]
     return ", ".join(["{} {:.5f}".format(name, val) for name, val in zip(model.metrics_names, metric_vals)])
 
+LOG_FREQ = 20 # in batches
+
 for epoch in range(args.epochs):
     print("Epoch {}".format(epoch))
     start_time = time.time()
 
-    pre = time.time()
+    step_time = 0
+    batch_time = 0
+    step_end_time = time.time()
     # Iterate over the batches of the dataset.
     for step, (x_batch_train, y_batch_train) in enumerate(train_gen):
-        t1 = time.time()
-        print("  > other:", t1-pre)
-        # loss_values = train_step(x_batch_train, y_batch_train)
-        losses = model.train_on_batch(x_batch_train, y_batch_train)
-        print("  > step time:", time.time()-t1)
+        step_start_time = time.time()
+        batch_time += step_start_time - step_end_time
 
-        pre = time.time()
+        # loss_values = train_step(x_batch_train, y_batch_train)
+        loss_values = model.train_on_batch(x_batch_train, y_batch_train)
+
+        step_end_time = time.time()
+        step_time += step_end_time - step_start_time
         # Log every n batches.
-        # if step % 20 == 0:
-        #     print("   {:>3d} -- loss {:.5f}, {}".format(step, np.mean(loss_values), eval_metrics()))
+        if step % LOG_FREQ == 0:
+            print("   {:>3d} -- avg time: step {:.3f}, batch {:.3f} -- loss {:.5f}, {}".format(
+                step, step_time/LOG_FREQ, batch_time/LOG_FREQ, np.mean(loss_values), eval_metrics()))
+            step_time = 0
+            batch_time = 0
 
     # Train metrics
     print("Train -- loss {:.5f}, {}".format(np.mean(loss_values), eval_metrics()))

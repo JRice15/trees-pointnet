@@ -191,6 +191,6 @@ with h5py.File('data/patches.h5', 'w') as hf:
         grp_lidar.create_dataset('patch'+str(i), data=p)
         grp_gt.create_dataset('patch'+str(i), data=patch_gts[i])
     grp_lidar.attrs["max_points"] = max(p_lens)
-    grp_lidar.attrs["min_trees"] = min(p_lens)
+    grp_lidar.attrs["min_points"] = min(p_lens)
     grp_gt.attrs["max_trees"] = max(gt_lens)
     grp_gt.attrs["min_trees"] = min(gt_lens)
