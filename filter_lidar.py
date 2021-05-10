@@ -9,13 +9,13 @@ from pprint import pprint
 import geopandas as gpd
 import pandas as pd
 import h5py
-import matplotlib.pyplot as plt
 import numpy as np
 import pdal
 import shapely
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--bounds",help="shp file to crop points to")
+parser.add_argument("--no-mpl",action="store_true",help="shp file to crop points to")
 args = parser.parse_args()
 
 gt = gpd.read_file("data/SaMo_trees.csv")
@@ -178,10 +178,12 @@ print("min, max points in patches:", min(p_lens), max(p_lens))
 gt_lens = [len(i) for i in patch_gts]
 print("min, max gt trees in patches:", min(gt_lens), max(gt_lens))
 
-plt.hist(p_lens)
-plt.show()
-plt.hist(gt_lens)
-plt.show()
+if not args.no_mpl:
+    import matplotlib.pyplot as plt
+    plt.hist(p_lens)
+    plt.show()
+    plt.hist(gt_lens)
+    plt.show()
 
 
 with h5py.File('data/patches.h5', 'w') as hf:
