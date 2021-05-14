@@ -1,11 +1,19 @@
-import numpy as np 
-import laspy
-import tables
+import argparse
+import os
+import sys
 import time
-import shapely
-import h5py
+
 import geopandas as gpd
+import h5py
+import laspy
+import numpy as np
 import pyproj
+import shapely
+import tables
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--no-mpl",action="store_true")
+args = parser.parse_args()
 
 if not laspy.__version__.startswith("2"):
     print("This program requires laspy >=2.0. It can be installed like this:")
@@ -76,6 +84,9 @@ grid_bounds = grid["geometry"].bounds.to_numpy()
 grid_x = np.maximum(grid_bounds[:,2], grid_bounds[:,0])
 grid_y = np.maximum(grid_bounds[:,3], grid_bounds[:,1])
 
+grid_lowerbound_x = np.minimum(grid_bounds[:,2], grid_bounds[:,0]).min()
+grid_lowerbound_y = np.minimum(grid_bounds[:,3], grid_bounds[:,1]).min()
+
 grid_x = grid_x[:COLS] # first row; all row x's are the same
 grid_y = grid_y[::COLS] # first column; all col y's are the same
 grid_y = grid_y[::-1] # put y in sorted order
@@ -103,11 +114,16 @@ def seperate_pts_by_grid(pts):
     returns:
         list, the same length as the number of grid squares
     """
+    pts = pts[
+        (pts[:,0] >= grid_lowerbound_x)
+        & (pts[:,1] >= grid_lowerbound_y)
+    ]
     seperated = [None] * (ROWS * COLS)
     xlocs = np.searchsorted(grid_x, pts[:,0])
     ylocs = np.searchsorted(grid_y, pts[:,1])
     indexes = (ylocs * COLS) + xlocs
-    print("i", indexes)
+    # pts outside grid are excluded. pts where y is larger than grid are excluded by not being reached by the for loop
+    indexes[xlocs >= COLS] = -1
     for i in range(ROWS * COLS):
         these = pts[indexes == i]
         seperated[i] = these if len(these) else None
@@ -190,7 +206,53 @@ with laspy.open("../data/SaMo_full_hag_subsampled_30x.laz", "r") as reader:
 
         print(count, "points complete")
 
+        train_fp.flush()
+        test_fp.flush()
+
+"""
+save length attributes
+"""
+
+train_patch_lens = [i.shape[0] for i in train_fp.get_node("/lidar")]
+train_gt_lens = [i.shape[0] for i in train_fp.get_node("/gt")]
+test_patch_lens = [i.shape[0] for i in test_fp.get_node("/lidar")]
+test_gt_lens = [i.shape[0] for i in test_fp.get_node("/gt")]
+
+print("min, max points in train patches:", min(train_patch_lens), max(train_patch_lens))
+train_fp.get_node("/lidar")._v_attrs["min_points"] = min(train_patch_lens)
+train_fp.get_node("/lidar")._v_attrs["max_points"] = max(train_patch_lens)
+
+print("min, max gt trees in train patches:", min(train_gt_lens), max(train_gt_lens))
+train_fp.get_node("/gt")._v_attrs["min_trees"] = min(train_gt_lens)
+train_fp.get_node("/gt")._v_attrs["max_trees"] = max(train_gt_lens)
+
+print("min, max points in test patches:", min(test_patch_lens), max(test_patch_lens))
+test_fp.get_node("/lidar")._v_attrs["min_points"] = min(test_patch_lens)
+test_fp.get_node("/lidar")._v_attrs["max_points"] = max(test_patch_lens)
+
+print("min, max gt trees in test patches:", min(test_gt_lens), max(test_gt_lens))
+test_fp.get_node("/gt")._v_attrs["min_trees"] = min(test_gt_lens)
+test_fp.get_node("/gt")._v_attrs["max_trees"] = max(test_gt_lens)
+
+if not args.no_mpl:
+    import matplotlib.pyplot as plt
+    os.makedirs("output", exist_ok=True)
+
+    plt.hist(train_patch_lens)
+    plt.savefig("output/train_pts_per_patch")
+    plt.close()
+    plt.hist(train_gt_lens)
+    plt.savefig("output/train_trees_per_patch")
+    plt.close()
+
+    plt.hist(test_patch_lens)
+    plt.savefig("output/test_pts_per_patch")
+    plt.close()
+    plt.hist(test_gt_lens)
+    plt.savefig("output/test_trees_per_patch")
+    plt.close()
+
+
 
 train_fp.close()
 test_fp.close()
-
