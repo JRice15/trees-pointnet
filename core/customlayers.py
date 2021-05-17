@@ -4,6 +4,7 @@ from tensorflow.keras import Model
 from tensorflow.keras import backend as K
 from tensorflow.keras import layers
 
+from core import args
 
 
 class MatMul(layers.Layer):

@@ -4,8 +4,9 @@ from tensorflow.keras import Model
 from tensorflow.keras import backend as K
 from tensorflow.keras import layers
 from tensorflow import keras
-import customlayers
-from data_loading import make_data_generators
+
+from core import customlayers
+from core.data_loading import make_data_generators
 
 class TNet(keras.layers.Layer):
     """

@@ -8,39 +8,48 @@ from tensorflow.keras import Model
 from tensorflow.keras import backend as K
 from tensorflow.keras import layers
 from tensorflow import keras
-
+from core import args
 
 class LidarPatchGen(keras.utils.Sequence):
     """
-    loads data from 'data/patches.h5'
+    loads data from a patches h5 file.
+    The file should have this structure:
+
+    /gt: group [attributes: min_trees, max_trees]
+    /lidar: group [attributes: min_points, max_points]
+    /gt/patchN: dataset N, shape (numtrees, 2)
+    /lidar/patchN: dataset N, shape (numpts, 3)
     """
 
-    def __init__(self, mode, batch_size, split_low=None, split_high=None):
-        self.batch_size = batch_size
-        self.file = h5py.File("data/patches.h5", "r")
+    def __init__(self, filename, skip_freq=None, keep_freq=None):
+        """
+        args:
+            skip_freq: every skip_freq patches will be skipped (designated for validation)
+            keep_freq: every keep_freq patches will be kept (designated for validation) 
+                (only one of skip_freq and keep_freq should be provided)
+        """
+        assert not (skip_freq is not None and keep_freq is not None)
+        self.batch_size = args.batchsize
+        self.file = h5py.File(filename, "r")
         atexit.register(self.close_file) # close file on completion
-        self.init_data(split_low, split_high)
+        self.init_data(skip_freq, keep_freq)
         self.y_counts_only = False
-        if mode == "count":
+        if args.mode == "count":
             self.y_counts_only = True
 
-    def init_data(self, split_low, split_high):
+    def init_data(self, skip_freq, keep_freq):
         self.max_points = self.file["lidar"].attrs["max_points"]
         self.min_points = self.file["lidar"].attrs["min_points"]
         self.max_trees = self.file["gt"].attrs["max_trees"]
         self.min_trees = self.file["gt"].attrs["min_trees"]
         all_ids = list(self.file['lidar'].keys())
         self.num_ids = len(all_ids)
-        if split_low is None:
-            split_high = round(split_high * self.num_ids)
-            self.ids = all_ids[:split_high]
-        elif split_high is None:
-            split_low = round(split_low * self.num_ids)
-            self.ids = all_ids[split_low:]
-        else:
-            split_high = round(split_high * self.num_ids)
-            split_low = round(split_low * self.num_ids)
-            self.ids = all_ids[split_low:split_high]
+        if skip_freq is not None:
+            all_ids = set(all_ids) - set(all_ids[::skip_freq])
+            all_ids = list(all_ids)
+        elif keep_freq is not None:
+            all_ids = all_ids[::keep_freq]
+        self.ids = all_ids
         np.random.shuffle(self.ids)
 
     def __len__(self):
@@ -85,7 +94,6 @@ def generator_wrapper(mode, batchsize):
                 yield elem
     return gen
 
-
 def dataset_wrapper(mode, batchsize):
     train_gen = tf.data.Dataset.from_generator(
         generator_wrapper(mode, batchsize),
@@ -100,14 +108,19 @@ def dataset_wrapper(mode, batchsize):
 
 
 
-def make_data_generators(mode, batchsize, val_split=0.1, test_split=0.1):
-    """returns train, val, test dataset generators"""
-    val_low = -val_split - test_split
-    test_low = -test_split
-    
-    train_gen = LidarPatchGen(mode, batchsize, None, val_low)
-    val_gen = LidarPatchGen(mode, batchsize, val_low, test_low)
-    test_gen = LidarPatchGen(mode, batchsize, test_low, None)
+def make_data_generators(val_split=0.1, val_as_gen=True):
+    """
+    returns train generator, val data, test generator
+    """
+    val_freq = int(1/val_split)
+
+    train_gen = LidarPatchGen("data/patches.h5", skip_freq=val_freq)
+    if val_as_gen:
+        val_gen = LidarPatchGen("data/patches.h5", keep_freq=val_freq)
+    else:
+        val_gen = None
+    # test_gen = LidarPatchGen(None)
+    test_gen = None
 
 
     return train_gen, val_gen, test_gen
