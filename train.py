@@ -1,5 +1,6 @@
 import contextlib
 import time
+import os
 
 import h5py
 import numpy as np
@@ -10,9 +11,10 @@ from tensorflow.keras import backend as K
 from tensorflow.keras import layers
 from tensorflow.keras.optimizers import Adam
 
-from core import args, data_loading
+from core import args, data_loading, OUTPUT_DIR, DATA_DIR
 from core.losses import get_loss
 from core.models import pointnet
+from core.utils import output_model
 
 
 # map modes to number of output features
@@ -22,12 +24,11 @@ output_features_map = {
 }
 
 model = pointnet(
-    args, 
+    npoints=None,
     nattributes=3, 
     output_features=output_features_map[args.mode]
 )
-model.summary()
-# tf.keras.utils.plot_model(model)
+output_model(model)
 
 loss, metrics = get_loss(args)
 
@@ -97,8 +98,8 @@ else:
             step_start_time = time.time()
             batch_time += step_start_time - step_end_time
 
-            # loss_values = train_step(x_batch_train, y_batch_train)
-            loss_values = model.train_on_batch(x_batch_train, y_batch_train)
+            loss_values = train_step(x_batch_train, y_batch_train)
+            # loss_values = model.train_on_batch(x_batch_train, y_batch_train)
 
             step_end_time = time.time()
             step_time += step_end_time - step_start_time
@@ -116,7 +117,7 @@ else:
             
         # Validation
         for x_batch_val, y_batch_val in val_gen:
-            val_loss = model.test_on_batch(x_batch_val, y_batch_val)
+            val_loss = test_step(x_batch_val, y_batch_val)
         print("Val   -- loss {:.5f}, {}".format(np.mean(val_loss), eval_metrics()))
         for m in model.metrics:
             m.reset_states()

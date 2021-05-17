@@ -18,7 +18,7 @@ def get_loss(args):
     if mode == "count":
         return keras.losses.mse, [keras.metrics.mse]
 
-    raise ValueError("No loss for mode '{}'".format(name))
+    raise ValueError("No loss for mode '{}'".format(mode))
 
 
 def pointwise_treetop(args):

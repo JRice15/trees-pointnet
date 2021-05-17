@@ -1,6 +1,11 @@
+"""
+__init__.py: loads CL args and sets random seeds seeds
+"""
+
 import argparse
 from pprint import pprint
 import time
+import os
 
 import h5py
 import numpy as np
@@ -11,12 +16,10 @@ from tensorflow.keras import layers
 from tensorflow.keras.optimizers import Adam
 from tensorflow import keras
 
-np.random.seed(9999)
-tf.random.set_seed(9999)
-tf.compat.v1.set_random_seed(9999)
-
 print("TF version:", tf.__version__)
 print("Keras version:", keras.__version__)
+
+""" handle args """
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--mode",required=True)
@@ -37,3 +40,14 @@ elif args.mode in ["count"]:
     args.output_type = "cls"
 else:
     raise ValueError("unknown mode to outputtype initialization")
+
+""" set global constants """
+
+MAIN_DIR = os.path.dirname(os.path.dirname(__file__))
+DATA_DIR = os.path.join(MAIN_DIR, "data")
+OUTPUT_DIR = os.path.join(MAIN_DIR, "output")
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+np.random.seed(9999)
+tf.random.set_seed(9999)
+tf.compat.v1.set_random_seed(9999)

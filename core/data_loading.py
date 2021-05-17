@@ -65,12 +65,20 @@ class LidarPatchGen(keras.utils.Sequence):
                 y.append(self.file['gt/'+i].shape[0])
             else:
                 y.append(self.file['gt/'+i][:])
-        x = [i.tolist() for i in x]
-        # x = tf.ragged.constant(x, ragged_rank=1, inner_shape=(3,), dtype=tf.float32)
-        x = [i[:self.min_points] for i in x]
-        x = tf.constant(x, dtype=tf.float32)
+        if args.ragged:
+            x = tf.ragged.constant(x, ragged_rank=1, inner_shape=(3,), dtype=tf.float32)
+        else:
+            # x = [i.tolist() for i in x]
+            x = [i[:self.min_points] for i in x]
+            x = tf.constant(x, dtype=tf.float32)
         y = tf.constant(y, dtype=tf.float32)
         return x, y
+
+    def load_all(self):
+        """
+        load all examples into one big array
+        """
+        pass
 
     def on_epoch_end(self):
         np.random.shuffle(self.ids)
@@ -84,25 +92,32 @@ class LidarPatchGen(keras.utils.Sequence):
 
 
 
-def generator_wrapper(mode, batchsize):
-    lidar = LidarPatchGen(mode, batchsize, None, -0.2)
+def generator_wrapper(sequence):
+    """turn Keras Sequence to generator"""
     def gen():
         while True:
-            for i in range(len(lidar)):
-                elem = lidar[i]
-                print(elem[0].shape, elem[1].shape)
-                yield elem
+            for i in range(len(sequence)):
+                yield sequence[i]
     return gen
 
-def dataset_wrapper(mode, batchsize):
+def dataset_wrapper(sequence):
+    """
+    turn Keras Sequence to generator than tf.data.Dataset.
+    There is probably a better way to achieve this?
+    """
+    if args.ragged:
+        xspec = tf.RaggedTensorSpec(shape=(args.batchsize, None, 3), dtype=tf.float32),
+    else:
+        x,y = sequence[0]
+        xspec = tf.TensorSpec(shape=x.shape, dtype=tf.float32)
+
     train_gen = tf.data.Dataset.from_generator(
-        generator_wrapper(mode, batchsize),
+        generator_wrapper(sequence),
         output_signature=(
-            tf.RaggedTensorSpec(shape=(batchsize, None, 3), dtype=tf.float32),
+            xspec,
             tf.TensorSpec(shape=(), dtype=tf.float32)
         )
     )
-
     return train_gen
 
 
@@ -110,15 +125,15 @@ def dataset_wrapper(mode, batchsize):
 
 def make_data_generators(val_split=0.1, val_as_gen=True):
     """
-    returns train generator, val data, test generator
+    returns:
+        train Keras Sequence, val Sequence or raw data, test Sequence
     """
     val_freq = int(1/val_split)
 
     train_gen = LidarPatchGen("data/patches.h5", skip_freq=val_freq)
-    if val_as_gen:
-        val_gen = LidarPatchGen("data/patches.h5", keep_freq=val_freq)
-    else:
-        val_gen = None
+    val_gen = LidarPatchGen("data/patches.h5", keep_freq=val_freq)
+    if not val_as_gen:
+        val_gen = val_gen.load_all()
     # test_gen = LidarPatchGen(None)
     test_gen = None
 
