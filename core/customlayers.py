@@ -35,7 +35,7 @@ class TNet(keras.layers.Layer):
 
     def get_config(self):
         config = super().get_config()
-        config = config.update({
+        config.update({
             "in_channels": self.in_channels,
             "out_channels": self.out_channels,
         })
@@ -84,6 +84,7 @@ class RaggedMatMul(layers.Layer):
         config.update({
             "batchsize": self.batchsize
         })
+        return config
 
 
 def Activation(actname, **kwargs):

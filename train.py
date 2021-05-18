@@ -10,12 +10,19 @@ from tensorflow.keras import Model
 from tensorflow.keras import backend as K
 from tensorflow.keras import layers
 from tensorflow.keras.optimizers import Adam
+from tensorflow.keras import callbacks
 
-from core import args, data_loading, OUTPUT_DIR, DATA_DIR
+from core import args, data_loading, OUTPUT_DIR, DATA_DIR, MODEL_DIR, MODEL_PATH
 from core.losses import get_loss
 from core.models import pointnet
 from core.utils import output_model
 
+
+# get data generators
+
+train_gen, val_gen, test_gen = data_loading.make_data_generators(val_split=0.1, val_as_gen=args.ragged)
+train_gen.summary()
+inpt_shape = train_gen.get_batch_shape()[1:]
 
 # map modes to number of output features
 output_features_map = {
@@ -24,9 +31,9 @@ output_features_map = {
 }
 
 model = pointnet(
-    npoints=None,
-    nattributes=3, 
-    output_features=output_features_map[args.mode]
+    inpt_shape=inpt_shape,
+    output_features=output_features_map[args.mode],
+    reg_weight=args.ortho_weight,
 )
 output_model(model)
 
@@ -38,18 +45,21 @@ model.compile(
     optimizer=Adam(0.003)
 )
 
-# get data generators
-
-train_gen, val_gen, test_gen = data_loading.make_data_generators(val_split=0.1, val_as_gen=args.ragged)
-
+callback_list = [
+    callbacks.History(),
+    callbacks.ReduceLROnPlateau(factor=args.reducelr_factor, patience=args.reducelr_patience,
+        min_lr=1e-6),
+    callbacks.EarlyStopping(verbose=1, patience=args.reducelr_patience*2),
+    callbacks.ModelCheckpoint(MODEL_PATH, verbose=1, 
+        save_best_only=True)
+]
 
 if not args.ragged:
     model.fit(
-        # x=data_loading.generator_wrapper(args.mode, args.batchsize)(),
-        # x=data_loading.dataset_wrapper(args.mode, args.batchsize),
         x=train_gen,
-        validation_data=val_gen,
+        validation_data=val_gen.load_all(),
         epochs=args.epochs,
+        callbacks=callback_list,
         batch_size=args.batchsize,
     )
 
@@ -121,8 +131,19 @@ else:
         print("Val   -- loss {:.5f}, {}".format(np.mean(val_loss), eval_metrics()))
         for m in model.metrics:
             m.reset_states()
+        for c in callback_list:
+            c.on_epoch_end(epoch, logs={"val_loss": np.mean(val_loss)})
 
         print("  Time taken: %.2fs" % (time.time() - start_time))
         
 
+"""
+Testing phase
+"""
+print("\nTesting phase")
+
+# load best model
+model = keras.models.load_model(MODEL_PATH)
+
+print(model.evaluate(test_gen))
 

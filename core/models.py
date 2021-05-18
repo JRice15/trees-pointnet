@@ -79,8 +79,7 @@ def pointnet_transform(x_in, batchsize, kind):
     
     # apply transformation matrix
     if args.ragged:
-        x_out = customlayers.RaggedMatMul(batchsize=batchsize, 
-                    name=prefix+"matmul")([x_in, trans_matrix])
+        x_out = customlayers.RaggedMatMul(name=prefix+"matmul")([x_in, trans_matrix])
     else:
         x_out = customlayers.MatMul(name=prefix+"matmul")([x_in, trans_matrix])
 
@@ -132,7 +131,7 @@ def cls_output_flow(global_feature, outchannels, dropout=0.3):
     return x
 
 
-def pointnet(npoints, nattributes, output_features, reg_weight=0.001):
+def pointnet(inpt_shape, output_features, reg_weight=0.001):
     """
     args:
         npoints: number of points per example (None if in ragged mode)
@@ -140,10 +139,7 @@ def pointnet(npoints, nattributes, output_features, reg_weight=0.001):
         output_features: num features per output point
     """
 
-    if args.ragged:
-        inpt = layers.Input((None, nattributes), ragged=True, batch_size=args.batchsize) # (B,N,K)
-    else:
-        inpt = layers.Input((npoints, nattributes), batch_size=args.batchsize)
+    inpt = layers.Input(inpt_shape, ragged=args.ragged, batch_size=args.batchsize) # (B,N,K)
 
     x = inpt
     x = customlayers.ExpandDims(axis=2, name="add_channels_1")(x) # (B,N,1,K)

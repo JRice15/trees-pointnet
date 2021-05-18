@@ -13,6 +13,7 @@ import tables
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--no-mpl",action="store_true")
+parser.add_argument("--subdivide",type=int,default=1)
 args = parser.parse_args()
 
 if not laspy.__version__.startswith("2"):
@@ -20,8 +21,8 @@ if not laspy.__version__.startswith("2"):
     print("$ pip3 install --pre laspy lazrs")
 
 
-ROWS = 44
-COLS = 49
+ORIG_ROWS = 44
+ORIG_COLS = 49
 
 
 """ 
@@ -81,15 +82,30 @@ grid.crs = "EPSG:26911"
 # edges of each grid square
 grid_bounds = grid["geometry"].bounds.to_numpy()
 # find larger valued x and y side of each grid square
-grid_x = np.maximum(grid_bounds[:,2], grid_bounds[:,0])
-grid_y = np.maximum(grid_bounds[:,3], grid_bounds[:,1])
+grid_x = np.maximum(grid_bounds[:,0], grid_bounds[:,2])
+grid_y = np.maximum(grid_bounds[:,1], grid_bounds[:,3])
 
-grid_lowerbound_x = np.minimum(grid_bounds[:,2], grid_bounds[:,0]).min()
-grid_lowerbound_y = np.minimum(grid_bounds[:,3], grid_bounds[:,1]).min()
+grid_lowerbound_x = np.minimum(grid_bounds[:,0], grid_bounds[:,2]).min()+0.6
+grid_lowerbound_y = np.minimum(grid_bounds[:,1], grid_bounds[:,3]).min()+0.6
 
-grid_x = grid_x[:COLS] # first row; all row x's are the same
-grid_y = grid_y[::COLS] # first column; all col y's are the same
+grid_x = grid_x[:ORIG_COLS] # first row; all row x's are the same
+grid_y = grid_y[::ORIG_COLS] # first column; all col y's are the same
 grid_y = grid_y[::-1] # put y in sorted order
+
+grid_x = np.insert(grid_x, 0, grid_lowerbound_x)
+grid_y = np.insert(grid_y, 0, grid_lowerbound_y)
+
+# make sure the differences between all grid squares are the same
+assert np.allclose(np.diff(grid_x), 153.6)
+assert np.allclose(np.diff(grid_y), 153.6)
+
+# make sure both are strictly increasing
+assert np.all(grid_x[1:] - grid_x[:-1] > 0)
+assert np.all(grid_y[1:] - grid_y[:-1] > 0)
+
+# subdividing
+grid_x = np.unique(np.linspace(grid_x[1:], grid_x[:-1], num=args.subdivide+1))
+grid_y = np.unique(np.linspace(grid_y[1:], grid_y[:-1], num=args.subdivide+1))
 
 print("Grid x, y")
 print(grid_x)
@@ -97,14 +113,10 @@ print("min:", grid_x.min(axis=0), "max:", grid_x.max(axis=0))
 print(grid_y)
 print("min:", grid_y.min(axis=0), "max:", grid_y.max(axis=0))
 
+ROWS = len(grid_x)
+COLS = len(grid_y)
 
-# make sure the differences between all grid square centers are the same
-assert np.allclose(np.diff(grid_x), 153.6)
-assert np.allclose(np.diff(grid_y), 153.6)
-
-# make sure both are strictly increasing
-assert np.all(grid_x[1:] - grid_x[:-1] > 0)
-assert np.all(grid_y[1:] - grid_y[:-1] > 0)
+print(ROWS, "rows,", COLS, "cols")
 
 
 def seperate_pts_by_grid(pts):
@@ -114,19 +126,17 @@ def seperate_pts_by_grid(pts):
     returns:
         list, the same length as the number of grid squares
     """
-    pts = pts[
-        (pts[:,0] >= grid_lowerbound_x)
-        & (pts[:,1] >= grid_lowerbound_y)
-    ]
     seperated = [None] * (ROWS * COLS)
     xlocs = np.searchsorted(grid_x, pts[:,0])
     ylocs = np.searchsorted(grid_y, pts[:,1])
     indexes = (ylocs * COLS) + xlocs
-    # pts outside grid are excluded. pts where y is larger than grid are excluded by not being reached by the for loop
-    indexes[xlocs >= COLS] = -1
-    for i in range(ROWS * COLS):
-        these = pts[indexes == i]
-        seperated[i] = these if len(these) else None
+    # pts outside grid are excluded. searchsorted returns first index where value could be inserted for sorted order
+    # y==0, y==ROWS, x==0, x=COLS means that point falls outside the grid.
+    for y in range(1, ROWS):
+        for x in range(1, COLS):
+            i = (y * COLS) + x
+            these = pts[indexes == i]
+            seperated[i] = these if len(these) else None
     return seperated
 
 
@@ -194,15 +204,21 @@ with laspy.open("../data/SaMo_full_hag_subsampled_30x.laz", "r") as reader:
             break
         count += len(pts)
 
-        # Note to future: never use pts["X"], only pts["x"]. the capitalized version scales the numbers to remove the decimal for some reason
+        # Note to future: never use pts["X"], only pts["x"]. the capitalized version scales the numbers to 
+        # remove the decimal bc that's how laspy stores the underlying data
+        t1 = time.time()
         xs, ys = reproject(pts["x"], pts["y"])
         pts = np.stack([xs, ys, pts["HeightAboveGround"]], axis=1)
+        print("  reprojection:", time.time() - t1)
 
+        t1 = time.time()
         sep_pts = seperate_pts_by_grid(pts)
-        # print(sep_pts)
+        print("  seperation:", time.time() - t1)
 
+        t1 = time.time()
         add_to_patches(train_fp, "lidar", sep_pts, inds=train_patch_inds)
         add_to_patches(test_fp, "lidar", sep_pts, inds=test_patch_inds)
+        print("  add to patches:", time.time() - t1)
 
         print(count, "points complete")
 
