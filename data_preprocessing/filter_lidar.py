@@ -25,7 +25,7 @@ pipeline.append({
 })
 if args.subsample > 1:
     pipeline.append({
-        "type": "filters.sample",
+        "type": "filters.decimation",
         "step": args.subsample,
     })
 pipeline.append({
