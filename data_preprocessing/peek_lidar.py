@@ -12,10 +12,14 @@ seaborn.set()
 
 from chunked_lidar_to_patches import load_grid, seperate_pts_by_grid, add_to_patches, load_train_gt
 
-load_train_gt()
+with h5py.File("../data/train_patches.h5", "r") as f:
+    ROWS = f["lidar"].attrs["gridrows"]
+    COLS = f["lidar"].attrs["gridcols"]
 
-grid_x, grid_y = load_grid()
-from chunked_lidar_to_patches import ROWS, COLS
+class args:
+    subdivide = int((ROWS - 1) / 44)
+
+grid_x, grid_y = load_grid(args)
 
 
 fig, axlist = plt.subplots(2,2)

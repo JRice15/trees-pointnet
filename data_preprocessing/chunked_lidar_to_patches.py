@@ -11,10 +11,6 @@ import pyproj
 import shapely
 import tables
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--no-mpl",action="store_true")
-parser.add_argument("--subdivide",type=int,default=1)
-args = parser.parse_args()
 
 if not laspy.__version__.startswith("2"):
     print("This program requires laspy >=2.0. It can be installed like this:")
@@ -26,7 +22,7 @@ ORIG_COLS = 49
 ROWS = None
 COLS = None
 
-def load_train_gt():
+def load_train_gt(args):
     """
     Load GT
     """
@@ -56,12 +52,12 @@ def load_train_gt():
     return gt
 
 
-def load_test_gt():
+def load_test_gt(args):
     """
     Load Test GT (Grid Squares Handpicked by Milo)
     """
 
-    test_gt = gpd.read_file("../data/Annotated.shp")
+    test_gt = gpd.read_file("../data/Patches/Patches.shp")
     test_gt.crs = "EPSG:4326"
     test_gt = test_gt.to_crs("EPSG:26911")
 
@@ -77,7 +73,7 @@ def load_test_gt():
     return test_gt
 
 
-def load_grid():
+def load_grid(args):
     """ 
     Load Grid
     """
@@ -172,14 +168,21 @@ def reproject(xs, ys):
 
 
 def main():
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--file",required=True,help="input laz/las file")
+    parser.add_argument("--no-mpl",action="store_true")
+    parser.add_argument("--subdivide",type=int,default=1)
+    args = parser.parse_args()
+
     """
     Use pytables to create extendable h5 file
     inspired by https://stackoverflow.com/questions/30376581/save-numpy-array-in-append-mode
     """
 
-    gt = load_train_gt()
-    test_gt = load_test_gt()
-    grid_x, grid_y = load_grid()
+    gt = load_train_gt(args)
+    test_gt = load_test_gt(args)
+    grid_x, grid_y = load_grid(args)
 
     train_fp = tables.open_file("../data/train_patches.h5", "w")
     test_fp = tables.open_file("../data/test_patches.h5", "w")
@@ -189,6 +192,10 @@ def main():
     train_fp.create_group("/", "lidar")
     test_fp.create_group("/", "gt")
     test_fp.create_group("/", "lidar")
+    train_fp.get_node("/lidar")._v_attrs["gridrows"] = ROWS
+    train_fp.get_node("/lidar")._v_attrs["gridcols"] = COLS
+    test_fp.get_node("/lidar")._v_attrs["gridrows"] = ROWS
+    test_fp.get_node("/lidar")._v_attrs["gridcols"] = COLS
 
 
     # seperate test gt
