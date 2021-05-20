@@ -229,7 +229,7 @@ def main():
 
     chunk_size = 10_000_000
     count = 0
-    with laspy.open("../data/SaMo_full_hag_subsampled_30x.laz", "r") as reader:
+    with laspy.open(args.file, "r") as reader:
         while True:
             pts = reader.read_points(chunk_size)
             if pts is None:
