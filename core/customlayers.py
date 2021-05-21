@@ -9,7 +9,7 @@ from core import args
 
 class TNet(keras.layers.Layer):
     """
-    Tranformation Network, from B*InChannels to B*K*K
+    Tranformation Network, from B*InChannels to B*OutChannels
     """
 
     def __init__(self, in_channels, out_channels, **kwargs):
@@ -25,20 +25,19 @@ class TNet(keras.layers.Layer):
             initial_value=K.flatten(K.eye(out_channels, dtype=tf.float32)),
             trainable=True
         )
-        self.reshape = layers.Reshape((out_channels, out_channels), name=self.name+"_reshape")
 
     def call(self, x):
         x = tf.matmul(x, self.w)
         x += self.b
-        transformation_matrix = self.reshape(x)
-        return transformation_matrix
+        return x
 
     def get_config(self):
-        config = super().get_config()
-        config.update({
+        # super.get_config fails?
+        config = {
+            "name": self.name,
             "in_channels": self.in_channels,
             "out_channels": self.out_channels,
-        })
+        }
         return config
 
 

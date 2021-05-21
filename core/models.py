@@ -6,7 +6,7 @@ from tensorflow.keras import layers
 from tensorflow import keras
 
 from core import customlayers, args
-from core.data_loading import make_data_generators
+
 
 def pointnet_conv(outchannels, kernel_size, name, bn=True, activation=True):
     """
@@ -67,15 +67,17 @@ def pointnet_transform(x_in, batchsize, kind):
     x = pointnet_conv(128, kernel_size=1, name=prefix+"conv2")(x)
     x = pointnet_conv(1024, kernel_size=1, name=prefix+"conv3")(x)
 
-    x = customlayers.ReduceDims(axis=2)(x) # (B,N,K)
+    x = customlayers.ReduceDims(axis=2, name=prefix+"squeeze")(x) # (B,N,K)
     x = layers.GlobalMaxPool1D(name=prefix+"maxpool")(x) # (B,K)
 
     x = pointnet_dense(512, name=prefix+"dense1")(x)
     x = pointnet_dense(256, name=prefix+"dense2")(x)
 
-    trans_matrix = customlayers.TNet(256, nattributes, name=prefix+"tnet")(x) # (B*K*K)
-    
-    x_in = customlayers.ReduceDims(axis=2)(x_in)
+    trans_matrix = customlayers.TNet(256, nattributes, name=prefix+"tnet")(x) # (B,(K*K))
+    trans_matrix = layers.Reshape((nattributes, nattributes), 
+                        name=prefix+"transmatrix_reshape")(trans_matrix) # (B,K,K)
+
+    x_in = customlayers.ReduceDims(axis=2, name=prefix+"squeeze2")(x_in)
     
     # apply transformation matrix
     if args.ragged:
@@ -120,10 +122,10 @@ def cls_output_flow(global_feature, outchannels, dropout=0.3):
 
     x = pointnet_dense(512, "outmlp_dense1")(x)
     if dropout > 0:
-        x = layers.Dropout(dropout)(x)
+        x = layers.Dropout(dropout, name="outmlp_dropout1")(x)
     x = pointnet_dense(256, "outmlp_dense2")(x)
     if dropout > 0:
-        x = layers.Dropout(dropout)(x)
+        x = layers.Dropout(dropout, name="outmlp_dropout2")(x)
 
     x = pointnet_dense(outchannels, "outmlp_dense3", bn=False, 
             activation=False)(x)
@@ -139,7 +141,8 @@ def pointnet(inpt_shape, output_features, reg_weight=0.001):
         output_features: num features per output point
     """
 
-    inpt = layers.Input(inpt_shape, ragged=args.ragged, batch_size=args.batchsize) # (B,N,K)
+    inpt = layers.Input(inpt_shape, ragged=args.ragged, 
+                batch_size=args.batchsize if args.ragged else None) # (B,N,K)
 
     x = inpt
     x = customlayers.ExpandDims(axis=2, name="add_channels_1")(x) # (B,N,1,K)
@@ -197,10 +200,11 @@ def pointnet(inpt_shape, output_features, reg_weight=0.001):
 
 
 if __name__ == "__main__":
+    from core import data_loading
 
     model = pointnet(None, 3, 1)
 
-    traingen, _, _ = make_data_generators(args.mode, args.batchsize)
+    traingen, _, _ = data_loading.get_train_val_gen(args.mode, args.batchsize)
 
     x, y = traingen[3]
 

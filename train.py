@@ -1,6 +1,8 @@
 import contextlib
-import time
+import datetime
+import json
 import os
+import time
 
 import h5py
 import numpy as np
@@ -8,21 +10,49 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import Model
 from tensorflow.keras import backend as K
-from tensorflow.keras import layers
+from tensorflow.keras import callbacks, layers
 from tensorflow.keras.optimizers import Adam
-from tensorflow.keras import callbacks
 
-from core import args, data_loading, OUTPUT_DIR, DATA_DIR, MODEL_DIR, MODEL_PATH
+from core import DATA_DIR, OUTPUT_DIR, MAIN_DIR, args, data_loading
 from core.losses import get_loss
 from core.models import pointnet
-from core.utils import output_model
+from core.utils import MyModelCheckpoint, output_model
 
+"""
+handle args
+"""
 
-# get data generators
+now = datetime.datetime.now()
+modelname = now.strftime("%y%m%d-%H%M%S-") + args.name
+MODEL_DIR = os.path.join(MAIN_DIR, "models/"+modelname)
+os.makedirs(MODEL_DIR, exist_ok=False)
+MODEL_PATH = os.path.join(MODEL_DIR, "model_" + args.name + ".tf")
 
-train_gen, val_gen, test_gen = data_loading.make_data_generators(val_split=0.1, val_as_gen=args.ragged)
+with open(os.path.join(MODEL_DIR, "params.json"), "w") as f:
+    json.dump(vars(args), f, indent=2)
+
+if args.mode is None:
+    print("'--mode' argument required")
+    exit()
+elif args.mode in ["pointwise-treetop"]:
+    args.output_type = "seg"
+elif args.mode in ["count"]:
+    args.output_type = "cls"
+else:
+    raise ValueError("unknown mode to outputtype initialization")
+
+"""
+load data
+"""
+
+train_gen, val_gen = data_loading.get_train_val_gens(val_split=0.1, val_as_gen=args.ragged)
 train_gen.summary()
+val_gen.summary()
 inpt_shape = train_gen.get_batch_shape()[1:]
+
+"""
+create model
+"""
 
 # map modes to number of output features
 output_features_map = {
@@ -42,7 +72,7 @@ loss, metrics = get_loss(args)
 model.compile(
     loss=loss, 
     metrics=metrics,
-    optimizer=Adam(0.003)
+    optimizer=Adam(args.lr)
 )
 
 callback_list = [
@@ -50,9 +80,12 @@ callback_list = [
     callbacks.ReduceLROnPlateau(factor=args.reducelr_factor, patience=args.reducelr_patience,
         min_lr=1e-6),
     callbacks.EarlyStopping(verbose=1, patience=args.reducelr_patience*2),
-    callbacks.ModelCheckpoint(MODEL_PATH, verbose=1, 
-        save_best_only=True)
+    MyModelCheckpoint(MODEL_PATH, verbose=1, epoch_per_save=5, save_best_only=True)
 ]
+
+"""
+train model
+"""
 
 if not args.ragged:
     model.fit(
@@ -135,15 +168,15 @@ else:
             c.on_epoch_end(epoch, logs={"val_loss": np.mean(val_loss)})
 
         print("  Time taken: %.2fs" % (time.time() - start_time))
-        
+
+train_gen.close_file()
+val_gen.close_file()
+
 
 """
 Testing phase
 """
-print("\nTesting phase")
 
-# load best model
-model = keras.models.load_model(MODEL_PATH)
-
-print(model.evaluate(test_gen))
-
+args.name = modelname
+# just run the evaluate script
+import evaluate

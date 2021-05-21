@@ -7,6 +7,7 @@ import datetime
 import os
 import shutil
 import time
+import json
 from pprint import pprint
 
 import h5py
@@ -24,8 +25,8 @@ print("Keras version:", keras.__version__)
 """ handle args """
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--name",required=True,help="name to save this model under")
-parser.add_argument("--mode",required=True)
+parser.add_argument("--name",required=True,help="name to save this model under or load")
+parser.add_argument("--mode",help="training mode, which determines which output flow and loss target to use")
 parser.add_argument("--ragged",action="store_true")
 parser.add_argument("--test",action="store_true",help="run minimal batches and epochs to test functionality")
 
@@ -48,13 +49,6 @@ parser.add_argument("--ortho-weight",type=float,default=0.001,
 args = parser.parse_args()
 pprint(vars(args))
 
-if args.mode in ["pointwise-treetop"]:
-    args.output_type = "seg"
-elif args.mode in ["count"]:
-    args.output_type = "cls"
-else:
-    raise ValueError("unknown mode to outputtype initialization")
-
 if args.test:
     args.epochs = 2
     args.batchsize = 2
@@ -66,12 +60,6 @@ DATA_DIR = os.path.join(MAIN_DIR, "data")
 OUTPUT_DIR = os.path.join(MAIN_DIR, "output")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 os.makedirs(os.path.join(MAIN_DIR, "models"), exist_ok=True)
-
-now = datetime.datetime.now()
-modelname = now.strftime("%y%m%d-%H%M%S-") + args.name
-MODEL_DIR = os.path.join(MAIN_DIR, "models/"+modelname)
-os.makedirs(MODEL_DIR, exist_ok=False)
-MODEL_PATH = os.path.join(MODEL_DIR, "model_" + args.name + ".tf")
 
 np.random.seed(9999)
 tf.random.set_seed(9999)

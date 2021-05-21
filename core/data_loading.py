@@ -21,7 +21,7 @@ class LidarPatchGen(keras.utils.Sequence):
     /lidar/patchN: dataset N, shape (numpts, 3)
     """
 
-    def __init__(self, filename, skip_freq=None, keep_freq=None):
+    def __init__(self, filename, skip_freq=None, keep_freq=None, batchsize=None):
         """
         args:
             skip_freq: every skip_freq patches will be skipped (designated for validation)
@@ -29,7 +29,7 @@ class LidarPatchGen(keras.utils.Sequence):
                 (only one of skip_freq and keep_freq should be provided)
         """
         assert not (skip_freq is not None and keep_freq is not None)
-        self.batch_size = args.batchsize
+        self.batch_size = args.batchsize if batchsize is None else batchsize
         self.filename = filename
         self.file = h5py.File(self.filename, "r")
         atexit.register(self.close_file) # close file on completion
@@ -169,7 +169,7 @@ def dataset_wrapper(sequence):
 
 
 
-def make_data_generators(val_split=0.1, val_as_gen=True):
+def get_train_val_gens(val_split=0.1, val_as_gen=True):
     """
     returns:
         train Keras Sequence, val Sequence or raw data, test Sequence
@@ -178,9 +178,12 @@ def make_data_generators(val_split=0.1, val_as_gen=True):
 
     train_gen = LidarPatchGen("data/train_patches.h5", skip_freq=val_freq)
     val_gen = LidarPatchGen("data/train_patches.h5", keep_freq=val_freq)
-    test_gen = LidarPatchGen("data/test_patches.h5")
 
-    return train_gen, val_gen, test_gen
+    return train_gen, val_gen
+
+def get_test_gen():
+    test_gen = LidarPatchGen("data/test_patches.h5", batchsize=2)
+    return test_gen
 
 
 
