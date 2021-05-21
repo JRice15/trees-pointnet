@@ -21,6 +21,7 @@ ORIG_ROWS = 44
 ORIG_COLS = 49
 ROWS = None
 COLS = None
+GRID_SIZE = None
 
 def load_train_gt(args):
     """
@@ -97,18 +98,21 @@ def load_grid(args):
     grid_x = np.insert(grid_x, 0, grid_lowerbound_x)
     grid_y = np.insert(grid_y, 0, grid_lowerbound_y)
 
+    # subdividing
+    grid_x = np.unique(np.linspace(grid_x[1:], grid_x[:-1], num=args.subdivide+1))
+    grid_y = np.unique(np.linspace(grid_y[1:], grid_y[:-1], num=args.subdivide+1))
+
     # make sure the differences between all grid squares are the same
-    assert np.allclose(np.diff(grid_x), 153.6)
-    assert np.allclose(np.diff(grid_y), 153.6)
+    global GRID_SIZE
+    GRID_SIZE = np.diff(grid_x)[0]
+    assert np.allclose(np.diff(grid_x), GRID_SIZE)
+    assert np.allclose(np.diff(grid_y), GRID_SIZE)
 
     # make sure both are strictly increasing
     assert np.all(grid_x[1:] - grid_x[:-1] > 0)
     assert np.all(grid_y[1:] - grid_y[:-1] > 0)
 
-    # subdividing
-    grid_x = np.unique(np.linspace(grid_x[1:], grid_x[:-1], num=args.subdivide+1))
-    grid_y = np.unique(np.linspace(grid_y[1:], grid_y[:-1], num=args.subdivide+1))
-
+    print("Grid square side length:", GRID_SIZE)
     print("Grid x, y")
     print(grid_x)
     print("min:", grid_x.min(axis=0), "max:", grid_x.max(axis=0))
@@ -143,21 +147,30 @@ def seperate_pts_by_grid(pts, grid_x, grid_y):
     return seperated
 
 
-def add_to_patches(fp, group, sep_pts, inds=None):
-    """
-    take the output from seperate_pts_by_grid (list of np.array|None), and add each to the corresponding patch
-    """
-    atom = tables.Float32Atom()
-    if inds is None:
-        inds = [(x,y) for x in range(COLS) for y in range(ROWS)]
-    for (x,y) in inds:
-        pt_group = sep_pts[y][x]
-        if pt_group is not None:
-            try:
-                earray = fp.get_node("/"+group+"/patch{}_{}".format(x,y))
-            except tables.NoSuchNodeError:
-                earray = fp.create_earray("/"+group, "patch{}_{}".format(x,y), atom, (0, pt_group.shape[1]))
-            earray.append(pt_group)
+def make_patcher(fp, group, grid_x, grid_y, inds=None):
+    """factory function to make add_to_patches func"""
+    def add_to_patches(sep_pts, zmin=None, zmax=None):
+        """
+        take the output from seperate_pts_by_grid (list of np.array|None), and add each to the corresponding patch
+        """
+        nonlocal fp, group, grid_x, grid_y, inds
+        atom = tables.Float32Atom()
+        if inds is None:
+            inds = [(x,y) for x in range(COLS) for y in range(ROWS)]
+        for (x,y) in inds:
+            pt_group = sep_pts[y][x]
+            if pt_group is not None:
+                # normalize points to 0,1
+                pt_group[:,0] = (pt_group[:,0] - grid_x[x] + GRID_SIZE) / GRID_SIZE
+                pt_group[:,1] = (pt_group[:,1] - grid_y[y] + GRID_SIZE) / GRID_SIZE
+                if zmin is not None:
+                    pt_group[:,2] = (pt_group[:,2] - zmin) / (zmax - zmin)
+                try:
+                    earray = fp.get_node("/"+group+"/patch{}_{}".format(x,y))
+                except tables.NoSuchNodeError:
+                    earray = fp.create_earray("/"+group, "patch{}_{}".format(x,y), atom, (0, pt_group.shape[1]))
+                earray.append(pt_group)
+    return add_to_patches
 
 
 transformer = pyproj.Transformer.from_crs("EPSG:3857", "EPSG:26911", 
@@ -192,11 +205,19 @@ def main():
     train_fp.create_group("/", "lidar")
     test_fp.create_group("/", "gt")
     test_fp.create_group("/", "lidar")
-    train_fp.get_node("/lidar")._v_attrs["gridrows"] = ROWS
-    train_fp.get_node("/lidar")._v_attrs["gridcols"] = COLS
-    test_fp.get_node("/lidar")._v_attrs["gridrows"] = ROWS
-    test_fp.get_node("/lidar")._v_attrs["gridcols"] = COLS
 
+    # add attributes
+    train_fp.get_node("/")._v_attrs["gridrows"] = ROWS
+    train_fp.get_node("/")._v_attrs["gridcols"] = COLS
+    train_fp.get_node("/")._v_attrs["gridsize"] = GRID_SIZE
+    train_fp.get_node("/")._v_attrs["grid_min_x"] = grid_x.min()
+    train_fp.get_node("/")._v_attrs["grid_min_y"] = grid_y.min()
+
+    test_fp.get_node("/")._v_attrs["gridrows"] = ROWS
+    test_fp.get_node("/")._v_attrs["gridcols"] = COLS
+    test_fp.get_node("/")._v_attrs["gridsize"] = GRID_SIZE
+    test_fp.get_node("/")._v_attrs["grid_min_x"] = grid_x.min()
+    test_fp.get_node("/")._v_attrs["grid_min_y"] = grid_y.min()
 
     # seperate test gt
     sep_test_gt = seperate_pts_by_grid(test_gt, grid_x, grid_y)
@@ -219,16 +240,23 @@ def main():
             else:
                 filtered_sep_test_gt[-1].append(test_v)
                 test_patch_inds.append((x,y))
-    add_to_patches(test_fp, "gt", filtered_sep_test_gt)
 
     print("test patches:", len(test_patch_inds))
     print("train patches:", len(train_patch_inds))
 
-    # add train gt
-    add_to_patches(train_fp, "gt", sep_train_gt, inds=train_patch_inds)
+    # create patchers
+    train_lidar_patcher = make_patcher(train_fp, "lidar", grid_x, grid_y, inds=train_patch_inds)
+    train_gt_patcher = make_patcher(train_fp, "gt", grid_x, grid_y, inds=train_patch_inds)
+    test_lidar_patcher = make_patcher(test_fp, "lidar", grid_x, grid_y, inds=test_patch_inds)
+    test_gt_patcher = make_patcher(test_fp, "gt", grid_x, grid_y, inds=test_patch_inds)
+
+    # add gt to patches
+    train_gt_patcher(sep_train_gt)
+    test_gt_patcher(filtered_sep_test_gt)
 
     chunk_size = 10_000_000
     count = 0
+    z_min, z_max = None, None
     with laspy.open(args.file, "r") as reader:
         while True:
             pts = reader.read_points(chunk_size)
@@ -240,7 +268,14 @@ def main():
             # remove the decimal bc that's how laspy stores the underlying data
             t1 = time.time()
             xs, ys = reproject(pts["x"], pts["y"])
-            pts = np.stack([xs, ys, pts["HeightAboveGround"]], axis=1)
+            zs = pts["HeightAboveGround"]
+            if z_min is None:
+                # we can't know the absolute min and max z when we only look at it in chunks.
+                # so, let's use the min/max from the first chunk as a good estimate of the whole
+                z_min = zs.min()
+                z_max = zs.max()
+                print("z min, max:", zs.min(), zs.max())
+            pts = np.stack([xs, ys, zs], axis=1)
             print("  reprojection:", time.time() - t1, "sec")
 
             t1 = time.time()
@@ -248,8 +283,8 @@ def main():
             print("  seperation:", time.time() - t1, "sec")
 
             t1 = time.time()
-            add_to_patches(train_fp, "lidar", sep_pts, inds=train_patch_inds)
-            add_to_patches(test_fp, "lidar", sep_pts, inds=test_patch_inds)
+            train_lidar_patcher(sep_pts, z_min, z_max)
+            test_lidar_patcher(sep_pts)
             print("  add to patches:", time.time() - t1, "sec")
 
             print(count, "points complete")

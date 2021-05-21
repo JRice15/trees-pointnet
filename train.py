@@ -28,9 +28,6 @@ MODEL_DIR = os.path.join(MAIN_DIR, "models/"+modelname)
 os.makedirs(MODEL_DIR, exist_ok=False)
 MODEL_PATH = os.path.join(MODEL_DIR, "model_" + args.name + ".tf")
 
-with open(os.path.join(MODEL_DIR, "params.json"), "w") as f:
-    json.dump(vars(args), f, indent=2)
-
 if args.mode is None:
     print("'--mode' argument required")
     exit()
@@ -40,6 +37,9 @@ elif args.mode in ["count"]:
     args.output_type = "cls"
 else:
     raise ValueError("unknown mode to outputtype initialization")
+
+with open(os.path.join(MODEL_DIR, "params.json"), "w") as f:
+    json.dump(vars(args), f, indent=2)
 
 """
 load data

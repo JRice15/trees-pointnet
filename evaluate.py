@@ -59,11 +59,16 @@ model = keras.models.load_model(MODEL_PATH)
 test_gen = data_loading.get_test_gen()
 test_gen.summary()
 
-results = model.evaluate(test_gen)
+metric_vals = model.evaluate(test_gen)
+
+results = {model.metrics_names[i]:v for i,v in enumerate(metric_vals)}
 
 print() # newline
-for i,v in enumerate(results):
-    print(model.metrics_names[i] + ":", v)
+for k,v in results.items():
+    print(k+":", v)
+
+with open(os.path.join(RESULTS_DIR, "results.json"), "w") as f:
+    json.dump(results, f, indent=2)
 
 x, y = test_gen.load_all()
 predictions = model.predict(x)

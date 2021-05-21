@@ -10,11 +10,11 @@ seaborn.set()
 # import tensorflow as tf
 # from dataset import make_data_generators
 
-from chunked_lidar_to_patches import load_grid, seperate_pts_by_grid, add_to_patches, load_train_gt
+from chunked_lidar_to_patches import load_grid
 
 with h5py.File("../data/train_patches.h5", "r") as f:
-    ROWS = f["lidar"].attrs["gridrows"]
-    COLS = f["lidar"].attrs["gridcols"]
+    ROWS = f.attrs["gridrows"]
+    COLS = f.attrs["gridcols"]
 
 class args:
     subdivide = int((ROWS - 1) / 44)
