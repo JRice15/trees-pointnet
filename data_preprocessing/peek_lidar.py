@@ -16,10 +16,10 @@ with h5py.File("../data/train_patches.h5", "r") as f:
     ROWS = f.attrs["gridrows"]
     COLS = f.attrs["gridcols"]
 
-class args:
+class ARGS:
     subdivide = int((ROWS - 1) / 44)
 
-grid_x, grid_y = load_grid(args)
+grid_x, grid_y = load_grid(ARGS)
 
 
 fig, axlist = plt.subplots(2,2)

@@ -8,27 +8,72 @@ from tensorflow.keras.optimizers import Adam
 from tensorflow import keras
 
 
-def get_loss(args):
+def get_loss(ARGS):
     """
-    return tuple of (loss, list(metrics))
+    return tuple of (loss, list(metrics), error_func).
+    loss is a keras loss, and metrics are keras metrics.
+    error func is a function with this signature:
+        error_func(predictions, gt_targets): -> scalar
+    where scalar is an error metric (can be negative)
     """
-    mode = args.mode.lower()
+    mode = ARGS.mode.lower()
     if mode == "pointwise-treetop":
-        return pointwise_treetop(args)
+        if ARGS.ragged:
+            return ragged_pointwise_treetop(ARGS)
+        else:
+            return nonrag_pointwise_treetop(ARGS)
     if mode == "count":
-        return keras.losses.mse, [keras.metrics.mse]
+        return keras.losses.mse, [keras.metrics.mse], lambda x,y: y - x
 
     raise ValueError("No loss for mode '{}'".format(mode))
 
 
-def pointwise_treetop(args):
+def nonrag_pointwise_treetop(ARGS):
     """
-    squared xy distance of each point to closest ground truth target, weighted by 
+    squared xy distance of each point to closest ground truth target, weighted by tree/not-tree classification
     """
-    assert args.dist_weight is not None
+    assert ARGS.dist_weight is not None
+
+    @tf.function
+    def dist_loss(x, y_locs):
+        x_locs = x[:,:,:2]
+        x_weights = x[:,:,2]
+        sqr_dists = tf.map_fn(handle_batch, (x_locs, y_locs), 
+            fn_output_signature=tf.RaggedTensorSpec(shape=(None,), dtype=tf.float32) # only tf > 2.2
+            # dtype=tf.RaggedTensorSpec(shape=(None,), dtype=tf.float32) # tf 2.2
+        )
+
+        weighted_dists = sqr_dists * x_weights
+        # mean loss per point, not mean of batch means. ie, losses for each batch is weighted by number of points
+        return K.mean(weighted_dists)
+
+    @tf.function
+    def count_loss(x, y_locs):
+        x_weights = x[:,:,2]
+        # negative y -> not a tree
+        y_is_positive = tf.sign(K.sum(y_locs, axis=-1) + K.epsilon())
+        tree_count = K.sum(tf.nn.relu(y_is_positive), axis=-1) # per batch
+        predicted_counts = K.sum(x_weights, axis=-1)
+        # batchwise squared error between predicted and actual tree count. ie batch loss is not weighted
+        return K.mean((tree_count - predicted_counts) ** 2)
+
+    @tf.function
+    def loss_func(y_locs, x):
+        loss = ARGS.dist_weight * dist_loss(x, y_locs)
+        loss += (1 - ARGS.dist_weight) * count_loss(x, y_locs)
+        return loss
+    
+    return loss_func, None, None
+
+
+def ragged_pointwise_treetop(ARGS):
+    """
+    NOTE: this code may not work
+    """
+    assert ARGS.dist_weight is not None
 
     def x_handler(y_row):
-        # @tf.function
+        @tf.function
         def f(x):
             """
             min squared distance between any yrow point and the provided x
@@ -36,7 +81,7 @@ def pointwise_treetop(args):
             return K.min(K.sum((x - y_row) ** 2, axis=-1))
         return f
 
-    # @tf.function
+    @tf.function
     def handle_batch(inpt):
         """
         for each x point in this batch, find the squared distance to the closest y point
@@ -57,34 +102,23 @@ def pointwise_treetop(args):
         # mean loss per point, not mean of batch means. ie, losses for each batch is weighted by number of points
         return K.mean(weighted_dists)
 
-    # @tf.function
+    @tf.function
     def count_loss(x, y_locs):
         x_weights = x[:,:,2]
         # negative y -> not a tree
         y_is_positive = tf.sign(K.sum(y_locs, axis=-1) + K.epsilon())
         tree_count = K.sum(tf.nn.relu(y_is_positive), axis=-1) # per batch
         predicted_counts = K.sum(x_weights, axis=-1)
-
-        print(x_weights, predicted_counts, tree_count)
         # batchwise squared error between predicted and actual tree count. ie batch loss is not weighted
         return K.mean((tree_count - predicted_counts) ** 2)
 
     def loss_func(y_locs, x):
-        # loss = args.dist_weight * dist_loss(x, y_locs)
-        loss = (1 - args.dist_weight) * count_loss(x, y_locs)
+        loss = ARGS.dist_weight * dist_loss(x, y_locs)
+        loss += (1 - ARGS.dist_weight) * count_loss(x, y_locs)
         return loss
     
-    return loss_func, None # [count_loss, dist_loss]
+    return loss_func, None, None
         
-
-
-class RaggedMSE(keras.losses.Loss):
-    @tf.function
-    def call(self, y_true, y_pred):
-        losses = tf.ragged.map_flat_values(
-            keras.losses.mse, y_true, y_pred)
-        return tf.reduce_mean(losses)
-
 
 
 
@@ -110,13 +144,10 @@ if __name__ == "__main__":
 
 
     class A:
-        pass
+        dist_weight = 0.5
 
-    args = A()
-
-    args.dist_weight = 0.5
-
-    res = pointwise_treetop(args)[0](y, x)
+    ARGS = A()
+    res = pointwise_treetop(ARGS)[0](y, x)
 
     print(res)
 

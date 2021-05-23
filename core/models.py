@@ -5,7 +5,7 @@ from tensorflow.keras import backend as K
 from tensorflow.keras import layers
 from tensorflow import keras
 
-from core import customlayers, args
+from core import customlayers, ARGS
 
 
 def pointnet_conv(outchannels, kernel_size, name, bn=True, activation=True):
@@ -21,7 +21,7 @@ def pointnet_conv(outchannels, kernel_size, name, bn=True, activation=True):
         layer_list.append(layers.BatchNormalization(name=name+"_bn"))
     if activation:
         layer_list.append(layers.ReLU(name=name+"_relu"))
-    if args.ragged:
+    if ARGS.ragged:
         for i,v in enumerate(layer_list):
             layer_list[i] = layers.TimeDistributed(v, name=v.name+"_timedistrib")
     def op(x):
@@ -48,7 +48,7 @@ def pointnet_dense(outchannels, name, bn=True, activation=True):
 
 def pointnet_transform(x_in, batchsize, kind):
     """
-    args:
+    ARGS:
         x_in: (B,N,1,K)
         kind: 'input' or 'feature'
     returns:
@@ -80,7 +80,7 @@ def pointnet_transform(x_in, batchsize, kind):
     x_in = customlayers.ReduceDims(axis=2, name=prefix+"squeeze2")(x_in)
     
     # apply transformation matrix
-    if args.ragged:
+    if ARGS.ragged:
         x_out = customlayers.RaggedMatMul(name=prefix+"matmul")([x_in, trans_matrix])
     else:
         x_out = customlayers.MatMul(name=prefix+"matmul")([x_in, trans_matrix])
@@ -135,20 +135,20 @@ def cls_output_flow(global_feature, outchannels, dropout=0.3):
 
 def pointnet(inpt_shape, output_features, reg_weight=0.001):
     """
-    args:
+    ARGS:
         npoints: number of points per example (None if in ragged mode)
         nattributes: number of attributes per point (x,y,z, r,g,b, etc)
         output_features: num features per output point
     """
 
-    inpt = layers.Input(inpt_shape, ragged=args.ragged, 
-                batch_size=args.batchsize if args.ragged else None) # (B,N,K)
+    inpt = layers.Input(inpt_shape, ragged=ARGS.ragged, 
+                batch_size=ARGS.batchsize if ARGS.ragged else None) # (B,N,K)
 
     x = inpt
     x = customlayers.ExpandDims(axis=2, name="add_channels_1")(x) # (B,N,1,K)
 
     # input transform
-    x, inpt_trans_matrix = pointnet_transform(x, batchsize=args.batchsize, kind="input") # (B,N,K)
+    x, inpt_trans_matrix = pointnet_transform(x, batchsize=ARGS.batchsize, kind="input") # (B,N,K)
     x = customlayers.ExpandDims(axis=2, name="add_channels_2")(x) # (B,N,1,K)
 
     # mlp 1
@@ -156,7 +156,7 @@ def pointnet(inpt_shape, output_features, reg_weight=0.001):
     x = pointnet_conv(64, 1, name="mlp1_conv2")(x)
 
     # feature transform
-    x, feat_trans_matrix = pointnet_transform(x, batchsize=args.batchsize, kind="feature") # (B,N,K)
+    x, feat_trans_matrix = pointnet_transform(x, batchsize=ARGS.batchsize, kind="feature") # (B,N,K)
     x = customlayers.ExpandDims(axis=2, name="add_channels_3")(x) # (B,N,1,K)
 
     local_features = x
@@ -173,14 +173,15 @@ def pointnet(inpt_shape, output_features, reg_weight=0.001):
     global_feature = x
 
     # output flow
-    if args.output_type == "seg":
+    if ARGS.output_type == "seg":
         output = seg_output_flow(local_features, global_feature, output_features)
-    elif args.output_type == "cls":
+    elif ARGS.output_type == "cls":
         output = cls_output_flow(global_feature, output_features)
     
-    if args.mode == "pointwise-treetop":
+    if ARGS.mode == "pointwise-treetop":
+        # limit to 0 to 1
+        output = customlayers.Activation("sigmoid", name="pwtt-sigmoid")(output)
         # add input xy locations to each point
-        output = customlayers.Activation("sigmoid", name="pwtt-sigmoid")(output) # limit to 0 to 1
         output = layers.Concatenate(axis=-1, name="pwtt-concat_inpt")([inpt, output])
 
     model = Model(inpt, output)
@@ -204,7 +205,7 @@ if __name__ == "__main__":
 
     model = pointnet(None, 3, 1)
 
-    traingen, _, _ = data_loading.get_train_val_gen(args.mode, args.batchsize)
+    traingen, _, _ = data_loading.get_train_val_gen(ARGS.mode, ARGS.batchsize)
 
     x, y = traingen[3]
 

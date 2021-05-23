@@ -23,7 +23,7 @@ ROWS = None
 COLS = None
 GRID_SIZE = None
 
-def load_train_gt(args):
+def load_train_gt(ARGS):
     """
     Load GT
     """
@@ -53,7 +53,7 @@ def load_train_gt(args):
     return gt
 
 
-def load_test_gt(args):
+def load_test_gt(ARGS):
     """
     Load Test GT (Grid Squares Handpicked by Milo)
     """
@@ -74,7 +74,7 @@ def load_test_gt(args):
     return test_gt
 
 
-def load_grid(args):
+def load_grid(ARGS):
     """ 
     Load Grid
     """
@@ -99,8 +99,8 @@ def load_grid(args):
     grid_y = np.insert(grid_y, 0, grid_lowerbound_y)
 
     # subdividing
-    grid_x = np.unique(np.linspace(grid_x[1:], grid_x[:-1], num=args.subdivide+1))
-    grid_y = np.unique(np.linspace(grid_y[1:], grid_y[:-1], num=args.subdivide+1))
+    grid_x = np.unique(np.linspace(grid_x[1:], grid_x[:-1], num=ARGS.subdivide+1))
+    grid_y = np.unique(np.linspace(grid_y[1:], grid_y[:-1], num=ARGS.subdivide+1))
 
     # make sure the differences between all grid squares are the same
     global GRID_SIZE
@@ -186,16 +186,16 @@ def main():
     parser.add_argument("--file",required=True,help="input laz/las file")
     parser.add_argument("--no-mpl",action="store_true")
     parser.add_argument("--subdivide",type=int,default=1)
-    args = parser.parse_args()
+    ARGS = parser.parse_args()
 
     """
     Use pytables to create extendable h5 file
     inspired by https://stackoverflow.com/questions/30376581/save-numpy-array-in-append-mode
     """
 
-    gt = load_train_gt(args)
-    test_gt = load_test_gt(args)
-    grid_x, grid_y = load_grid(args)
+    gt = load_train_gt(ARGS)
+    test_gt = load_test_gt(ARGS)
+    grid_x, grid_y = load_grid(ARGS)
 
     train_fp = tables.open_file("../data/train_patches.h5", "w")
     test_fp = tables.open_file("../data/test_patches.h5", "w")
@@ -257,7 +257,7 @@ def main():
     chunk_size = 10_000_000
     count = 0
     z_min, z_max = None, None
-    with laspy.open(args.file, "r") as reader:
+    with laspy.open(ARGS.file, "r") as reader:
         while True:
             pts = reader.read_points(chunk_size)
             if pts is None:
@@ -318,7 +318,7 @@ def main():
     test_fp.get_node("/gt")._v_attrs["min_trees"] = min(test_gt_lens)
     test_fp.get_node("/gt")._v_attrs["max_trees"] = max(test_gt_lens)
 
-    if not args.no_mpl:
+    if not ARGS.no_mpl:
         import matplotlib.pyplot as plt
         os.makedirs("output", exist_ok=True)
 

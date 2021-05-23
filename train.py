@@ -2,6 +2,8 @@ import contextlib
 import datetime
 import json
 import os
+import argparse
+from pprint import pprint
 import time
 
 import h5py
@@ -14,42 +16,70 @@ from tensorflow.keras import callbacks, layers
 from tensorflow.keras.optimizers import Adam
 import matplotlib.pyplot as plt
 
-from core import DATA_DIR, OUTPUT_DIR, MAIN_DIR, args, data_loading
+from core import DATA_DIR, OUTPUT_DIR, MAIN_DIR, ARGS, data_loading
 from core.losses import get_loss
 from core.models import pointnet
 from core.utils import MyModelCheckpoint, output_model
 
 """
-handle args
+parse args
 """
 
-now = datetime.datetime.now()
-modelname = now.strftime("%y%m%d-%H%M%S-") + args.name
-MODEL_DIR = os.path.join(MAIN_DIR, "models/"+modelname)
-os.makedirs(MODEL_DIR, exist_ok=False)
-MODEL_PATH = os.path.join(MODEL_DIR, "model_" + args.name + ".tf")
+parser = argparse.ArgumentParser()
+parser.add_argument("--name",required=True,help="name to save this model under or load")
+parser.add_argument("--mode",required=True,help="training mode, which determines which output flow and loss target to use")
+parser.add_argument("--ragged",action="store_true")
+parser.add_argument("--test",action="store_true",help="run minimal batches and epochs to test functionality")
 
-if args.mode is None:
-    print("'--mode' argument required")
-    exit()
-elif args.mode in ["pointwise-treetop"]:
-    args.output_type = "seg"
-elif args.mode in ["count"]:
-    args.output_type = "cls"
+# training hyperparameters
+parser.add_argument("--epochs",type=int,default=250)
+parser.add_argument("--batchsize",type=int,default=16)
+parser.add_argument("--lr",type=float,default=0.003,help="initial learning rate")
+parser.add_argument("--reducelr_factor",type=float,default=0.2,help="initial learning rate")
+parser.add_argument("--reducelr_patience",type=float,default=50,help="initial learning rate")
+
+# model parameters
+parser.add_argument("--npoints",type=int,default=300,help="number of points to run per patch. In ragged or non-ragged, "
+        "patches with fewer points will be skipped. Also in non-ragged, patches with more points with be truncated to npoints")
+parser.add_argument("--dist-weight",type=float,default=0.5,
+        help="pointnet-treetop mode: weight on distance vs sum loss")
+parser.add_argument("--ortho-weight",type=float,default=0.001,
+        help="orthogonality regularization loss weight")
+
+
+ARGS = parser.parse_args(namespace=ARGS)
+
+if ARGS.test:
+    ARGS.epochs = 2
+    ARGS.batchsize = 2
+
+if ARGS.mode in ["pointwise-treetop"]:
+    ARGS.output_type = "seg"
+elif ARGS.mode in ["count"]:
+    ARGS.output_type = "cls"
 else:
     raise ValueError("unknown mode to outputtype initialization")
 
+pprint(vars(ARGS))
+
+# create model output dir
+now = datetime.datetime.now()
+modelname = now.strftime("%y%m%d-%H%M%S-") + ARGS.name
+MODEL_DIR = os.path.join(MAIN_DIR, "models/"+modelname)
+os.makedirs(MODEL_DIR, exist_ok=False)
+MODEL_PATH = os.path.join(MODEL_DIR, "model_" + ARGS.name + ".tf")
+
 with open(os.path.join(MODEL_DIR, "params.json"), "w") as f:
-    json.dump(vars(args), f, indent=2)
+    json.dump(vars(ARGS), f, indent=2)
 
 """
 load data
 """
 
-train_gen, val_gen = data_loading.get_train_val_gens(val_split=0.1, val_as_gen=args.ragged)
+train_gen, val_gen = data_loading.get_train_val_gens(val_split=0.1, val_as_gen=ARGS.ragged)
 train_gen.summary()
 val_gen.summary()
-inpt_shape = train_gen.get_batch_shape()[1:]
+inpt_shape = train_gen.get_batch_shape()[0][1:]
 
 """
 create model
@@ -63,24 +93,24 @@ output_features_map = {
 
 model = pointnet(
     inpt_shape=inpt_shape,
-    output_features=output_features_map[args.mode],
-    reg_weight=args.ortho_weight,
+    output_features=output_features_map[ARGS.mode],
+    reg_weight=ARGS.ortho_weight,
 )
 output_model(model)
 
-loss, metrics = get_loss(args)
+loss, metrics, _ = get_loss(ARGS)
 
 model.compile(
     loss=loss, 
     metrics=metrics,
-    optimizer=Adam(args.lr)
+    optimizer=Adam(ARGS.lr)
 )
 
 callback_list = [
     callbacks.History(),
-    callbacks.ReduceLROnPlateau(factor=args.reducelr_factor, patience=args.reducelr_patience,
+    callbacks.ReduceLROnPlateau(factor=ARGS.reducelr_factor, patience=ARGS.reducelr_patience,
         min_lr=1e-6, verbose=1),
-    callbacks.EarlyStopping(verbose=1, patience=args.reducelr_patience*2),
+    callbacks.EarlyStopping(verbose=1, patience=ARGS.reducelr_patience*2),
     MyModelCheckpoint(MODEL_PATH, verbose=1, epoch_per_save=5, save_best_only=True)
 ]
 
@@ -88,14 +118,14 @@ callback_list = [
 train model
 """
 
-if not args.ragged:
+if not ARGS.ragged:
     try:
         H = model.fit(
             x=train_gen,
             validation_data=val_gen.load_all(),
-            epochs=args.epochs,
+            epochs=ARGS.epochs,
             callbacks=callback_list,
-            batch_size=args.batchsize,
+            batch_size=ARGS.batchsize,
         )
     except KeyboardInterrupt:
         H = callback_list[0]
@@ -142,7 +172,7 @@ else:
 
     LOG_FREQ = 20 # in batches
 
-    for epoch in range(args.epochs):
+    for epoch in range(ARGS.epochs):
         print("Epoch {}".format(epoch))
         start_time = time.time()
 
@@ -189,7 +219,8 @@ val_gen.close_file()
 """
 Testing phase
 """
-
-args.name = modelname
-# just run the evaluate script
 import evaluate
+
+# add qualified name with timestamp as name, so it is unambigous in case of multiple models with same name
+ARGS.name = modelname
+evaluate.main()

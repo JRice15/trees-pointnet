@@ -11,7 +11,7 @@ from tensorflow.keras import backend as K
 from tensorflow.keras import layers
 from tensorflow.keras.optimizers import Adam
 
-from core import args, OUTPUT_DIR, DATA_DIR
+from core import ARGS, OUTPUT_DIR, DATA_DIR
 
 
 class MyModelCheckpoint(tf.keras.callbacks.ModelCheckpoint):

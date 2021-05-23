@@ -5,7 +5,7 @@ from tensorflow.keras import Model
 from tensorflow.keras import backend as K
 from tensorflow.keras import layers
 
-from core import args
+from core import ARGS
 
 class TNet(keras.layers.Layer):
     """
@@ -60,7 +60,7 @@ class RaggedMatMul(layers.Layer):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._supports_ragged_inputs = True
-        self.batchsize = args.batchsize
+        self.batchsize = ARGS.batchsize
 
     def call(self, xs):
         a, b = xs
@@ -88,10 +88,10 @@ class RaggedMatMul(layers.Layer):
 
 def Activation(actname, **kwargs):
     """
-    args:
+    ARGS:
         actname: name of activation function
     """
-    if args.ragged:
+    if ARGS.ragged:
         return layers.TimeDistributed(layers.Activation(actname), **kwargs)
     else:
         return layers.Activation(actname, **kwargs)
