@@ -284,7 +284,7 @@ def main():
 
             t1 = time.time()
             train_lidar_patcher(sep_pts, z_min, z_max)
-            test_lidar_patcher(sep_pts)
+            test_lidar_patcher(sep_pts, z_min, z_max)
             print("  add to patches:", time.time() - t1, "sec")
 
             print(count, "points complete")
