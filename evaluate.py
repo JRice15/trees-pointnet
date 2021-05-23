@@ -56,6 +56,18 @@ print("\nTesting phase")
 print("Loading model", MODEL_PATH)
 model = keras.models.load_model(MODEL_PATH)
 
+addl_metrics = [
+    keras.metrics.RootMeanSquaredError(),
+    keras.metrics.MeanAbsoluteError(),
+    keras.metrics.MeanAbsolutePercentageError(),
+]
+
+model.compile(
+    optimizer=model.optimizer,
+    loss=model.loss,
+    metrics=model.metrics+addl_metrics
+)
+
 test_gen = data_loading.get_test_gen()
 test_gen.summary()
 
@@ -74,7 +86,7 @@ x, y = test_gen.load_all()
 predictions = model.predict(x)
 
 print("First 10 predictions:")
-print(predictions[:10])
+print(np.squeeze(predictions[:10]))
 print("First 10 Ground Truth")
 print(y[:10].numpy())
 
