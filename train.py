@@ -12,6 +12,7 @@ from tensorflow.keras import Model
 from tensorflow.keras import backend as K
 from tensorflow.keras import callbacks, layers
 from tensorflow.keras.optimizers import Adam
+import matplotlib.pyplot as plt
 
 from core import DATA_DIR, OUTPUT_DIR, MAIN_DIR, args, data_loading
 from core.losses import get_loss
@@ -78,7 +79,7 @@ model.compile(
 callback_list = [
     callbacks.History(),
     callbacks.ReduceLROnPlateau(factor=args.reducelr_factor, patience=args.reducelr_patience,
-        min_lr=1e-6),
+        min_lr=1e-6, verbose=1),
     callbacks.EarlyStopping(verbose=1, patience=args.reducelr_patience*2),
     MyModelCheckpoint(MODEL_PATH, verbose=1, epoch_per_save=5, save_best_only=True)
 ]
@@ -88,14 +89,26 @@ train model
 """
 
 if not args.ragged:
-    model.fit(
-        x=train_gen,
-        validation_data=val_gen.load_all(),
-        epochs=args.epochs,
-        callbacks=callback_list,
-        batch_size=args.batchsize,
-    )
+    try:
+        H = model.fit(
+            x=train_gen,
+            validation_data=val_gen.load_all(),
+            epochs=args.epochs,
+            callbacks=callback_list,
+            batch_size=args.batchsize,
+        )
+    except KeyboardInterrupt:
+        H = callback_list[0]
 
+    for k in H.history.keys():
+        if not k.startswith("val_"):
+            plt.plot(H.history[k])
+            plt.plot(H.history["val_"+k])
+            plt.legend(['train', 'val'])
+            plt.title(k)
+            plt.xlabel('epoch')
+            plt.savefig(os.path.join(MODEL_DIR, k+".png"))
+            plt.close()
 
 else:
     """
