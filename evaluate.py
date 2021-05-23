@@ -56,16 +56,22 @@ print("\nTesting phase")
 print("Loading model", MODEL_PATH)
 model = keras.models.load_model(MODEL_PATH)
 
-addl_metrics = [
-    keras.metrics.RootMeanSquaredError(),
-    keras.metrics.MeanAbsoluteError(),
-    keras.metrics.MeanAbsolutePercentageError(),
+#metrics = [v for i,v in enumerate(model.metrics) if model.metrics_names[i] != "loss"]
+metrics = [
+    "mean_squared_error",
+    "mean_absolute_error",
+    "RootMeanSquaredError",
+    "mean_absolute_percentage_error",
 ]
+
+print(">>>>>>>")
+print(model.metrics)
+print(model.metrics_names)
 
 model.compile(
     optimizer=model.optimizer,
     loss=model.loss,
-    metrics=model.metrics+addl_metrics
+    metrics=metrics
 )
 
 test_gen = data_loading.get_test_gen()
@@ -82,11 +88,10 @@ for k,v in results.items():
 with open(os.path.join(RESULTS_DIR, "results.json"), "w") as f:
     json.dump(results, f, indent=2)
 
+print()
 x, y = test_gen.load_all()
 predictions = model.predict(x)
 
-print("First 10 predictions:")
-print(np.squeeze(predictions[:10]))
-print("First 10 Ground Truth")
-print(y[:10].numpy())
-
+print("First 10 predictions, ground truths:")
+for i in range(10):
+    print(" ", np.squeeze(predictions[i]), y[i].numpy())
