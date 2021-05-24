@@ -184,7 +184,6 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--file",required=True,help="input laz/las file")
-    parser.add_argument("--no-mpl",action="store_true")
     parser.add_argument("--subdivide",type=int,default=1)
     ARGS = parser.parse_args()
 
@@ -317,24 +316,6 @@ def main():
     print("min, max gt trees in test patches:", min(test_gt_lens), max(test_gt_lens))
     test_fp.get_node("/gt")._v_attrs["min_trees"] = min(test_gt_lens)
     test_fp.get_node("/gt")._v_attrs["max_trees"] = max(test_gt_lens)
-
-    if not ARGS.no_mpl:
-        import matplotlib.pyplot as plt
-        os.makedirs("output", exist_ok=True)
-
-        plt.hist(train_patch_lens)
-        plt.savefig("output/train_pts_per_patch")
-        plt.close()
-        plt.hist(train_gt_lens)
-        plt.savefig("output/train_trees_per_patch")
-        plt.close()
-
-        plt.hist(test_patch_lens)
-        plt.savefig("output/test_pts_per_patch")
-        plt.close()
-        plt.hist(test_gt_lens)
-        plt.savefig("output/test_trees_per_patch")
-        plt.close()
 
     train_fp.close()
     test_fp.close()

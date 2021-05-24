@@ -45,7 +45,32 @@ for i,fname in enumerate(("train", "test")):
         plt.title("{} {}".format(fname, kind))
 
 plt.savefig("output/patches_raster.png", dpi=200)
-plt.show()
+plt.close()
+
+with tables.open_file("../data/train_patches.h5", "r") as train_fp, \
+        tables.open_file("../data/test_patches.h5", "r") as test_fp:
+
+    train_patch_lens = [i.shape[0] for i in train_fp.get_node("/lidar")]
+    train_gt_lens = [i.shape[0] for i in train_fp.get_node("/gt")]
+    test_patch_lens = [i.shape[0] for i in test_fp.get_node("/lidar")]
+    test_gt_lens = [i.shape[0] for i in test_fp.get_node("/gt")]
+
+    pts_min = min(min(train_patch_lens), min(test_patch_lens))
+    pts_max = max(max(train_patch_lens), max(test_patch_lens))
+    plt.hist([train_patch_lens, test_patch_lens], label=["train", "test"], density=True, bins=range(pts_min, pts_max+1, 200))
+    plt.legend()
+    plt.savefig("output/pts_per_patch")
+    plt.close()
+
+    trees_min = min(min(train_gt_lens), min(test_gt_lens))
+    trees_max = max(max(train_gt_lens), max(test_gt_lens))
+    plt.hist([train_gt_lens, test_gt_lens], label=["train", "test"], density=True, bins=range(trees_min, trees_max+1, 3))
+    plt.legend()
+    plt.savefig("output/trees_per_patch")
+    plt.close()
+
+    train_fp.close()
+    test_fp.close()
 
 
 
@@ -53,24 +78,25 @@ with h5py.File("../data/train_patches.h5", "r") as f:
     assert len(f["lidar"].keys()) == len(f["gt"].keys())
 
 
-"""
-verify correct patches are selected for test
-"""
-with h5py.File("../data/test_patches.h5", "r") as f:
-    keys = list(f["gt"].keys())
-    keys = [re.sub(r"patch", "", i) for i in keys]
-    keys = [i.split("_") for i in keys]
-    keys = [(int(x), int(y)) for x,y in keys]
-    keys.sort()
+if ARGS.subdivide == 1:
+    """
+    verify correct patches are selected for test
+    """
+    with h5py.File("../data/test_patches.h5", "r") as f:
+        keys = list(f["gt"].keys())
+        keys = [re.sub(r"patch", "", i) for i in keys]
+        keys = [i.split("_") for i in keys]
+        keys = [(int(x), int(y)) for x,y in keys]
+        keys.sort()
 
-# a few of the test patches, hand indexed. These are indexed from 1, like the grid
-expected = [
-    (25,7),
-    (29,8),
-    (32,10),
-    (21,10),
-    (25,14)
-]
+    # a few of the test patches, hand indexed. These are indexed from 1, like the grid
+    expected = [
+        (25,7),
+        (29,8),
+        (32,10),
+        (21,10),
+        (25,14)
+    ]
 
-expected.sort()
-assert all([i in keys for i in expected])
+    expected.sort()
+    assert all([i in keys for i in expected])
