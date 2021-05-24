@@ -57,14 +57,16 @@ with tables.open_file("../data/train_patches.h5", "r") as train_fp, \
 
     pts_min = min(min(train_patch_lens), min(test_patch_lens))
     pts_max = max(max(train_patch_lens), max(test_patch_lens))
-    plt.hist([train_patch_lens, test_patch_lens], label=["train", "test"], density=True, bins=range(pts_min, pts_max+1, 200))
+    step = (pts_max - pts_min) // 20
+    plt.hist([train_patch_lens, test_patch_lens], label=["train", "test"], density=True, bins=range(pts_min, pts_max+1, step))
     plt.legend()
     plt.savefig("output/pts_per_patch")
     plt.close()
 
     trees_min = min(min(train_gt_lens), min(test_gt_lens))
     trees_max = max(max(train_gt_lens), max(test_gt_lens))
-    plt.hist([train_gt_lens, test_gt_lens], label=["train", "test"], density=True, bins=range(trees_min, trees_max+1, 3))
+    step = (trees_max - trees_min) // 20
+    plt.hist([train_gt_lens, test_gt_lens], label=["train", "test"], density=True, bins=range(trees_min, trees_max+1, step))
     plt.legend()
     plt.savefig("output/trees_per_patch")
     plt.close()
