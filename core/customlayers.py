@@ -86,6 +86,20 @@ class RaggedMatMul(layers.Layer):
         return config
 
 
+class Tile(layers.Layer):
+
+    def __init__(self, num, axis, **kwargs):
+        super().__init__(**kwargs)
+        self.num = num
+        self.axis = axis
+
+    def build(self, input_shape):
+        self.tilevec = [self.num if i == self.axis else 1 for i in range(len(input_shape))]
+
+    def call(self, x):
+        return tf.tile(x, self.tilevec)
+
+
 def Activation(actname, **kwargs):
     """
     ARGS:

@@ -18,7 +18,7 @@ from tensorflow.keras import callbacks, layers
 from tensorflow.keras.optimizers import Adam
 import seaborn
 
-from core import DATA_DIR, MAIN_DIR, OUTPUT_DIR, ARGS, data_loading
+from core import DATA_DIR, MAIN_DIR, ARGS, data_loading
 from core.losses import get_loss
 from core.models import pointnet
 from core.utils import MyModelCheckpoint, output_model

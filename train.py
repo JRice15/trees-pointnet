@@ -16,7 +16,7 @@ from tensorflow.keras import callbacks, layers
 from tensorflow.keras.optimizers import Adam
 import matplotlib.pyplot as plt
 
-from core import DATA_DIR, OUTPUT_DIR, MAIN_DIR, ARGS, data_loading
+from core import DATA_DIR, MAIN_DIR, ARGS, data_loading
 from core.losses import get_loss
 from core.models import pointnet
 from core.utils import MyModelCheckpoint, output_model
@@ -96,7 +96,7 @@ model = pointnet(
     output_features=output_features_map[ARGS.mode],
     reg_weight=ARGS.ortho_weight,
 )
-output_model(model)
+output_model(model, MODEL_DIR)
 
 loss, metrics, _ = get_loss(ARGS)
 

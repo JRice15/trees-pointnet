@@ -96,7 +96,10 @@ def seg_output_flow(local_features, global_feature, outchannels):
     """
     # concat local and global
     global_feature = layers.Reshape((1,1,1024), name="expand_global_feature_reshape")(global_feature)
-    
+    if not ARGS.ragged:
+        _, npoints, _, _ = local_features.shape
+        global_feature = customlayers.Tile(npoints, axis=1)(global_feature)
+
     full_features = layers.Concatenate(axis=-1)([local_features, global_feature])
 
     # output flow
@@ -177,6 +180,8 @@ def pointnet(inpt_shape, output_features, reg_weight=0.001):
         output = seg_output_flow(local_features, global_feature, output_features)
     elif ARGS.output_type == "cls":
         output = cls_output_flow(global_feature, output_features)
+    else:
+        raise NotImplementedError()
     
     if ARGS.mode == "pointwise-treetop":
         # limit to 0 to 1

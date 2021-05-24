@@ -11,7 +11,7 @@ from tensorflow.keras import backend as K
 from tensorflow.keras import layers
 from tensorflow.keras.optimizers import Adam
 
-from core import ARGS, OUTPUT_DIR, DATA_DIR
+from core import ARGS, DATA_DIR
 
 
 class MyModelCheckpoint(tf.keras.callbacks.ModelCheckpoint):
@@ -29,13 +29,13 @@ class MyModelCheckpoint(tf.keras.callbacks.ModelCheckpoint):
 
 
 
-def output_model(model):
+def output_model(model, directory):
     """
     print and plot model structure to output dir
     """
-    with open(os.path.join(OUTPUT_DIR, "model_summary.txt"), "w") as f:
+    with open(os.path.join(directory, "model_summary.txt"), "w") as f:
         model.summary(print_fn=lambda x: f.write(x + "\n"))
     try:
-        tf.keras.utils.plot_model(model, to_file=os.path.join(OUTPUT_DIR, "model.png"))
+        tf.keras.utils.plot_model(model, to_file=os.path.join(directory, "model.png"))
     except Exception as e:
         print("Failed to plot model: " + str(e))

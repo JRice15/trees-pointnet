@@ -31,8 +31,6 @@ ARGS = argparse.Namespace()
 
 MAIN_DIR = os.path.dirname(os.path.dirname(__file__))
 DATA_DIR = os.path.join(MAIN_DIR, "data")
-OUTPUT_DIR = os.path.join(MAIN_DIR, "output")
-os.makedirs(OUTPUT_DIR, exist_ok=True)
 os.makedirs(os.path.join(MAIN_DIR, "models"), exist_ok=True)
 
 np.random.seed(9999)
