@@ -127,7 +127,11 @@ def main():
         x_w.fill(1/pred.shape[0])
         y_w = np.empty(y.shape)
         y_w.fill(1/y.shape[0])
-        _, bins, _ = plt.hist(y, weights=y_w, label="gt", alpha=0.5, color="green")
+        low = int(min(pred.min(), y.min()))
+        high = int(max(pred.max(), y.max()))
+        step = (high - low) // 20
+        bins = range(low, high+1, step)
+        plt.hist(y, bins=bins, weights=y_w, label="gt", alpha=0.5, color="green")
         plt.hist(pred, bins=bins, weights=x_w, label="predictions", alpha=0.5, color="blue")
         plt.title("Predictions and Ground Truth Values")
         plt.axvline(np.mean(y), label="gt mean", color="green", linestyle="--")
@@ -142,7 +146,7 @@ def main():
         errors = error_func(pred, y)
 
         plt.hist(errors)
-        plt.title("Errors (pred - gt)")
+        plt.title("Errors (gt - pred)")
         plt.vlines(np.mean(errors), 0, plt.ylim()[1], label="mean", colors="black")
         plt.legend()
         plt.savefig(os.path.join(RESULTS_DIR, "errors_hist.png"))
