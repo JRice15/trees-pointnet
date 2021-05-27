@@ -36,22 +36,30 @@ def nonrag_pointwise_treetop(ARGS):
     assert ARGS.dist_weight >= 0
     assert ARGS.dist_weight <= 1
 
-    def y_handler(xs):
-        """
-        returns func that finds sqared distance between all the xs and the provided y point
-        """
-        @tf.function
-        def sqr_dist(y):
-            return K.sum((xs - y) ** 2, axis=-1)
-        return sqr_dist
-
     @tf.function
     def handle_example(inpts):
         """
-        handles one example (ie one element from a batch) by iterating over ys
+        handles one element from a batch) by iterating over ys
         """
-        x, y = inpts
-        return tf.vectorized_map(y_handler(x), y, fallback_to_while_loop=False)
+        x_locs, y = inpts
+        y_locs = y[...,:2]
+        y_isvalid = y[...,2:]
+
+        # slightly hacky. add 10 to tree coords if y is not valid. since data is scaled 0-1, invalid trees will never be
+        # the closest when the min happens later
+        y_locs = y_locs + (10 * (1-y_isvalid))
+
+        # expand to shape (1, npoints, 2), where 2 is for xy coords
+        x_locs = tf.expand_dims(x_locs, 0)
+        # expand to shape (ngroundtruth, 1, 2), where 2 is for xy coords
+        y_locs = tf.expand_dims(y_locs, 1)
+        # automatically expands to distance-matrix-esque of shape (ngroundtruth, npoints, 2))
+        diff = x_locs - y_locs
+        # find squared euclidean distance: (x2 - x2)^2 + (y2 - y1)^2
+        sqr_dist = K.sum(diff ** 2, axis=-1)
+        # minimize over ngroundtruth axis, so we get min distance for each point, not each gt tree
+        dist2closest = K.min(sqr_dist, axis=0)
+        return dist2closest
 
     @tf.function
     def dist_loss(x, y):
@@ -60,14 +68,12 @@ def nonrag_pointwise_treetop(ARGS):
         """
         x_locs = x[:,:,:2]
         x_weights = x[:,:,2]
-        y_locs = y[:,:,:2]
         sqr_dists = tf.vectorized_map(
             handle_example,
-            [x_locs, y_locs],
+            [x_locs, y],
             fallback_to_while_loop=False
         )
-        closest_dist = K.min(sqr_dists, axis=-2)
-        weighted_dists = closest_dist * x_weights
+        weighted_dists = sqr_dists * x_weights
         return K.mean(weighted_dists)
 
     @tf.function
@@ -75,7 +81,7 @@ def nonrag_pointwise_treetop(ARGS):
         """
         MSE between actual count of trees and sum of x weights
         """
-        x_weights = x[:,:,2]
+        x_weights = x[:,:,-1]
         y_is_valid = y[:,:,2]
         tree_count = K.sum(y_is_valid, axis=-1) # per batch
         predicted_counts = K.sum(x_weights, axis=-1)
@@ -87,10 +93,10 @@ def nonrag_pointwise_treetop(ARGS):
         loss += (1 - ARGS.dist_weight) * count_loss(x, y)
         return loss
     
-    def count_eval_func(x, y):
-        x_counts = K.sum(x[:,:,2])
+    def count_eval_func(pred, y):
+        pred_counts = K.sum(pred[:,:,2])
         y_counts = K.sum(y[:,:,2])
-        return y_counts - x_counts
+        return y_counts - pred_counts
 
     return loss_func, None, count_eval_func
 

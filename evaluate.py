@@ -77,15 +77,18 @@ def main():
 
     # load best model
     print("Loading model", MODEL_PATH)
-    model = keras.models.load_model(MODEL_PATH)
+    loss_fun, _, error_func = get_loss(ARGS)
+    model = keras.models.load_model(MODEL_PATH, custom_objects={"loss_func": loss_fun})
 
+    metrics = None
     # additional metrics not used in training
-    metrics = [
-        "mean_squared_error",
-        "mean_absolute_error",
-        "RootMeanSquaredError",
-        "mean_absolute_percentage_error",
-    ]
+    if ARGS.mode == "count":
+        metrics = [
+            "mean_squared_error",
+            "mean_absolute_error",
+            "RootMeanSquaredError",
+            "mean_absolute_percentage_error",
+        ]
 
     model.compile(
         optimizer=model.optimizer,
@@ -118,7 +121,7 @@ def main():
     pred = np.squeeze(model.predict(x))
 
     print("First 10 predictions, ground truths:")
-    for i in range(10):
+    for i in range(min(10, len(pred))):
         print(" ", pred[i], y[i])
 
 
@@ -139,8 +142,6 @@ def main():
         plt.legend()
         plt.savefig(os.path.join(RESULTS_DIR, "preds_vs_gt_hist.png"))
         plt.close()
-
-    _, _, error_func = get_loss(ARGS)
 
     if error_func is not None:
         errors = error_func(pred, y)

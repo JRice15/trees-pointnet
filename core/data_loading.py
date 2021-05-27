@@ -217,4 +217,8 @@ def get_test_gen():
 
 
 if __name__ == "__main__":
-    tr, v, te = make_data_generators("count", 32)
+    train_gen, val_gen = get_train_val_gens()
+    test_gen = get_test_gen()
+    train_gen.summary()
+    val_gen.summary()
+    test_gen.summary()
