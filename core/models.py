@@ -135,6 +135,9 @@ def cls_output_flow(global_feature, outchannels, dropout=0.3):
 
     return x
 
+def custom_output_flow(global_feature, npoints, nchannels, dropout=0.3):
+    
+
 
 def pointnet(inpt_shape, output_features, reg_weight=0.001):
     """

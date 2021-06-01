@@ -6,6 +6,7 @@ from tensorflow.keras import backend as K
 from tensorflow.keras import layers
 from tensorflow.keras.optimizers import Adam
 from tensorflow import keras
+import math
 
 
 def get_loss(ARGS):
@@ -26,6 +27,92 @@ def get_loss(ARGS):
         return keras.losses.mse, [keras.metrics.mse], lambda x,y: y - x
 
     raise ValueError("No loss for mode '{}'".format(mode))
+
+
+
+def max_mean_discrepancy(ARGS):
+    """
+    from https://www.biorxiv.org/content/10.1101/267096v1.full
+    """
+    assert ARGS.mmd_sigma is not None
+
+    exp_constant = 4 * ARGS.mmd_sigma**2
+    # @tf.function
+    def gaussian_kernel_func(diffs):
+        """
+        equation 5 is general form, eq. 6 is this version.
+        diffs is x_locations - y_locations
+        """
+        sqr_dists = K.sum(K.square(diffs), axis=-1)
+        exponent = K.clip(-sqr_dists / exp_constant, None, 64)
+        return kernel_constant * K.exp(exponent)
+
+    exp_constant = ARGS.mmd_sigma
+    # @tf.function
+    def laplacian_kernel_func(diffs):
+        """
+        eq. 5 is general form, eq 10 specifically
+        """
+        l1_dists = tf.norm(diffs, ord=1, axis=-1)
+        exponent = K.clip(-l1_dists / exp_constant, None, 64)
+        return kernel_constant * K.exp(exponent)
+
+    # get correct kernel function
+    if ARGS.mmd_kernel == "gaussian":
+        kernel = gaussian_kernel_func
+        kernel_constant = (8 * math.pi**2 * ARGS.mmd_sigma**2) ** -0.5
+    elif ARGS.mmd_kernel == "laplacian":
+        kernel = laplacian_kernel_func
+        kernel_constant = (2 * ARGS.mmd_sigma) ** -0.5
+    else:
+        raise ValueError("Unknown mmd kernel {} to mmd loss".format(ARGS.mmd_kernel))
+
+    def mmd_loss(y, x):
+        """
+        equation 4. I 
+        y: targets, shape (B,MaxNumTrees,3) where 3 channels are x,y,isvalidbit
+        x: model outputs, shape (B,MaxNumTrees,3) where 3 channels are x,y,weight
+        """
+
+        # ground truth difference matrix, (B,MaxNumTrees,MaxNumTrees,3)
+        y_matrix = tf.expand_dims(y, axis=1) - tf.expand_dims(y, axis=2)
+        # get xy-diffs, and 0,1 weights
+        y_diffs = y_matrix[...,:2]
+        y_diff_weights = y_matrix[...,2]
+        # get loss from kernel function
+        y_losses = kernel(y_diffs)
+        y_loss = K.sum(y_losses * y_diff_weights)
+
+        # ground truth difference matrix, (B,MaxNumTrees,MaxNumTrees,3)
+        y_matrix = tf.expand_dims(y, axis=1) - tf.expand_dims(y, axis=2)
+        # get diffs, and 0,1 weights
+        y_diffs = y_matrix[...,:2]
+        y_diff_weights = y_matrix[...,2]
+        # get loss from kernel function
+        y_losses = kernel(y_diffs)
+        y_loss = K.sum(y_losses * y_diff_weights)
+
+        # repeat with xy
+        xy_matrix = tf.expand_dims(x, axis=1) - tf.expand_dims(y, axis=2)
+        xy_diffs = xy_matrix[...,:2]
+        xy_diff_weights = xy_matrix[...,2]
+        xy_losses = kernel(xy_diffs)
+        xy_loss = K.sum(y_losses * xy_diff_weights)
+
+        # repeat with x's
+        x_matrix = tf.expand_dims(x, axis=1) - tf.expand_dims(x, axis=2)
+        x_diffs = x_matrix[...,:2]
+        x_diff_weights = x_matrix[...,2]
+        x_losses = kernel(x_diffs)
+        x_loss = K.sum(x_losses * x_diff_weights)
+
+        # eq. 4
+        loss = y_loss - (2 * xy_loss) + x_loss
+        return kernel_constant * loss
+
+
+    return mmd_loss
+
 
 
 def nonrag_pointwise_treetop(ARGS):

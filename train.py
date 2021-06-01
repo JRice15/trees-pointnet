@@ -41,6 +41,12 @@ parser.add_argument("--reducelr_patience",type=float,default=50,help="initial le
 # model parameters
 parser.add_argument("--npoints",type=int,default=300,help="number of points to run per patch. In ragged or non-ragged, "
         "patches with fewer points will be skipped. Also in non-ragged, patches with more points with be truncated to npoints")
+
+# loss parameters
+parser.add_argument("--mmd-sigma",type=float,default=0.2,
+        help="max-mean-discrepancy mode: sigma on kernel")
+parser.add_argument("--mmd-kernel",default="gaussian",
+        help="max-mean-discrepancy mode: type of kernel")
 parser.add_argument("--dist-weight",type=float,default=0.5,
         help="pointnet-treetop mode: weight on distance vs sum loss")
 parser.add_argument("--ortho-weight",type=float,default=0.001,

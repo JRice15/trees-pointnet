@@ -122,7 +122,10 @@ def main():
 
     print("First 10 predictions, ground truths:")
     for i in range(min(10, len(pred))):
-        print(" ", pred[i], y[i])
+        print("pred {}:".format(i))
+        print(pred[i])
+        print("gt {}:".format(i))
+        print(y[i])
 
 
     if len(pred.shape) == 1: # if the model outputs a single number
