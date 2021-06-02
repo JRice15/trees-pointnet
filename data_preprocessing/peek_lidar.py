@@ -50,6 +50,19 @@ plt.close()
 with tables.open_file("../data/train_patches.h5", "r") as train_fp, \
         tables.open_file("../data/test_patches.h5", "r") as test_fp:
 
+    train_attrs = train_fp.get_node("/lidar")._v_attrs
+    test_attrs = test_fp.get_node("/lidar")._v_attrs
+    for i in train_attrs._f_list():
+        print("train", i, train_attrs[i])
+    for i in test_attrs._f_list():
+        print("test", i, test_attrs[i])
+    train_attrs = train_fp.get_node("/gt")._v_attrs
+    test_attrs = test_fp.get_node("/gt")._v_attrs
+    for i in train_attrs._f_list():
+        print("train", i, train_attrs[i])
+    for i in test_attrs._f_list():
+        print("test", i, test_attrs[i])
+
     train_patch_lens = [i.shape[0] for i in train_fp.get_node("/lidar")]
     train_gt_lens = [i.shape[0] for i in train_fp.get_node("/gt")]
     test_patch_lens = [i.shape[0] for i in test_fp.get_node("/lidar")]

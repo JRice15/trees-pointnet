@@ -73,7 +73,7 @@ class LidarPatchGen(keras.utils.Sequence):
             if self.y_counts_only:
                 self._y_batch = np.empty((self.batch_size,))
             else:
-                self._y_batch = np.empty((self.batch_size, self.npoints, 3)) # (x,y,isvalid)
+                self._y_batch = np.empty((self.batch_size, self.max_trees, 3)) # 3 -> (x,y,isvalid)
 
     def __len__(self):
         return self.num_ids // self.batch_size

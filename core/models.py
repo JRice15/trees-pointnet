@@ -115,7 +115,7 @@ def seg_output_flow(local_features, global_feature, outchannels):
     
     return x
 
-def cls_output_flow(global_feature, outchannels, dropout=0.3):
+def cls_output_flow(global_feature, outchannels):
     """
     Base global classification output flow
     returns:
@@ -124,22 +124,46 @@ def cls_output_flow(global_feature, outchannels, dropout=0.3):
     x = global_feature
 
     x = pointnet_dense(512, "outmlp_dense1")(x)
-    if dropout > 0:
-        x = layers.Dropout(dropout, name="outmlp_dropout1")(x)
+    if ARGS.dropout > 0:
+        x = layers.Dropout(ARGS.dropout, name="outmlp_dropout1")(x)
     x = pointnet_dense(256, "outmlp_dense2")(x)
-    if dropout > 0:
-        x = layers.Dropout(dropout, name="outmlp_dropout2")(x)
+    if ARGS.dropout > 0:
+        x = layers.Dropout(ARGS.dropout, name="outmlp_dropout2")(x)
 
     x = pointnet_dense(outchannels, "outmlp_dense3", bn=False, 
             activation=False)(x)
 
     return x
 
-def custom_output_flow(global_feature, npoints, nchannels, dropout=0.3):
-    
+def custom_output_flow(global_feature, npoints, nchannels):
+    """
+    Custom output flow
+    returns:
+        global feature vector: (B,npoints,nchannels)
+    """
+    x = global_feature
+    x = layers.Reshape((1024,1,1), name="expand_global_feature_reshape")(x)
+
+    # output flow
+    x = pointnet_conv(8, 5, name="outmlp_conv1")(x)
+    x = layers.MaxPool1D(strides=2)(x) # (B,508,1,8)
+    x = pointnet_conv(16, 5, name="outmlp_conv1")(x)
+    x = layers.MaxPool1D(strides=2)(x) # (B,250,1,16)
+    x = pointnet_conv(32, 5, name="outmlp_conv1")(x)
+    x = layers.MaxPool1D(strides=2)(x) # (B,128,1,32)
+    current = x.shape[1]
+    while current >= 2 * npoints:
+        x = pointnet_conv(32, 3, name="outmlp_conv1")(x)
+        x = layers.MaxPool1D(strides=2)(x)
+
+    x = pointnet_conv(nchannels, 1, name="outmlp_conv_final", 
+                      bn=False, activation=False)(x)
+    x = customlayers.ReduceDims(axis=2, name="outmlp_squeeze")(x)
+
+    return x
 
 
-def pointnet(inpt_shape, output_features, reg_weight=0.001):
+def pointnet(inpt_shape, output_features, output_pts=None, reg_weight=0.001):
     """
     ARGS:
         npoints: number of points per example (None if in ragged mode)
@@ -183,6 +207,9 @@ def pointnet(inpt_shape, output_features, reg_weight=0.001):
         output = seg_output_flow(local_features, global_feature, output_features)
     elif ARGS.output_type == "cls":
         output = cls_output_flow(global_feature, output_features)
+    elif ARGS.output_type == "custom":
+        assert output_pts is not None
+        output = cls_output_flow(global_feature, output_pts, output_features)
     else:
         raise NotImplementedError()
     

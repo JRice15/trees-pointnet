@@ -306,16 +306,16 @@ def main():
     train_fp.get_node("/lidar")._v_attrs["max_points"] = max(train_patch_lens)
 
     print("min, max gt trees in train patches:", min(train_gt_lens), max(train_gt_lens))
-    train_fp.get_node("/gt")._v_attrs["min_trees"] = min(train_gt_lens)
-    train_fp.get_node("/gt")._v_attrs["max_trees"] = max(train_gt_lens)
+    train_fp.get_node("/gt")._v_attrs["min_trees"] = min(train_gt_lens + test_gt_lens)
+    train_fp.get_node("/gt")._v_attrs["max_trees"] = max(train_gt_lens + test_gt_lens)
 
     print("min, max points in test patches:", min(test_patch_lens), max(test_patch_lens))
     test_fp.get_node("/lidar")._v_attrs["min_points"] = min(test_patch_lens)
     test_fp.get_node("/lidar")._v_attrs["max_points"] = max(test_patch_lens)
 
     print("min, max gt trees in test patches:", min(test_gt_lens), max(test_gt_lens))
-    test_fp.get_node("/gt")._v_attrs["min_trees"] = min(test_gt_lens)
-    test_fp.get_node("/gt")._v_attrs["max_trees"] = max(test_gt_lens)
+    test_fp.get_node("/gt")._v_attrs["min_trees"] = min(test_gt_lens + train_gt_lens)
+    test_fp.get_node("/gt")._v_attrs["max_trees"] = max(test_gt_lens + train_gt_lens)
 
     train_fp.close()
     test_fp.close()

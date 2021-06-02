@@ -41,6 +41,7 @@ parser.add_argument("--reducelr_patience",type=float,default=50,help="initial le
 # model parameters
 parser.add_argument("--npoints",type=int,default=300,help="number of points to run per patch. In ragged or non-ragged, "
         "patches with fewer points will be skipped. Also in non-ragged, patches with more points with be truncated to npoints")
+parser.add_argument("--dropout",type=float,default=0.3,help="dropout rate")
 
 # loss parameters
 parser.add_argument("--mmd-sigma",type=float,default=0.2,
