@@ -152,6 +152,11 @@ class LidarPatchGen(keras.utils.Sequence):
         print(" ", self.num_ids, "patches, in", len(self), "batches, batchsize", self.batch_size)
         print("  raw patches:", self.min_points, "pts min,", self.max_points, "pts max")
         print(" ", self.npoints, "points per patch.", self.num_patches_filtered, "patches filtered for having too few points")
+        try:
+            print("  xbatch shape:", self._x_batch.shape)
+            print("  ybatch shape:", self._y_batch.shape)
+        except AttributeError:
+            pass
 
     def on_epoch_end(self):
         print("avg batch time:", self.batch_time / len(self))

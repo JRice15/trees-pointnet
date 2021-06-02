@@ -217,7 +217,8 @@ def pointnet(inpt_shape, output_features, output_pts=None, reg_weight=0.001):
         # limit to 0 to 1
         output = customlayers.Activation("sigmoid", name="pwtt-sigmoid")(output)
         # add input xy locations to each point
-        output = layers.Concatenate(axis=-1, name="pwtt-concat_inpt")([inpt, output])
+        xy_locs = inpt[...,:2]
+        output = layers.Concatenate(axis=-1, name="pwtt-concat_inpt")([xy_locs, output])
 
     model = Model(inpt, output)
 

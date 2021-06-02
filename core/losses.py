@@ -67,46 +67,29 @@ def max_mean_discrepancy(ARGS):
     else:
         raise ValueError("Unknown mmd kernel {} to mmd loss".format(ARGS.mmd_kernel))
 
+    # @tf.function
+    def mmd_loss_term(a, b):
+        # ground truth difference matrix, (B,MaxNumTrees,MaxNumTrees,3)
+        matrix = tf.expand_dims(a, axis=1) - tf.expand_dims(b, axis=2)
+        # get xy-diffs, and 0,1 weights
+        diffs = matrix[...,:2]
+        diff_weights = matrix[...,2]
+        # get loss from kernel function
+        losses = kernel(diffs)
+        loss = K.sum(losses * diff_weights)
+        return loss
+
     def mmd_loss(y, x):
         """
-        equation 4. I 
+        equation 4.
         y: targets, shape (B,MaxNumTrees,3) where 3 channels are x,y,isvalidbit
         x: model outputs, shape (B,MaxNumTrees,3) where 3 channels are x,y,weight
         """
+        y_loss = mmd_loss_term(y, y)
+        xy_loss = mmd_loss_term(x, y)
+        x_loss = mmd_loss_term(x, x)
 
-        # ground truth difference matrix, (B,MaxNumTrees,MaxNumTrees,3)
-        y_matrix = tf.expand_dims(y, axis=1) - tf.expand_dims(y, axis=2)
-        # get xy-diffs, and 0,1 weights
-        y_diffs = y_matrix[...,:2]
-        y_diff_weights = y_matrix[...,2]
-        # get loss from kernel function
-        y_losses = kernel(y_diffs)
-        y_loss = K.sum(y_losses * y_diff_weights)
-
-        # ground truth difference matrix, (B,MaxNumTrees,MaxNumTrees,3)
-        y_matrix = tf.expand_dims(y, axis=1) - tf.expand_dims(y, axis=2)
-        # get diffs, and 0,1 weights
-        y_diffs = y_matrix[...,:2]
-        y_diff_weights = y_matrix[...,2]
-        # get loss from kernel function
-        y_losses = kernel(y_diffs)
-        y_loss = K.sum(y_losses * y_diff_weights)
-
-        # repeat with xy
-        xy_matrix = tf.expand_dims(x, axis=1) - tf.expand_dims(y, axis=2)
-        xy_diffs = xy_matrix[...,:2]
-        xy_diff_weights = xy_matrix[...,2]
-        xy_losses = kernel(xy_diffs)
-        xy_loss = K.sum(y_losses * xy_diff_weights)
-
-        # repeat with x's
-        x_matrix = tf.expand_dims(x, axis=1) - tf.expand_dims(x, axis=2)
-        x_diffs = x_matrix[...,:2]
-        x_diff_weights = x_matrix[...,2]
-        x_losses = kernel(x_diffs)
-        x_loss = K.sum(x_losses * x_diff_weights)
-
-        # eq. 4
+        # eq. 4. I pulled out the kernel constant from each K, and just multiply the final result
         loss = y_loss - (2 * xy_loss) + x_loss
         return kernel_constant * loss
 
@@ -149,7 +132,7 @@ def nonrag_pointwise_treetop(ARGS):
         return dist2closest
 
     @tf.function
-    def dist_loss(x, y):
+    def dist_loss(y, x):
         """
         minimum squared distance from each x to each y, weighted by x weights
         """
@@ -164,11 +147,11 @@ def nonrag_pointwise_treetop(ARGS):
         return K.mean(weighted_dists)
 
     @tf.function
-    def count_loss(x, y):
+    def count_loss(y, x):
         """
         MSE between actual count of trees and sum of x weights
         """
-        x_weights = x[:,:,-1]
+        x_weights = x[:,:,2]
         y_is_valid = y[:,:,2]
         tree_count = K.sum(y_is_valid, axis=-1) # per batch
         predicted_counts = K.sum(x_weights, axis=-1)
@@ -176,16 +159,16 @@ def nonrag_pointwise_treetop(ARGS):
 
     @tf.function
     def loss_func(y, x):
-        loss = ARGS.dist_weight * dist_loss(x, y)
-        loss += (1 - ARGS.dist_weight) * count_loss(x, y)
+        loss = ARGS.dist_weight * dist_loss(y, x)
+        loss += (1 - ARGS.dist_weight) * count_loss(y, x)
         return loss
     
     def count_eval_func(pred, y):
-        pred_counts = K.sum(pred[:,:,2])
-        y_counts = K.sum(y[:,:,2])
+        pred_counts = K.sum(pred[:,:,2], axis=-1)
+        y_counts = K.sum(y[:,:,2], axis=-1)
         return y_counts - pred_counts
 
-    return loss_func, None, count_eval_func
+    return loss_func, [dist_loss, count_loss], count_eval_func
 
 
 def ragged_pointwise_treetop(ARGS):
