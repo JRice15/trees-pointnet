@@ -52,7 +52,7 @@ def max_mean_discrepancy(ARGS):
         """
         sqr_dists = K.sum(K.square(diffs), axis=-1)
         exponent = K.clip(-sqr_dists / exp_constant, None, 64)
-        return kernel_constant * K.exp(exponent)
+        return K.exp(exponent)
 
     exp_constant = ARGS.mmd_sigma
     @tf.function
@@ -62,7 +62,7 @@ def max_mean_discrepancy(ARGS):
         """
         l1_dists = tf.norm(diffs, ord=1, axis=-1)
         exponent = K.clip(-l1_dists / exp_constant, None, 64)
-        return kernel_constant * K.exp(exponent)
+        return K.exp(exponent)
 
     # get correct kernel function
     if ARGS.mmd_kernel == "gaussian":

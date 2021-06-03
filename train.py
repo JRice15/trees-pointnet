@@ -54,7 +54,7 @@ parser.add_argument("--npoints",type=int,default=300,help="number of points to r
 parser.add_argument("--dropout",type=float,default=0.3,help="dropout rate")
 
 # loss parameters
-parser.add_argument("--mmd-sigma",type=float,default=0.2,
+parser.add_argument("--mmd-sigma",type=float,default=0.05,
         help="max-mean-discrepancy mode: sigma on kernel")
 parser.add_argument("--mmd-kernel",default="gaussian",
         help="max-mean-discrepancy mode: type of kernel")
