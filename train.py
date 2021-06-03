@@ -58,8 +58,8 @@ parser.add_argument("--mmd-sigma",type=float,default=0.2,
         help="max-mean-discrepancy mode: sigma on kernel")
 parser.add_argument("--mmd-kernel",default="gaussian",
         help="max-mean-discrepancy mode: type of kernel")
-parser.add_argument("--dist-weight",type=float,default=0.5,
-        help="pointnet-treetop mode: weight on distance vs sum loss")
+parser.add_argument("--dist-weight",type=float,default=0.9,
+        help="pointnet-treetop mode: weight on distance vs count loss")
 parser.add_argument("--ortho-weight",type=float,default=0.001,
         help="orthogonality regularization loss weight")
 

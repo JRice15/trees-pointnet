@@ -31,6 +31,12 @@ def get_loss(ARGS):
 
 
 
+def count_eval_func(pred, y):
+    pred_counts = K.sum(pred[:,:,-1], axis=-1)
+    y_counts = K.sum(y[:,:,-1], axis=-1)
+    return y_counts - pred_counts
+
+
 def max_mean_discrepancy(ARGS):
     """
     from https://www.biorxiv.org/content/10.1101/267096v1.full
@@ -38,7 +44,7 @@ def max_mean_discrepancy(ARGS):
     assert ARGS.mmd_sigma is not None
 
     exp_constant = 4 * ARGS.mmd_sigma**2
-    # @tf.function
+    @tf.function
     def gaussian_kernel_func(diffs):
         """
         equation 5 is general form, eq. 6 is this version.
@@ -49,7 +55,7 @@ def max_mean_discrepancy(ARGS):
         return kernel_constant * K.exp(exponent)
 
     exp_constant = ARGS.mmd_sigma
-    # @tf.function
+    @tf.function
     def laplacian_kernel_func(diffs):
         """
         eq. 5 is general form, eq 10 specifically
@@ -68,7 +74,7 @@ def max_mean_discrepancy(ARGS):
     else:
         raise ValueError("Unknown mmd kernel {} to mmd loss".format(ARGS.mmd_kernel))
 
-    # @tf.function
+    @tf.function
     def mmd_loss_term(a, b):
         # ground truth difference matrix, (B,MaxNumTrees,MaxNumTrees,3)
         matrix = tf.expand_dims(a, axis=1) - tf.expand_dims(b, axis=2)
@@ -80,6 +86,7 @@ def max_mean_discrepancy(ARGS):
         loss = K.sum(losses * diff_weights)
         return loss
 
+    @tf.function
     def mmd_loss(y, x):
         """
         equation 4.
@@ -92,10 +99,9 @@ def max_mean_discrepancy(ARGS):
 
         # eq. 4. I pulled out the kernel constant from each K, and just multiply the final result
         loss = y_loss - (2 * xy_loss) + x_loss
-        return kernel_constant * loss
+        return kernel_constant * loss / 1_000_000
 
-
-    return mmd_loss, None, None
+    return mmd_loss, None, count_eval_func
 
 
 
@@ -110,7 +116,7 @@ def nonrag_pointwise_treetop(ARGS):
     @tf.function
     def handle_example(inpts):
         """
-        handles one element from a batch) by iterating over ys
+        handles one element from a batch
         """
         x_locs, y = inpts
         y_locs = y[...,:2]
@@ -150,24 +156,19 @@ def nonrag_pointwise_treetop(ARGS):
     @tf.function
     def count_loss(y, x):
         """
-        MSE between actual count of trees and sum of x weights
+        error between actual count of trees and sum of x weights
         """
         x_weights = x[:,:,2]
         y_is_valid = y[:,:,2]
-        tree_count = K.sum(y_is_valid, axis=-1) # per batch
+        tree_counts = K.sum(y_is_valid, axis=-1) # per batch
         predicted_counts = K.sum(x_weights, axis=-1)
-        return K.mean((tree_count - predicted_counts) ** 2)
+        return keras.losses.huber(tree_counts, predicted_counts)
 
     @tf.function
     def loss_func(y, x):
         loss = ARGS.dist_weight * dist_loss(y, x)
         loss += (1 - ARGS.dist_weight) * count_loss(y, x)
         return loss
-    
-    def count_eval_func(pred, y):
-        pred_counts = K.sum(pred[:,:,2], axis=-1)
-        y_counts = K.sum(y[:,:,2], axis=-1)
-        return y_counts - pred_counts
 
     return loss_func, [dist_loss, count_loss], count_eval_func
 
@@ -223,7 +224,7 @@ def ragged_pointwise_treetop(ARGS):
         loss += (1 - ARGS.dist_weight) * count_loss(x, y_locs)
         return loss
     
-    return loss_func, None, None
+    return loss_func, None, count_eval_func
         
 
 
