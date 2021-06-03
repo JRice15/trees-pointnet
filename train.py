@@ -5,6 +5,7 @@ import os
 import argparse
 from pprint import pprint
 import time
+import itertools
 
 import h5py
 import numpy as np
@@ -25,9 +26,18 @@ from core.utils import MyModelCheckpoint, output_model
 parse args
 """
 
+modes_w_aliases = {
+    "pwtt": ["pointwise-treetop"],
+    "mmd": ["max-mean-discrepancy"],
+    "count": [],
+}
+
+all_modes = list(modes_w_aliases.keys()) + list(itertools.chain.from_iterable(modes_w_aliases.values()))
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--name",required=True,help="name to save this model under or load")
-parser.add_argument("--mode",required=True,help="training mode, which determines which output flow and loss target to use")
+parser.add_argument("--mode",required=True,help="training mode, which determines which output flow and loss target to use",
+    choices=all_modes)
 parser.add_argument("--ragged",action="store_true")
 parser.add_argument("--test",action="store_true",help="run minimal batches and epochs to test functionality")
 
@@ -56,14 +66,21 @@ parser.add_argument("--ortho-weight",type=float,default=0.001,
 
 ARGS = parser.parse_args(namespace=ARGS)
 
+# manual args handling
 if ARGS.test:
     ARGS.epochs = 2
     ARGS.batchsize = 2
+for name,aliases in modes_w_aliases.items():
+    if ARGS.mode in aliases:
+        ARGS.mode = name
+        break
 
-if ARGS.mode in ["pointwise-treetop"]:
+if ARGS.mode in ["pwtt"]:
     ARGS.output_type = "seg"
 elif ARGS.mode in ["count"]:
     ARGS.output_type = "cls"
+elif ARGS.mode in ["mmd"]:
+    ARGS.output_type = "custom"
 else:
     raise ValueError("unknown mode to outputtype initialization")
 
@@ -93,13 +110,20 @@ create model
 """
 
 # map modes to number of output features
+output_pts_map = {
+    "mmd": train_gen.max_trees,
+    "pwtt": None,
+    "count": None,
+}
 output_features_map = {
-    "pointwise-treetop": 1,
+    "pwtt": 1,
     "count": 1,
+    "mmd": 3, # (x,y,confidence)
 }
 
 model = pointnet(
     inpt_shape=inpt_shape,
+    output_pts=output_pts_map[ARGS.mode],
     output_features=output_features_map[ARGS.mode],
     reg_weight=ARGS.ortho_weight,
 )

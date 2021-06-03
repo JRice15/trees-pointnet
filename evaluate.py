@@ -70,15 +70,14 @@ def main():
 
 
     """
-    Run Testing
+    Setup Testing
     """
-
-    print("\nTesting phase")
 
     # load best model
     print("Loading model", MODEL_PATH)
     loss_fun, _, error_func = get_loss(ARGS)
-    model = keras.models.load_model(MODEL_PATH, custom_objects={"loss_func": loss_fun})
+    print(loss_fun.__name__)
+    model = keras.models.load_model(MODEL_PATH, custom_objects={loss_fun.__name__: loss_fun})
 
     metrics = None
     # additional metrics not used in training
@@ -99,21 +98,10 @@ def main():
     test_gen = data_loading.get_test_gen()
     test_gen.summary()
 
-    metric_vals = model.evaluate(test_gen)
-
-    results = {model.metrics_names[i]:v for i,v in enumerate(metric_vals)}
-
 
     """
-    Evaluate results
+    Evaluate model
     """
-
-    print() # newline
-    for k,v in results.items():
-        print(k+":", v)
-
-    with open(os.path.join(RESULTS_DIR, "results.json"), "w") as f:
-        json.dump(results, f, indent=2)
 
     print()
     x, y = test_gen.load_all()
@@ -126,6 +114,18 @@ def main():
         print(pred[i])
         print("gt {}:".format(i))
         print(y[i])
+
+
+    metric_vals = model.evaluate(test_gen)
+
+    results = {model.metrics_names[i]:v for i,v in enumerate(metric_vals)}
+
+    print() # newline
+    for k,v in results.items():
+        print(k+":", v)
+
+    with open(os.path.join(RESULTS_DIR, "results.json"), "w") as f:
+        json.dump(results, f, indent=2)
 
 
     if len(pred.shape) == 1: # if the model outputs a single number

@@ -17,16 +17,17 @@ def get_loss(ARGS):
         error_func(predictions, gt_targets): -> scalar
     where scalar is an error metric (can be negative)
     """
-    mode = ARGS.mode.lower()
-    if mode == "pointwise-treetop":
+    if ARGS.mode == "pwtt":
         if ARGS.ragged:
             return ragged_pointwise_treetop(ARGS)
         else:
             return nonrag_pointwise_treetop(ARGS)
-    if mode == "count":
+    if ARGS.mode == "count":
         return keras.losses.mse, [keras.metrics.mse], lambda x,y: y - x
+    if ARGS.mode == "mmd":
+        return max_mean_discrepancy(ARGS)
 
-    raise ValueError("No loss for mode '{}'".format(mode))
+    raise ValueError("No loss for mode '{}'".format(ARGS.mode))
 
 
 
@@ -94,7 +95,7 @@ def max_mean_discrepancy(ARGS):
         return kernel_constant * loss
 
 
-    return mmd_loss
+    return mmd_loss, None, None
 
 
 
