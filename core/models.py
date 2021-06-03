@@ -145,9 +145,7 @@ def custom_output_flow(global_feature, npoints, nchannels):
     x = layers.Reshape((1024,1), name="expand_global_feature_reshape")(x)
 
     # output flow
-    print(x.shape)
     x = pointnet_conv(8, 5, name="outmlp_conv1")(x)
-    print(x.shape)
     x = layers.MaxPool1D(strides=2)(x) # (B,508,8)
     x = pointnet_conv(16, 5, name="outmlp_conv2")(x)
     x = layers.MaxPool1D(strides=2)(x) # (B,250,16)
