@@ -54,8 +54,8 @@ def init_evaluation_args():
     else:
         MODEL_PATH = matching_models[0]
     MODEL_DIR = os.path.dirname(MODEL_PATH)
-    RESULTS_DIR = os.path.join(MODEL_DIR, "results")
-    os.makedirs(RESULTS_DIR, exist_ok=True)
+    EVAL_DIR = os.path.join(MODEL_DIR, "evaluation")
+    os.makedirs(EVAL_DIR, exist_ok=True)
 
     # load original params into ARGS object
     params_file = os.path.join(MODEL_DIR, "params.json")
@@ -68,7 +68,7 @@ def init_evaluation_args():
 
     pprint(vars(ARGS))
 
-    return MODEL_PATH, MODEL_DIR, RESULTS_DIR
+    return MODEL_PATH, MODEL_DIR, EVAL_DIR
 
 def load_model(model_path, ARGS):
     print("Loading model", model_path)
@@ -149,7 +149,7 @@ def count_errors(pred, y):
 
 
 def main():
-    MODEL_PATH, MODEL_DIR, RESULTS_DIR = init_evaluation_args()
+    MODEL_PATH, MODEL_DIR, EVAL_DIR = init_evaluation_args()
 
     """
     Setup Testing
@@ -162,22 +162,24 @@ def main():
     """
     Raw predictions
     """
+    print("Generating Raw Predictions")
 
-    print()
     x, y = test_gen.load_all()
     y = np.squeeze(y.numpy())
     pred = np.squeeze(model.predict(x))
 
-    print("First 10 predictions, ground truths:")
-    for i in range(min(10, len(pred))):
-        print("pred {}:".format(i))
-        print(pred[i])
-        print("gt {}:".format(i))
-        print(y[i])
+    with open(os.path.join(EVAL_DIR, "sample_predictions.txt"), "w") as f:
+        f.write("First 10 predictions, ground truths:\n")
+        for i in range(min(10, len(pred))):
+            f.write("pred {}:\n".format(i))
+            f.write(str(pred[i])+"\n")
+            f.write("gt {}:\n".format(i))
+            f.write(str(y[i])+"\n")
 
     """
     Evaluate Metrics
     """
+    print("Evaluating metrics")
 
     metric_vals = model.evaluate(test_gen)
     results = {model.metrics_names[i]:v for i,v in enumerate(metric_vals)}
@@ -186,16 +188,17 @@ def main():
     for k,v in results.items():
         print(k+":", v)
 
-    with open(os.path.join(RESULTS_DIR, "results.json"), "w") as f:
+    with open(os.path.join(EVAL_DIR, "results.json"), "w") as f:
         json.dump(results, f, indent=2)
 
     """
     Mode-specific evaluations
     """
+    print("Evaluating errors")
 
     # error between target and prediction scalar labels
     if ARGS.mode in ["count"]:
-        errors_plot(pred, y, RESULTS_DIR)
+        errors_plot(pred, y, EVAL_DIR)
 
     # error histogram
     if ARGS.mode in ["count", "pwtt"]:
@@ -205,21 +208,22 @@ def main():
         plt.title("Errors (pred - gt)")
         plt.vlines(np.mean(errors), 0, plt.ylim()[1], label="mean", colors="black")
         plt.legend()
-        plt.savefig(os.path.join(RESULTS_DIR, "errors_hist.png"))
+        plt.savefig(os.path.join(EVAL_DIR, "errors_hist.png"))
         plt.close()
     
     """
     Visualizations
     """
+    print("Generating visualizations")
 
     # data visualizations
     if ARGS.mode not in ["count"]:
         test_gen.sorted()
-        GT_VIS_DIR = os.path.join(MODEL_DIR, "visualizations")
+        GT_VIS_DIR = os.path.join(EVAL_DIR, "visualizations")
         os.makedirs(GT_VIS_DIR+"/lidar", exist_ok=True)
         os.makedirs(GT_VIS_DIR+"/gt", exist_ok=True)
         os.makedirs(GT_VIS_DIR+"/predictions", exist_ok=True)
-        # grab one example from ~20 batches batch
+        # grab one example from ~20 batches
         for i in range(0, len(test_gen), len(test_gen)//20):
             full_x, full_y = test_gen[i]
             x = full_x[0]

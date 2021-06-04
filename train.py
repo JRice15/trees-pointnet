@@ -5,6 +5,7 @@ import os
 import argparse
 from pprint import pprint
 import time
+import shutil
 import itertools
 
 import h5py
@@ -142,7 +143,8 @@ callback_list = [
     callbacks.ReduceLROnPlateau(factor=ARGS.reducelr_factor, patience=ARGS.reducelr_patience,
         min_lr=1e-6, verbose=1),
     callbacks.EarlyStopping(verbose=1, patience=ARGS.reducelr_patience*2),
-    MyModelCheckpoint(MODEL_PATH, verbose=1, epoch_per_save=5, save_best_only=True)
+    MyModelCheckpoint(MODEL_PATH, verbose=1, 
+        epoch_per_save=(5 if not ARGS.test else 1), save_best_only=True)
 ]
 
 """
