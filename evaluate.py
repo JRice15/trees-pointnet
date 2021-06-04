@@ -205,7 +205,7 @@ def main():
             raster_plot(ylocs, GT_VIS_DIR+"/{}_gt".format(patchname))
 
             if ARGS.mode in ["mmd", "pwtt"]:
-                gt_ntrees = len(y)
+                gt_ntrees = len(ylocs)
 
                 x_weights = x[...,-1]
                 x_locs = x[...,:2]

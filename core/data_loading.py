@@ -170,7 +170,6 @@ class LidarPatchGen(keras.utils.Sequence):
         # restore correct values
         self.ids = old_ids
         self.batch_size = old_batchsize
-        print(x.shape, y.shape)
         return x[0], y[0], id
 
     def get_batch_shape(self):
