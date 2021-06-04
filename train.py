@@ -46,8 +46,8 @@ parser.add_argument("--test",action="store_true",help="run minimal batches and e
 parser.add_argument("--epochs",type=int,default=250)
 parser.add_argument("--batchsize",type=int,default=16)
 parser.add_argument("--lr",type=float,default=0.003,help="initial learning rate")
-parser.add_argument("--reducelr-factor",type=float,default=0.2,help="initial learning rate")
-parser.add_argument("--reducelr-patience",type=int,default=50,help="initial learning rate")
+parser.add_argument("--reducelr-factor",type=float,default=0.2,help="factor to multiply lr by for reducelronplateau")
+parser.add_argument("--reducelr-patience",type=int,default=20,help="number of epochs with no valloss improvement to reduce lr")
 
 # model parameters
 parser.add_argument("--npoints",type=int,default=300,help="number of points to run per patch. In ragged or non-ragged, "
@@ -142,7 +142,7 @@ callback_list = [
     callbacks.History(),
     callbacks.ReduceLROnPlateau(factor=ARGS.reducelr_factor, patience=ARGS.reducelr_patience,
         min_lr=1e-6, verbose=1),
-    callbacks.EarlyStopping(verbose=1, patience=ARGS.reducelr_patience*2),
+    callbacks.EarlyStopping(verbose=1, patience=int(ARGS.reducelr_patience*2.5)),
     MyModelCheckpoint(MODEL_PATH, verbose=1, 
         epoch_per_save=(5 if not ARGS.test else 1), save_best_only=True)
 ]
