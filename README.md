@@ -17,4 +17,11 @@ This script outputs `data/train_patches.h5` and `data/test_patches.h5`
 
 from the root directory of this project:
 
-`python3 train.py` with many command-line options available
+`python3 train.py --mode <mode> --name <name>` and many other command-line options available
+
+
+### evaluation
+
+Evaluation is run automatically after training. You can also run it on its own, with:
+
+`python3 evaluate.py --name <name>` with many command-line options available

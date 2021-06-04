@@ -75,7 +75,8 @@ def load_model(model_path, ARGS):
     loss_fun, metrics = get_loss(ARGS)
 
     custom_objs = {loss_fun.__name__: loss_fun}
-    custom_objs.update({m.__name__:m for m in metrics})
+    if metrics is not None:
+        custom_objs.update({m.__name__:m for m in metrics})
 
     model = keras.models.load_model(model_path, custom_objects=custom_objs)
 
