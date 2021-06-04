@@ -117,12 +117,12 @@ def errors_plot(pred, y, results_dir):
     plt.savefig(os.path.join(results_dir, "preds_vs_gt_hist.png"))
     plt.close()
 
-def gaussian(x, center, sigma=0.05):
+def gaussian(x, center, sigma=0.02):
     const = (2 * np.pi * sigma) ** -0.5
     exp = np.exp( -np.sum((x - center) ** 2, axis=-1) / (2 * sigma ** 2))
     return const * exp
 
-def raster_plot(pts, name, weights=None, title=None, logscale=False):
+def raster_plot(pts, name, weights=None, title=None, scale=False):
     x = np.linspace(0, 1)
     y = np.linspace(0, 1)
     x, y = np.meshgrid(x, y)
@@ -134,12 +134,10 @@ def raster_plot(pts, name, weights=None, title=None, logscale=False):
             vals *= max(weights[i], 0)
         gridvals += vals
 
-    kwargs = {}
-    if logscale:
-        vmax = np.percentile(gridvals, 80)
-        kwargs["norm"] = matplotlib.colors.LogNorm(vmin=gridvals.min(), vmax=vmax)
+    if scale:
+        gridvals = np.sqrt(gridvals)
 
-    plt.pcolormesh(x,y,gridvals, shading="auto", **kwargs)
+    plt.pcolormesh(x,y,gridvals, shading="auto")
     plt.colorbar()
     if title is not None:
         plt.title(title)
@@ -226,9 +224,6 @@ def main():
     if ARGS.mode not in ["count"]:
         test_gen.sorted()
         GT_VIS_DIR = os.path.join(EVAL_DIR, "visualizations")
-        os.makedirs(GT_VIS_DIR+"/lidar", exist_ok=True)
-        os.makedirs(GT_VIS_DIR+"/gt", exist_ok=True)
-        os.makedirs(GT_VIS_DIR+"/predictions", exist_ok=True)
         # grab one example from ~20 batches
         for i in range(0, len(test_gen), len(test_gen)//20):
             full_x, full_y = test_gen[i]
@@ -237,16 +232,16 @@ def main():
             x = full_x[0]
             y = full_y[0]
             y = y[y[...,2] == 1]
-            raster_plot(y[...,:2], GT_VIS_DIR+"/gt/gt{}".format(i))
+            raster_plot(y[...,:2], GT_VIS_DIR+"/{}gt".format(i))
             if ARGS.mode in ["mmd", "pwtt"]:
                 x_weights = x[...,-1]
                 x_locs = x[...,:2]
-                raster_plot(x_locs, weights=x_weights, logscale=True, name=GT_VIS_DIR+"/lidar/lidar{}".format(i))
+                raster_plot(x_locs, weights=x_weights, scale=True, name=GT_VIS_DIR+"/{}lidar".format(i))
 
                 pred = model.predict(full_x)[0]
                 pred_locs = pred[...,:2]
                 pred_weights = pred[...,2]
-                raster_plot(pred_locs, weights=pred_weights, name=GT_VIS_DIR+"/predictions/pred{}".format(i))
+                raster_plot(pred_locs, weights=pred_weights, name=GT_VIS_DIR+"/{}pred".format(i))
 
 
 
