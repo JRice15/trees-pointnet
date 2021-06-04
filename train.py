@@ -129,7 +129,7 @@ model = pointnet(
 )
 output_model(model, MODEL_DIR)
 
-loss, metrics, _ = get_loss(ARGS)
+loss, metrics = get_loss(ARGS)
 
 model.compile(
     loss=loss, 
@@ -161,6 +161,7 @@ if not ARGS.ragged:
     except KeyboardInterrupt:
         H = callback_list[0]
 
+    os.makedirs(os.path.join(MODEL_DIR, "training"))
     for k in H.history.keys():
         if not k.startswith("val_"):
             plt.plot(H.history[k])
@@ -168,7 +169,7 @@ if not ARGS.ragged:
             plt.legend(['train', 'val'])
             plt.title(k)
             plt.xlabel('epoch')
-            plt.savefig(os.path.join(MODEL_DIR, k+".png"))
+            plt.savefig(os.path.join(MODEL_DIR, "training", k+".png"))
             plt.close()
 
 else:

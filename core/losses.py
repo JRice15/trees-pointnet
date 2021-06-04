@@ -23,18 +23,13 @@ def get_loss(ARGS):
         else:
             return nonrag_pointwise_treetop(ARGS)
     if ARGS.mode == "count":
-        return keras.losses.mse, [keras.metrics.mse], lambda x,y: y - x
+        return keras.losses.mse, [keras.metrics.mse]
     if ARGS.mode == "mmd":
         return max_mean_discrepancy(ARGS)
 
     raise ValueError("No loss for mode '{}'".format(ARGS.mode))
 
 
-
-def count_eval_func(pred, y):
-    pred_counts = K.sum(pred[:,:,-1], axis=-1)
-    y_counts = K.sum(y[:,:,-1], axis=-1)
-    return y_counts - pred_counts
 
 
 def max_mean_discrepancy(ARGS):
@@ -101,7 +96,7 @@ def max_mean_discrepancy(ARGS):
         loss = y_loss - (2 * xy_loss) + x_loss
         return kernel_constant * loss / 1_000_000
 
-    return mmd_loss, None, count_eval_func
+    return mmd_loss, None
 
 
 
@@ -170,7 +165,7 @@ def nonrag_pointwise_treetop(ARGS):
         loss += (1 - ARGS.dist_weight) * count_loss(y, x)
         return loss
 
-    return loss_func, [dist_loss, count_loss], count_eval_func
+    return loss_func, [dist_loss, count_loss]
 
 
 def ragged_pointwise_treetop(ARGS):
@@ -224,7 +219,7 @@ def ragged_pointwise_treetop(ARGS):
         loss += (1 - ARGS.dist_weight) * count_loss(x, y_locs)
         return loss
     
-    return loss_func, None, count_eval_func
+    return loss_func, None
         
 
 
