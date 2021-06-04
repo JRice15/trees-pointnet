@@ -99,7 +99,7 @@ def max_mean_discrepancy(ARGS):
 
         # eq. 4. I pulled out the kernel constant from each K, and just multiply the final result
         loss = y_loss - (2 * xy_loss) + x_loss
-        return kernel_constant * loss / 1_000_000
+        return kernel_constant * loss / 100_000
 
     return mmd_loss, None, count_eval_func
 
@@ -151,7 +151,7 @@ def nonrag_pointwise_treetop(ARGS):
             fallback_to_while_loop=False
         )
         weighted_dists = sqr_dists * x_weights
-        return K.mean(weighted_dists)
+        return ARGS.dist_weight * K.mean(weighted_dists)
 
     @tf.function
     def count_loss(y, x):
@@ -162,12 +162,12 @@ def nonrag_pointwise_treetop(ARGS):
         y_is_valid = y[:,:,2]
         tree_counts = K.sum(y_is_valid, axis=-1) # per batch
         predicted_counts = K.sum(x_weights, axis=-1)
-        return keras.losses.huber(tree_counts, predicted_counts)
+        return (1 - ARGS.dist_weight) * keras.losses.huber(tree_counts, predicted_counts)
 
     @tf.function
     def loss_func(y, x):
-        loss = ARGS.dist_weight * dist_loss(y, x)
-        loss += (1 - ARGS.dist_weight) * count_loss(y, x)
+        loss = dist_loss(y, x)
+        loss += count_loss(y, x)
         return loss
 
     return loss_func, [dist_loss, count_loss], count_eval_func
