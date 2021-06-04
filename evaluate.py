@@ -9,6 +9,7 @@ import time
 
 import h5py
 import matplotlib.pyplot as plt
+import matplotlib
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
@@ -121,7 +122,7 @@ def gaussian(x, center, sigma=0.05):
     exp = np.exp( -np.sum((x - center) ** 2, axis=-1) / (2 * sigma ** 2))
     return const * exp
 
-def raster_plot(pts, name, weights=None, title=None):
+def raster_plot(pts, name, weights=None, title=None, logscale=False):
     x = np.linspace(0, 1)
     y = np.linspace(0, 1)
     x, y = np.meshgrid(x, y)
@@ -131,13 +132,14 @@ def raster_plot(pts, name, weights=None, title=None):
         vals = gaussian(gridpts, p)
         if weights is not None:
             vals *= max(weights[i], 0)
-        cutoff = 2 * np.median(vals)
-        vals = np.where(vals > cutoff, 
-            ((vals - cutoff) * 0.1) + cutoff,
-            vals)
         gridvals += vals
 
-    plt.pcolormesh(x,y,gridvals, shading="auto")
+    kwargs = {}
+    if logscale:
+        vmax = np.percentile(gridvals, 80)
+        kwargs["norm"] = matplotlib.colors.LogNorm(vmin=gridvals.min(), vmax=vmax)
+
+    plt.pcolormesh(x,y,gridvals, shading="auto", **kwargs)
     plt.colorbar()
     if title is not None:
         plt.title(title)
@@ -230,6 +232,8 @@ def main():
         # grab one example from ~20 batches
         for i in range(0, len(test_gen), len(test_gen)//20):
             full_x, full_y = test_gen[i]
+            full_x = full_x.numpy()
+            full_y = full_y.numpy()            
             x = full_x[0]
             y = full_y[0]
             y = y[y[...,2] == 1]
@@ -237,7 +241,7 @@ def main():
             if ARGS.mode in ["mmd", "pwtt"]:
                 x_weights = x[...,-1]
                 x_locs = x[...,:2]
-                raster_plot(x_locs, weights=x_weights, name=GT_VIS_DIR+"/lidar/lidar{}".format(i))
+                raster_plot(x_locs, weights=x_weights, logscale=True, name=GT_VIS_DIR+"/lidar/lidar{}".format(i))
 
                 pred = model.predict(full_x)[0]
                 pred_locs = pred[...,:2]
