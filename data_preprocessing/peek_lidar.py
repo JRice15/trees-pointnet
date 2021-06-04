@@ -1,16 +1,23 @@
-import numpy as np
-import h5py
+import os
 import re
-import tables
+import sys
+
 import geopandas as gpd
+import h5py
 import matplotlib.pyplot as plt
+import numpy as np
 import seaborn
+import tables
 
 seaborn.set()
-# import tensorflow as tf
-# from dataset import make_data_generators
+
+sys.path.append("../core")
+
+from viz_utils import raster_plot
 
 from chunked_lidar_to_patches import load_grid
+
+os.makedirs("output/example_patches", exist_ok=True)
 
 with h5py.File("../data/train_patches.h5", "r") as f:
     ROWS = f.attrs["gridrows"]
@@ -84,13 +91,37 @@ with tables.open_file("../data/train_patches.h5", "r") as train_fp, \
     plt.savefig("output/trees_per_patch")
     plt.close()
 
-    train_fp.close()
-    test_fp.close()
 
+with h5py.File("../data/test_patches.h5", "r") as f:
+    # vizualize 10 patches
+    keys = sorted(list(f["lidar"].keys()))
+    for i in range(0, len(keys), len(keys)//20):
+        patchname = keys[i]
+        x = f["lidar/"+patchname][:]
+        y = f["gt/"+patchname][:]
+        
+        raster_plot(y, filename="output/example_patches/{}_gt".format(patchname))
+
+        xlocs = x[...,:2]
+        xweights = x[...,2]
+        raster_plot(xlocs, weights=xweights, scale=True,
+            filename="output/example_patches/{}_lidar_full.png".format(patchname))
+
+        step = len(x) // 3000
+        if step > 0:
+            leftover = len(x) % 3000
+            x_sampled = x[0:len(x)-leftover:step]
+            assert len(x_sampled) == 3000
+            xlocs = x_sampled[...,:2]
+            xweights = x_sampled[...,2]
+            raster_plot(xlocs, weights=xweights, scale=True,
+                filename="output/example_patches/{}_lidar_sampled3k.png".format(patchname))
 
 
 with h5py.File("../data/train_patches.h5", "r") as f:
     assert len(f["lidar"].keys()) == len(f["gt"].keys())
+    print(list(f["lidar"].keys())[:10])
+    print(list(f["gt"].keys())[:10])
 
 
 if ARGS.subdivide == 1:

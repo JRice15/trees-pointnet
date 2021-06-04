@@ -23,6 +23,7 @@ from core import DATA_DIR, MAIN_DIR, ARGS, data_loading
 from core.losses import get_loss
 from core.models import pointnet
 from core.utils import MyModelCheckpoint, output_model
+from core.viz_utils import raster_plot
 
 seaborn.set()
 
@@ -117,34 +118,6 @@ def errors_plot(pred, y, results_dir):
     plt.savefig(os.path.join(results_dir, "preds_vs_gt_hist.png"))
     plt.close()
 
-def gaussian(x, center, sigma=0.02):
-    const = (2 * np.pi * sigma) ** -0.5
-    exp = np.exp( -np.sum((x - center) ** 2, axis=-1) / (2 * sigma ** 2))
-    return const * exp
-
-def raster_plot(pts, name, weights=None, title=None, scale=False):
-    x = np.linspace(0, 1)
-    y = np.linspace(0, 1)
-    x, y = np.meshgrid(x, y)
-    gridpts = np.stack([x,y], axis=-1)
-    gridvals = np.zeros_like(x)
-    for i,p in enumerate(pts):
-        vals = gaussian(gridpts, p)
-        if weights is not None:
-            vals *= max(weights[i], 0)
-        gridvals += vals
-
-    if scale:
-        gridvals = np.sqrt(gridvals)
-
-    plt.pcolormesh(x,y,gridvals, shading="auto")
-    plt.colorbar()
-    if title is not None:
-        plt.title(title)
-    plt.tight_layout()
-    plt.savefig(name)
-    plt.close()
-
 def count_errors(pred, y):
     if len(pred.shape) > 1:
         pred = K.sum(pred[...,-1], axis=-1)
@@ -224,25 +197,29 @@ def main():
     if ARGS.mode not in ["count"]:
         test_gen.sorted()
         GT_VIS_DIR = os.path.join(EVAL_DIR, "visualizations")
-        # grab one example from ~20 batches
-        for i in range(0, len(test_gen), len(test_gen)//20):
-            full_x, full_y = test_gen[i]
-            full_x = full_x.numpy()
-            full_y = full_y.numpy()            
-            x = full_x[0]
-            y = full_y[0]
-            y = y[y[...,2] == 1]
-            raster_plot(y[...,:2], GT_VIS_DIR+"/{}gt".format(i))
+        os.makedirs(GT_VIS_DIR, exist_ok=True)
+        # grab random 10 examples
+        for i in range(0, 10*5, 5):
+            x, y, patchname = test_gen.get_patch(i)
+            ylocs = y[y[...,2] == 1][...,:2]
+            raster_plot(ylocs, GT_VIS_DIR+"/{}_gt".format(patchname))
+
             if ARGS.mode in ["mmd", "pwtt"]:
+                gt_ntrees = len(y)
+
                 x_weights = x[...,-1]
                 x_locs = x[...,:2]
-                raster_plot(x_locs, weights=x_weights, scale=True, name=GT_VIS_DIR+"/{}lidar".format(i))
+                raster_plot(x_locs, weights=x_weights, scale=True, clip=1, filename=GT_VIS_DIR+"/{}_lidar".format(patchname))
 
-                pred = model.predict(full_x)[0]
+                pred = model.predict(np.expand_dims(x, 0))[0]
                 pred_locs = pred[...,:2]
                 pred_weights = pred[...,2]
-                raster_plot(pred_locs, weights=pred_weights, name=GT_VIS_DIR+"/{}pred".format(i))
+                raster_plot(pred_locs, weights=pred_weights, filename=GT_VIS_DIR+"/{}_pred".format(patchname))
 
+                sorted_preds = pred[np.argsort(pred_weights)][::-1]
+                topk_locs = sorted_preds[...,:2][:gt_ntrees]
+                topk_weights = sorted_preds[...,2][:gt_ntrees]
+                raster_plot(topk_locs, weights=topk_weights, filename=GT_VIS_DIR+"/{}_pred_topk".format(patchname))
 
 
 if __name__ == "__main__":

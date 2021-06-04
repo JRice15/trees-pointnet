@@ -11,7 +11,13 @@ from tensorflow.keras import backend as K
 from tensorflow.keras import layers
 from tensorflow.keras.optimizers import Adam
 
+import matplotlib
+import matplotlib.pyplot as plt
+import seaborn
+
 from core import ARGS, DATA_DIR
+
+seaborn.set()
 
 
 class MyModelCheckpoint(tf.keras.callbacks.ModelCheckpoint):
@@ -39,3 +45,5 @@ def output_model(model, directory):
         tf.keras.utils.plot_model(model, to_file=os.path.join(directory, "model.png"))
     except Exception as e:
         print("Failed to plot model: " + str(e))
+
+

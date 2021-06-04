@@ -39,8 +39,13 @@ class LidarPatchGen(keras.utils.Sequence):
         self.y_counts_only = False
         if ARGS.mode == "count":
             self.y_counts_only = True
+        self.init_rng()
         self.init_data()
         self.batch_time = 0
+
+    def init_rng(self):
+        """initialize or reinitialize the random number generatore"""
+        self.random = np.random.default_rng(seed=44)
 
     def init_data(self):
         self.max_points = self.file["lidar"].attrs["max_points"]
@@ -66,8 +71,9 @@ class LidarPatchGen(keras.utils.Sequence):
         self.num_ids = len(all_ids)
         if ARGS.test:
             self.num_ids = 2
-        self.ids = np.array(all_ids)
-        np.random.shuffle(self.ids)
+        # sort for reproducibility
+        self.ids = np.array(sorted(all_ids))
+        self.random.shuffle(self.ids)
         if not ARGS.ragged:
             self._x_batch = np.empty((self.batch_size, self.npoints, self.nattributes))
             if self.y_counts_only:
@@ -89,7 +95,18 @@ class LidarPatchGen(keras.utils.Sequence):
         idx = idx * self.batch_size
         end_idx = idx + self.batch_size
         for i,patch in enumerate(self.ids[idx:end_idx]):
-            self._x_batch[i] = self.file['lidar/'+patch][:self.npoints]
+            # select npoints even spaced points randomly from batch
+            x_node = self.file['lidar/'+patch]
+            num_x_pts = x_node.shape[0]
+            step = num_x_pts // self.npoints
+            leftover = num_x_pts % self.npoints
+            if leftover == 0:
+                rand_offset = 0
+            else:
+                rand_offset = self.random.choice(leftover)
+            top_offset = leftover - rand_offset
+            self._x_batch[i] = self.file['lidar/'+patch][rand_offset:num_x_pts-top_offset:step]
+            # select all gt y points, or just y count
             if self.y_counts_only:
                 self._y_batch[i] = self.file['gt/'+patch].shape[0]
             else:
@@ -124,9 +141,10 @@ class LidarPatchGen(keras.utils.Sequence):
 
     def load_all(self):
         """
-        load all examples into one big array. should only be used for the validation
-        patch generator, because keras doesn't accept a Sequence for 
+        load all examples into one big array. should be used for the validation
+        patch generator, because keras doesn't accept a Sequence for val data
         """
+        self.init_rng()
         x_batches = []
         y_batches = []
         for i in range(len(self)):
@@ -136,6 +154,24 @@ class LidarPatchGen(keras.utils.Sequence):
         x = tf.concat(x_batches, axis=0)
         y = tf.concat(y_batches, axis=0)
         return x, y
+
+    def get_patch(self, i):
+        """
+        get the full i'th patch from this dataset
+        """
+        # set temporary sorted ids
+        old_ids = self.ids
+        self.ids = sorted(self.ids)
+        old_batchsize = self.batch_size
+        self.batch_size = 1
+        # get results
+        id = self.ids[i]
+        x, y = self[i]
+        # restore correct values
+        self.ids = old_ids
+        self.batch_size = old_batchsize
+        print(x.shape, y.shape)
+        return x[0], y[0], id
 
     def get_batch_shape(self):
         """
@@ -161,10 +197,11 @@ class LidarPatchGen(keras.utils.Sequence):
     def on_epoch_end(self):
         print("avg batch time:", self.batch_time / len(self))
         self.batch_time = 0
-        np.random.shuffle(self.ids)
+        self.random.shuffle(self.ids)
 
     def sorted(self):
         """put ids in a reproducable order (sorted order)"""
+        self.init_rng()
         self.ids = sorted(self.ids)
 
     def close_file(self):
