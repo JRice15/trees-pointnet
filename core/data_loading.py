@@ -163,6 +163,10 @@ class LidarPatchGen(keras.utils.Sequence):
         self.batch_time = 0
         np.random.shuffle(self.ids)
 
+    def sorted(self):
+        """put ids in a reproducable order (sorted order)"""
+        self.ids = sorted(self.ids)
+
     def close_file(self):
         try:
             self.file.close()
