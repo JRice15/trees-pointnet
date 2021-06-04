@@ -71,11 +71,18 @@ def max_mean_discrepancy(ARGS):
 
     @tf.function
     def mmd_loss_term(a, b):
+        a = tf.expand_dims(a, axis=1)
+        a_locs = a[...,:2]
+        a_weights = a[...,2]
+
+        b = tf.expand_dims(b, axis=2)
+        b_locs = b[...,:2]
+        b_weights = b[...,2]
+
         # ground truth difference matrix, (B,MaxNumTrees,MaxNumTrees,3)
-        matrix = tf.expand_dims(a, axis=1) - tf.expand_dims(b, axis=2)
         # get xy-diffs, and 0,1 weights
-        diffs = matrix[...,:2]
-        diff_weights = matrix[...,2]
+        diffs = a_locs - b_locs
+        diff_weights = a_weights * b_weights
         # get loss from kernel function
         losses = kernel(diffs)
         loss = K.sum(losses * diff_weights)
