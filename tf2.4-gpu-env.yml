@@ -1,0 +1,12 @@
+channels:
+  - defaults
+dependencies:
+  - h5py
+  - tensorflow-gpu=2.4
+  - numpy=1.19
+  - pydot
+  - matplotlib
+  - seaborn
+  - pip
+  - pip:
+    - gast==0.3.3
