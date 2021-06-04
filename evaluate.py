@@ -72,9 +72,12 @@ def init_evaluation_args():
 
 def load_model(model_path, ARGS):
     print("Loading model", model_path)
-    loss_fun, _ = get_loss(ARGS)
+    loss_fun, metrics = get_loss(ARGS)
 
-    model = keras.models.load_model(model_path, custom_objects={loss_fun.__name__: loss_fun})
+    custom_objs = {loss_fun.__name__: loss_fun}
+    custom_objs.update({m.__name__:m for m in metrics})
+
+    model = keras.models.load_model(model_path, custom_objects=custom_objs)
 
     metrics = None
     # additional metrics not used in training
