@@ -44,9 +44,11 @@ class TNet(keras.layers.Layer):
 
 class ConcatGrid(layers.Layer):
 
-    def __init__(self, gridsize, **kwargs):
+    def __init__(self, gridsize, depth_factor, **kwargs):
         super().__init__(self, **kwargs)
         self.gridsize = gridsize
+        self.depth_factor = depth_factor
+        # self.gridconv = layers.Conv2D(depth_factor, 3, padding="same")
     
     def build(self, input_shape):
         xgrid, ygrid = np.meshgrid(
@@ -60,7 +62,7 @@ class ConcatGrid(layers.Layer):
     def call(self, x):
         # add batch size to grid
         batchsize = tf.shape(x)[0]
-        tilevec = [batchsize, 1, 1, 1]
+        tilevec = [batchsize, 1, 1, self.depth_factor]
         grid = tf.tile(self.grid, tilevec)
         return tf.concat([grid, x], axis=-1)
 

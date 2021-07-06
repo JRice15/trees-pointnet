@@ -154,7 +154,7 @@ def mmd_output_flow(global_feature, npoints, gridsize=8):
 
     x = customlayers.Tile(gridsize, axis=1)(x)
     x = customlayers.Tile(gridsize, axis=2)(x)
-    x = customlayers.ConcatGrid(gridsize)(x)
+    x = customlayers.ConcatGrid(gridsize, 32)(x)
 
     x = pointnet_conv(128, 1, name="out_conv1")(x)
     x = pointnet_conv(64, 3, padding="same", name="out_conv2")(x)
