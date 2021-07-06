@@ -12,8 +12,8 @@ class TNet(keras.layers.Layer):
     Tranformation Network, from B*InChannels to B*OutChannels
     """
 
-    def __init__(self, in_channels, out_channels, **kwargs):
-        super().__init__(self, **kwargs)
+    def __init__(self, in_channels, out_channels, name, **kwargs):
+        super().__init__(self, name=name, **kwargs)
         self.in_channels = in_channels
         self.out_channels = out_channels
         w_init = tf.constant_initializer(0.0)
@@ -33,37 +33,46 @@ class TNet(keras.layers.Layer):
 
     def get_config(self):
         # super.get_config fails?
-        config = {
-            "name": self.name,
+        # config = super().get_config()
+        config = {}
+        config.update({
             "in_channels": self.in_channels,
             "out_channels": self.out_channels,
-        }
+        })
         return config
 
 
 class ConcatGrid(layers.Layer):
 
-    def __init__(self, gridsize, name, **kwargs):
-        super().__init__(self, name=name, **kwargs)
+    def __init__(self, gridsize, **kwargs):
+        super().__init__(self, **kwargs)
         self.gridsize = gridsize
+    
+    def build(self, input_shape):
         xgrid, ygrid = np.meshgrid(
-            np.linspace(0, 1, gridsize),
-            np.linspace(0, 1, gridsize)
+            np.linspace(0, 1, self.gridsize),
+            np.linspace(0, 1, self.gridsize)
         )
         grid = np.stack([xgrid, ygrid], axis=-1)
-        self.grid = tf.constant(grid, shape=[1,gridsize,gridsize,2], dtype=K.floatx())
+        self.grid = tf.constant(grid, shape=[1,self.gridsize,self.gridsize,2], dtype=K.floatx())
         print("grid:", self.grid.shape)
 
     def call(self, x):
         # add batch size to grid
         batchsize = tf.shape(x)[0]
-        tilevec = [batchsize] + [1 for i in self.grid.shape[1:]]
+        tilevec = [batchsize, 1, 1, 1]
         grid = tf.tile(self.grid, tilevec)
         return tf.concat([grid, x], axis=-1)
 
+    def get_config(self):
+        config = {
+            "gridsize": self.gridsize,
+        }
+        return config
 
 class GatherTopK(layers.Layer):
     """
+    Does not work, I think
     call signiture:
         l = GatherTopK(...)
         top_n_from_data = l([data, confidences])
@@ -78,6 +87,13 @@ class GatherTopK(layers.Layer):
         tf.print(tf.shape(data), tf.shape(confidences))
         values, indices = tf.nn.top_k(confidences, k=self.k)
         return tf.gather(data, indices, axis=1)
+
+    def get_config(self):
+        config = super().get_config()
+        config.update({
+            "k": self.k,
+        })
+        return config
 
 
 class MatMul(layers.Layer):
@@ -137,6 +153,14 @@ class Tile(layers.Layer):
 
     def call(self, x):
         return tf.tile(x, self.tilevec)
+
+    def get_config(self):
+        config = super().get_config()
+        config.update({
+            "num": self.num,
+            "axis": self.axis,
+        })
+        return config
 
 
 def Activation(actname, **kwargs):

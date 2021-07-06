@@ -107,6 +107,7 @@ class LidarPatchGen(keras.utils.Sequence):
             top_offset = leftover - rand_offset
             self._x_batch[i] = self.file['lidar/'+patch][rand_offset:num_x_pts-top_offset:step]
             # select all gt y points, or just y count
+            self._y_batch.fill(0)
             if self.y_counts_only:
                 self._y_batch[i] = self.file['gt/'+patch].shape[0]
             else:
@@ -179,6 +180,8 @@ class LidarPatchGen(keras.utils.Sequence):
         """
         x, y = self[0]
         print("Batch shape x:", x.shape, "y:", y.shape)
+        print(x)
+        print(y)
         return x.shape, y.shape
 
     def summary(self):

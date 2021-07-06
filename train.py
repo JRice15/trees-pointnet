@@ -69,7 +69,7 @@ ARGS = parser.parse_args(namespace=ARGS)
 
 # manual args handling
 if ARGS.test:
-    ARGS.epochs = 2
+    ARGS.epochs = 6
     ARGS.batchsize = 2
 for name,aliases in modes_w_aliases.items():
     if ARGS.mode in aliases:
