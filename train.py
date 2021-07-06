@@ -76,15 +76,6 @@ for name,aliases in modes_w_aliases.items():
         ARGS.mode = name
         break
 
-if ARGS.mode in ["pwtt"]:
-    ARGS.output_type = "seg"
-elif ARGS.mode in ["count"]:
-    ARGS.output_type = "cls"
-elif ARGS.mode in ["mmd"]:
-    ARGS.output_type = "custom"
-else:
-    raise ValueError("unknown mode to outputtype initialization")
-
 pprint(vars(ARGS))
 
 # create model output dir

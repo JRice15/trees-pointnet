@@ -41,6 +41,45 @@ class TNet(keras.layers.Layer):
         return config
 
 
+class ConcatGrid(layers.Layer):
+
+    def __init__(self, gridsize, name, **kwargs):
+        super().__init__(self, name=name, **kwargs)
+        self.gridsize = gridsize
+        xgrid, ygrid = np.meshgrid(
+            np.linspace(0, 1, gridsize),
+            np.linspace(0, 1, gridsize)
+        )
+        grid = np.stack([xgrid, ygrid], axis=-1)
+        self.grid = tf.constant(grid, shape=[1,gridsize,gridsize,2], dtype=K.floatx())
+        print("grid:", self.grid.shape)
+
+    def call(self, x):
+        # add batch size to grid
+        batchsize = tf.shape(x)[0]
+        tilevec = [batchsize] + [1 for i in self.grid.shape[1:]]
+        grid = tf.tile(self.grid, tilevec)
+        return tf.concat([grid, x], axis=-1)
+
+
+class GatherTopK(layers.Layer):
+    """
+    call signiture:
+        l = GatherTopK(...)
+        top_n_from_data = l([data, confidences])
+    """
+
+    def __init__(self, k, name, **kwargs):
+        super().__init__(name=name, **kwargs)
+        self.k = k
+
+    def call(self, x):
+        data, confidences = x
+        tf.print(tf.shape(data), tf.shape(confidences))
+        values, indices = tf.nn.top_k(confidences, k=self.k)
+        return tf.gather(data, indices, axis=1)
+
+
 class MatMul(layers.Layer):
     """
     didn't work in a lambda layer for some reason

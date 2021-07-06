@@ -8,13 +8,14 @@ from tensorflow import keras
 from core import customlayers, ARGS
 
 
-def pointnet_conv(outchannels, kernel_size, name, bn=True, activation=True):
+def pointnet_conv(outchannels, kernel_size, name, bn=True, activation=True,
+        padding="valid"):
     """
     returns callable pipeline of conv, batchnorm, and relu
     input: (B,N,1,K)
     """
     layer_list = [
-        layers.Conv1D(outchannels, kernel_size=kernel_size, padding="valid",
+        layers.Conv1D(outchannels, kernel_size=kernel_size, padding=padding,
                     kernel_initializer="glorot_normal", name=name),
     ]
     if bn:
@@ -109,7 +110,7 @@ def seg_output_flow(local_features, global_feature, outchannels):
     x = pointnet_conv(128, 1, name="outmlp_conv3")(x)
     x = pointnet_conv(128, 1, name="outmlp_conv4")(x)
 
-    x = pointnet_conv(outchannels, 1, name="outmlp_conv_final", 
+    x = pointnet_conv(outchannels, 1, name="outmlp_conv_final",
                       bn=False, activation=False)(x)
     x = customlayers.ReduceDims(axis=2, name="outmlp_squeeze")(x)
     
@@ -135,36 +136,49 @@ def cls_output_flow(global_feature, outchannels):
 
     return x
 
-def custom_output_flow(global_feature, npoints, nchannels):
+def mmd_output_flow(global_feature, npoints, gridsize=8):
     """
-    Custom output flow
-    returns:
+    Custom output flow for mean-max-discrepancy loss
+    args:
         global feature vector: (B,npoints,nchannels)
+        npoints: number of top points to return
+        gridsize: initial size of artificial grid (gets doubled once)
+    returns:
+        (B,npoints,3) where 3 corresponds to x,y,confidence
     """
     x = global_feature
-    x = layers.Reshape((1024,1), name="expand_global_feature_reshape")(x)
+    x = layers.Reshape((1,1,1024), name="expand_global_feature_reshape")(x)
+    # reduce global feature vector dims
+    x = pointnet_conv(512, 1, "global_feature_conv1")(x)
+    x = pointnet_conv(256, 1, "global_feature_conv2")(x)
 
-    # output flow
-    x = pointnet_conv(8, 5, name="outmlp_conv1")(x)
-    x = layers.MaxPool1D(strides=2)(x) # (B,508,8)
-    x = pointnet_conv(16, 5, name="outmlp_conv2")(x)
-    x = layers.MaxPool1D(strides=2)(x) # (B,250,16)
-    x = pointnet_conv(32, 5, name="outmlp_conv3")(x)
-    x = layers.MaxPool1D(strides=2)(x) # (B,121,32)
-    
-    # select first npoints
-    x = x[:,:npoints] # (B,npoints,32)
+    x = customlayers.Tile(gridsize, axis=1)(x)
+    x = customlayers.Tile(gridsize, axis=2)(x)
+    x = customlayers.ConcatGrid(gridsize, "concat_grid")(x)
 
-    # filter to output channels
-    x = pointnet_conv(nchannels, 1, name="outmlp_conv_final", 
-                      bn=False, activation=False)(x) # (B,npoints,nchannels)
+    x = pointnet_conv(128, 1, name="out_conv1")(x)
+    x = pointnet_conv(64, 3, padding="same", name="out_conv2")(x)
+    x = pointnet_conv(64, 3, padding="same", name="out_conv3")(x)
+    # upsample grid
+    x = layers.UpSampling2D(2, name="out_upsample")(x)
+    x = pointnet_conv(32, 3, padding="same", name="out_conv4")(x)
+    x = pointnet_conv(32, 3, padding="same", name="out_conv5")(x)
+    # 3 channels represent x,y,confidence
+    x = pointnet_conv(3, 1, padding="same", name="out_conv_final")(x)
+
+    batchsize, gridx, gridy, _ = x.shape
+    x = layers.Reshape((gridx * gridy, 3))(x)
+
+    # get top k points
+    # confs = x[...,2]
+    # x = customlayers.GatherTopK(k=npoints, name="gather_topk")([x, confs])
 
     return x
 
 
 def pointnet(inpt_shape, output_features, output_pts=None, reg_weight=0.001):
     """
-    ARGS:
+    args:
         npoints: number of points per example (None if in ragged mode)
         nattributes: number of attributes per point (x,y,z, r,g,b, etc)
         output_features: num features per output point
@@ -172,6 +186,7 @@ def pointnet(inpt_shape, output_features, output_pts=None, reg_weight=0.001):
 
     inpt = layers.Input(inpt_shape, ragged=ARGS.ragged, 
                 batch_size=ARGS.batchsize if ARGS.ragged else None) # (B,N,K)
+    xy_locs = inpt[...,:2]
 
     x = inpt
     x = customlayers.ExpandDims(axis=2, name="add_channels_1")(x) # (B,N,1,K)
@@ -202,13 +217,13 @@ def pointnet(inpt_shape, output_features, output_pts=None, reg_weight=0.001):
     global_feature = x
 
     # output flow
-    if ARGS.output_type == "seg":
+    if ARGS.mode in ["pwtt"]:
         output = seg_output_flow(local_features, global_feature, output_features)
-    elif ARGS.output_type == "cls":
+    elif ARGS.mode in ["count"]:
         output = cls_output_flow(global_feature, output_features)
-    elif ARGS.output_type == "custom":
+    elif ARGS.mode in ["mmd"]:
         assert output_pts is not None
-        output = custom_output_flow(global_feature, output_pts, output_features)
+        output = mmd_output_flow(global_feature, output_pts)
     else:
         raise NotImplementedError()
     
@@ -216,7 +231,6 @@ def pointnet(inpt_shape, output_features, output_pts=None, reg_weight=0.001):
         # limit to 0 to 1
         output = customlayers.Activation("sigmoid", name="pwtt-sigmoid")(output)
         # add input xy locations to each point
-        xy_locs = inpt[...,:2]
         output = layers.Concatenate(axis=-1, name="pwtt-concat_inpt")([xy_locs, output])
     elif ARGS.mode == "mmd":
         # limit xy locations and weights to 0-1
