@@ -45,7 +45,7 @@ parser.add_argument("--test",action="store_true",help="run minimal batches and e
 # training hyperparameters
 parser.add_argument("--epochs",type=int,default=250)
 parser.add_argument("--batchsize",type=int,default=16)
-parser.add_argument("--lr",type=float,default=0.003,help="initial learning rate")
+parser.add_argument("--lr",type=float,default=0.001,help="initial learning rate")
 parser.add_argument("--reducelr-factor",type=float,default=0.2,help="factor to multiply lr by for reducelronplateau")
 parser.add_argument("--reducelr-patience",type=int,default=20,help="number of epochs with no valloss improvement to reduce lr")
 
@@ -101,16 +101,16 @@ inpt_shape = train_gen.get_batch_shape()[0][1:]
 create model
 """
 
-# map modes to number of output features
+# map modes to number of output features and points
 output_pts_map = {
-    "mmd": train_gen.max_trees,
+    "mmd": None,
     "pwtt": None,
     "count": None,
 }
 output_features_map = {
-    "pwtt": 1,
-    "count": 1,
-    "mmd": 3, # (x,y,confidence)
+    "pwtt": 1, # confidence, xys are appended
+    "count": 1, # count
+    "mmd": 1, # confidence, xys are appended
 }
 
 model = pointnet(

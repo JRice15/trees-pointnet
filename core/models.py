@@ -138,6 +138,7 @@ def cls_output_flow(global_feature, outchannels):
 
 def mmd_output_flow(global_feature, npoints, gridsize=8):
     """
+    DEPRECATED
     Custom output flow for mean-max-discrepancy loss
     args:
         global feature vector: (B,npoints,nchannels)
@@ -215,24 +216,21 @@ def pointnet(inpt_shape, output_features, output_pts=None, reg_weight=0.001):
     global_feature = x
 
     # output flow
-    if ARGS.mode in ["pwtt"]:
+    if ARGS.mode in ["pwtt", "mmd"]:
         output = seg_output_flow(local_features, global_feature, output_features)
     elif ARGS.mode in ["count"]:
         output = cls_output_flow(global_feature, output_features)
-    elif ARGS.mode in ["mmd"]:
-        assert output_pts is not None
-        output = mmd_output_flow(global_feature, output_pts)
+    # elif ARGS.mode in ["mmd"]:
+    #     assert output_pts is not None
+    #     output = mmd_output_flow(global_feature, output_pts)
     else:
         raise NotImplementedError()
     
-    if ARGS.mode == "pwtt":
+    if ARGS.mode in ["pwtt", "mmd"]:
         # limit to 0 to 1
         output = customlayers.Activation("sigmoid", name="pwtt-sigmoid")(output)
         # add input xy locations to each point
         output = layers.Concatenate(axis=-1, name="pwtt-concat_inpt")([xy_locs, output])
-    elif ARGS.mode == "mmd":
-        # limit xy locations and weights to 0-1
-        output = customlayers.Activation("sigmoid", name="mmd-sigmoid")(output)
 
     model = Model(inpt, output)
 

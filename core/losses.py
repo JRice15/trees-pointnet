@@ -67,7 +67,7 @@ def max_mean_discrepancy(ARGS):
         kernel = laplacian_kernel_func
         kernel_constant = (2 * ARGS.mmd_sigma) ** -0.5
     else:
-        raise ValueError("Unknown mmd kernel {} to mmd loss".format(ARGS.mmd_kernel))
+        raise ValueError("Unknown mmd kernel '{}' to mmd loss".format(ARGS.mmd_kernel))
 
     @tf.function
     def mmd_loss_term(a, b):
