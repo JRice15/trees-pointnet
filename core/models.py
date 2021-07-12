@@ -157,17 +157,17 @@ def mmd_output_flow(global_feature, output_channels):
     x = pointnet_conv(output_channels, 1, name="outmlp_conv_final", 
                       bn=False, activation=False)(x) # (B,246,nchannels)
 
-    assert output_channels == 3
+    return x
 
-    pts = x[...,:2]
-    confs = x[...,-1:]
 
-    # limit location coords to 0-1
-    pts = layers.Activation("sigmoid")(pts)
-    # limit to >= 0
-    confs = layers.Activation("softplus")(confs)
+def mmd_output_flow_2(global_feature, out_channels):
+    x = global_feature
 
-    x = layers.Concatenate(axis=-1)([pts, confs])
+    x = pointnet_dense(512, "outmlp_dense1")(x)
+    x = pointnet_dense(256, "outmlp_dense2")(x)
+    x = pointnet_dense(128*4, "outmlp_dense3")(x)
+    x = layers.Reshape((128, 4))(x)
+    x = pointnet_conv(out_channels, 1, bn=False, activation=False, name="out_channels_conv")(x)
 
     return x
 
@@ -217,11 +217,21 @@ def pointnet(inpt_shape, output_channels, reg_weight=0.001):
     elif ARGS.mode in ["count"]:
         output = cls_output_flow(global_feature, output_channels)
     elif ARGS.mode in ["mmd"]:
-        output = mmd_output_flow(global_feature, output_channels)
+        output = mmd_output_flow_2(global_feature, output_channels)
     else:
         raise NotImplementedError()
     
-    # optiinal post processing for some methods
+    # optional post processing for some methods
+    if ARGS.mode in ["mmd"]:
+        assert output_channels == 3
+        pts = output[...,:2]
+        confs = output[...,-1:]
+        # limit location coords to 0-1
+        pts = layers.Activation("sigmoid")(pts)
+        # limit to >= 0
+        confs = layers.Activation("softplus")(confs)
+        output = layers.Concatenate(axis=-1)([pts, confs])
+
     if ARGS.mode in ["pwtt"]:
         # limit to 0 to 1
         output = customlayers.Activation("sigmoid", name="pwtt-sigmoid")(output)
