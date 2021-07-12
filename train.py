@@ -102,21 +102,15 @@ create model
 """
 
 # map modes to number of output features and points
-output_pts_map = {
-    "mmd": None,
-    "pwtt": None,
-    "count": None,
-}
-output_features_map = {
+output_channels_map = {
     "pwtt": 1, # confidence, xys are appended
     "count": 1, # count
-    "mmd": 1, # confidence, xys are appended
+    "mmd": 3, # x,y,confidence
 }
 
 model = pointnet(
     inpt_shape=inpt_shape,
-    output_pts=output_pts_map[ARGS.mode],
-    output_features=output_features_map[ARGS.mode],
+    output_channels=output_channels_map[ARGS.mode],
     reg_weight=ARGS.ortho_weight,
 )
 output_model(model, MODEL_DIR)

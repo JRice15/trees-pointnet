@@ -8,7 +8,7 @@ from tensorflow import keras
 from core import customlayers, ARGS
 
 
-def pointnet_conv(outchannels, kernel_size, name, bn=True, activation=True,
+def pointnet_conv(outchannels, kernel_size, name, strides=1, bn=True, activation=True,
         padding="valid"):
     """
     returns callable pipeline of conv, batchnorm, and relu
@@ -16,7 +16,7 @@ def pointnet_conv(outchannels, kernel_size, name, bn=True, activation=True,
     """
     layer_list = [
         layers.Conv1D(outchannels, kernel_size=kernel_size, padding=padding,
-                    kernel_initializer="glorot_normal", name=name),
+                    strides=strides, kernel_initializer="glorot_normal", name=name),
     ]
     if bn:
         layer_list.append(layers.BatchNormalization(name=name+"_bn"))
@@ -136,51 +136,47 @@ def cls_output_flow(global_feature, outchannels):
 
     return x
 
-def mmd_output_flow(global_feature, npoints, gridsize=8):
+def mmd_output_flow(global_feature, output_channels):
     """
-    DEPRECATED
     Custom output flow for mean-max-discrepancy loss
     args:
         global feature vector: (B,npoints,nchannels)
-        npoints: number of top points to return
-        gridsize: initial size of artificial grid (gets doubled once)
     returns:
         (B,npoints,3) where 3 corresponds to x,y,confidence
     """
     x = global_feature
-    x = layers.Reshape((1,1,1024), name="expand_global_feature_reshape")(x)
-    # reduce global feature vector dims
-    x = pointnet_conv(512, 1, "global_feature_conv1")(x)
-    x = pointnet_conv(256, 1, "global_feature_conv2")(x)
+    x = layers.Reshape((1024,1), name="expand_global_feature_reshape")(x)
 
-    x = customlayers.Tile(gridsize, axis=1)(x)
-    x = customlayers.Tile(gridsize, axis=2)(x)
-    x = customlayers.ConcatGrid(gridsize, 32)(x)
+    # output flow
+    x = pointnet_conv(16, 7, name="outmlp_conv1")(x)
+    x = layers.MaxPool1D(strides=2)(x) # (B,508,8)
+    x = pointnet_conv(32, 5, strides=2, name="outmlp_conv2")(x) # (B,250,32)
+    x = pointnet_conv(32, 5, name="outmlp_conv3")(x) # (B,246,32)
+    
+    # filter to output channels
+    x = pointnet_conv(output_channels, 1, name="outmlp_conv_final", 
+                      bn=False, activation=False)(x) # (B,246,nchannels)
 
-    x = pointnet_conv(128, 1, name="out_conv1")(x)
-    x = pointnet_conv(64, 3, padding="same", name="out_conv2")(x)
-    x = pointnet_conv(64, 3, padding="same", name="out_conv3")(x)
-    # upsample grid
-    x = layers.UpSampling2D(2, name="out_upsample")(x)
-    x = pointnet_conv(32, 3, padding="same", name="out_conv4")(x)
-    x = pointnet_conv(32, 3, padding="same", name="out_conv5")(x)
-    # 3 channels represent x,y,confidence
-    x = pointnet_conv(3, 1, padding="same", name="out_conv_final")(x)
+    assert output_channels == 3
 
-    batchsize, gridx, gridy, _ = x.shape
-    x = layers.Reshape((gridx * gridy, 3))(x)
-    # limit coords and confidences to 0,1
-    x = layers.Activation("sigmoid")(x)
+    pts = x[...,:2]
+    confs = x[...,-1:]
+
+    # limit location coords to 0-1
+    pts = layers.Activation("sigmoid")(pts)
+    # limit to >= 0
+    confs = layers.Activation("softplus")(confs)
+
+    x = layers.Concatenate(axis=-1)([pts, confs])
 
     return x
 
 
-def pointnet(inpt_shape, output_features, output_pts=None, reg_weight=0.001):
+def pointnet(inpt_shape, output_channels, reg_weight=0.001):
     """
     args:
-        npoints: number of points per example (None if in ragged mode)
         nattributes: number of attributes per point (x,y,z, r,g,b, etc)
-        output_features: num features per output point
+        output_channels: num features per output point
     """
 
     inpt = layers.Input(inpt_shape, ragged=ARGS.ragged, 
@@ -216,17 +212,17 @@ def pointnet(inpt_shape, output_features, output_pts=None, reg_weight=0.001):
     global_feature = x
 
     # output flow
-    if ARGS.mode in ["pwtt", "mmd"]:
-        output = seg_output_flow(local_features, global_feature, output_features)
+    if ARGS.mode in ["pwtt"]:
+        output = seg_output_flow(local_features, global_feature, output_channels)
     elif ARGS.mode in ["count"]:
-        output = cls_output_flow(global_feature, output_features)
-    # elif ARGS.mode in ["mmd"]:
-    #     assert output_pts is not None
-    #     output = mmd_output_flow(global_feature, output_pts)
+        output = cls_output_flow(global_feature, output_channels)
+    elif ARGS.mode in ["mmd"]:
+        output = mmd_output_flow(global_feature, output_channels)
     else:
         raise NotImplementedError()
     
-    if ARGS.mode in ["pwtt", "mmd"]:
+    # optiinal post processing for some methods
+    if ARGS.mode in ["pwtt"]:
         # limit to 0 to 1
         output = customlayers.Activation("sigmoid", name="pwtt-sigmoid")(output)
         # add input xy locations to each point

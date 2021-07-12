@@ -99,9 +99,9 @@ def max_mean_discrepancy(ARGS):
         xy_loss = mmd_loss_term(x, y)
         x_loss = mmd_loss_term(x, x)
 
-        # eq. 4. I pulled out the kernel constant from each K, and just multiply the final result
+        # eq. 4. I pulled out the kernel constant from each K, and just multiply the final result (not that it really matters, as a constant in a loss term)
         loss = y_loss - (2 * xy_loss) + x_loss
-        return kernel_constant * loss / 100_000
+        return kernel_constant * loss / 10_000 # scaling factor
 
     return mmd_loss, None
 
