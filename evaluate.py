@@ -40,7 +40,7 @@ def parse_evaluation_args():
 def init_evaluation_args():
     ALL_MODELS_DIR = os.path.join(MAIN_DIR, "models/")
 
-    matching_models = [i for i in glob.glob(os.path.join(ALL_MODELS_DIR, "*"+ARGS.name, "model_*.tf"))]
+    matching_models = [i for i in glob.glob(os.path.join(ALL_MODELS_DIR, ARGS.name+"*", "model_*.tf"))]
     if len(matching_models) > 1:
         print("Multiple models match 'name' argument:")
         print(" ", matching_models)

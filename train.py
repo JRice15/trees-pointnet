@@ -80,7 +80,7 @@ pprint(vars(ARGS))
 
 # create model output dir
 now = datetime.datetime.now()
-modelname = now.strftime("%y%m%d-%H%M%S-") + ARGS.name
+modelname = ARGS.name + now.strftime("-%y%m%d-%H%M%S")
 MODEL_DIR = os.path.join(MAIN_DIR, "models/"+modelname)
 os.makedirs(MODEL_DIR, exist_ok=False)
 MODEL_PATH = os.path.join(MODEL_DIR, "model_" + ARGS.name + ".tf")
