@@ -12,15 +12,7 @@ from pprint import pprint
 
 import h5py
 import numpy as np
-import tensorflow as tf
-from tensorflow import keras
-from tensorflow.keras import Model
-from tensorflow.keras import backend as K
-from tensorflow.keras import layers
-from tensorflow.keras.optimizers import Adam
 
-print("TF version:", tf.__version__)
-print("Keras version:", keras.__version__)
 
 """ define global ARGS object """
 
@@ -33,6 +25,20 @@ MAIN_DIR = os.path.dirname(os.path.dirname(__file__))
 DATA_DIR = os.path.join(MAIN_DIR, "data")
 os.makedirs(os.path.join(MAIN_DIR, "models"), exist_ok=True)
 
-np.random.seed(9999)
-tf.random.set_seed(9999)
-tf.compat.v1.set_random_seed(9999)
+
+try:
+    import tensorflow as tf
+    from tensorflow import keras
+    from tensorflow.keras import Model
+    from tensorflow.keras import backend as K
+    from tensorflow.keras import layers
+    from tensorflow.keras.optimizers import Adam
+
+    print("TF version:", tf.__version__)
+    print("Keras version:", keras.__version__)
+
+    np.random.seed(9999)
+    tf.random.set_seed(9999)
+    tf.compat.v1.set_random_seed(9999)
+except ModuleNotFoundError:
+    pass

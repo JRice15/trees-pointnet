@@ -55,7 +55,7 @@ parser.add_argument("--npoints",type=int,default=300,help="number of points to r
 parser.add_argument("--dropout",type=float,default=0.3,help="dropout rate")
 
 # loss parameters
-parser.add_argument("--mmd-sigma",type=float,default=0.05,
+parser.add_argument("--mmd-sigma",type=float,default=0.02,
         help="max-mean-discrepancy mode: sigma on kernel")
 parser.add_argument("--mmd-kernel",default="gaussian",
         help="max-mean-discrepancy mode: type of kernel")
@@ -193,20 +193,20 @@ else:
 
     for epoch in range(ARGS.epochs):
         print("Epoch {}".format(epoch))
-        start_time = time.time()
+        start_time = time.perf_counter()
 
         step_time = 0
         batch_time = 0
-        step_end_time = time.time()
+        step_end_time = start_time
         # Iterate over the batches of the dataset.
         for step, (x_batch_train, y_batch_train) in enumerate(train_gen):
-            step_start_time = time.time()
+            step_start_time = time.perf_counter()
             batch_time += step_start_time - step_end_time
 
             loss_values = train_step(x_batch_train, y_batch_train)
             # loss_values = model.train_on_batch(x_batch_train, y_batch_train)
 
-            step_end_time = time.time()
+            step_end_time = time.perf_counter()
             step_time += step_end_time - step_start_time
             # Log every n batches.
             if step % LOG_FREQ == 0:
@@ -229,7 +229,7 @@ else:
         for c in callback_list:
             c.on_epoch_end(epoch, logs={"val_loss": np.mean(val_loss)})
 
-        print("  Time taken: %.2fs" % (time.time() - start_time))
+        print("  Time taken: %.2fs" % (time.perf_counter() - start_time))
 
 train_gen.close_file()
 val_gen.close_file()

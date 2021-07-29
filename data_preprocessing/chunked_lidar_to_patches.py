@@ -19,11 +19,13 @@ if not laspy.__version__.startswith("2"):
 
 ORIG_ROWS = 44
 ORIG_COLS = 49
+# may differ from above because of subdivision of grid
 ROWS = None
 COLS = None
+# length/width of a grid square
 GRID_SIZE = None
 
-def load_train_gt(ARGS):
+def load_train_gt():
     """
     Load GT
     """
@@ -53,7 +55,7 @@ def load_train_gt(ARGS):
     return gt
 
 
-def load_test_gt(ARGS):
+def load_test_gt():
     """
     Load Test GT (Grid Squares Handpicked by Milo)
     """
@@ -74,14 +76,14 @@ def load_test_gt(ARGS):
     return test_gt
 
 
-def load_grid(ARGS):
+def load_grid(subdivide):
     """ 
     Load Grid
     """
     grid = gpd.read_file("../data/grid.gpkg")
     grid.crs = "EPSG:26911"
 
-    # the grid is perfectly aligned with the CRS, so the polygon bounds give us the 
+    # the grid is perfectly aligned with the CRS, so the polygon bounds give us the
     # edges of each grid square
     grid_bounds = grid["geometry"].bounds.to_numpy()
     # find larger valued x and y side of each grid square
@@ -99,8 +101,8 @@ def load_grid(ARGS):
     grid_y = np.insert(grid_y, 0, grid_lowerbound_y)
 
     # subdividing
-    grid_x = np.unique(np.linspace(grid_x[1:], grid_x[:-1], num=ARGS.subdivide+1))
-    grid_y = np.unique(np.linspace(grid_y[1:], grid_y[:-1], num=ARGS.subdivide+1))
+    grid_x = np.unique(np.linspace(grid_x[1:], grid_x[:-1], num=subdivide+1))
+    grid_y = np.unique(np.linspace(grid_y[1:], grid_y[:-1], num=subdivide+1))
 
     # make sure the differences between all grid squares are the same
     global GRID_SIZE
@@ -138,8 +140,8 @@ def seperate_pts_by_grid(pts, grid_x, grid_y):
     seperated = [[None] * COLS for i in range(ROWS)]
     xlocs = np.searchsorted(grid_x, pts[:,0])
     ylocs = np.searchsorted(grid_y, pts[:,1])
-    # pts outside grid are excluded. searchsorted returns first index where value could be inserted for sorted order
-    # y==0, y==ROWS, x==0, x=COLS means that point falls outside the grid.
+    # searchsorted returns first index where value could be inserted for sorted order.
+    # y==0, y==ROWS, x==0, or x=COLS will result in that point falling outside the grid.
     for y in range(1, ROWS):
         for x in range(1, COLS):
             these = pts[(xlocs == x) & (ylocs == y)]
@@ -181,7 +183,6 @@ def reproject(xs, ys):
 
 
 def main():
-
     parser = argparse.ArgumentParser()
     parser.add_argument("--file",required=True,help="input laz/las file")
     parser.add_argument("--subdivide",type=int,default=1)
@@ -192,9 +193,9 @@ def main():
     inspired by https://stackoverflow.com/questions/30376581/save-numpy-array-in-append-mode
     """
 
-    gt = load_train_gt(ARGS)
-    test_gt = load_test_gt(ARGS)
-    grid_x, grid_y = load_grid(ARGS)
+    gt = load_train_gt()
+    test_gt = load_test_gt()
+    grid_x, grid_y = load_grid(ARGS.subdivide)
 
     train_fp = tables.open_file("../data/train_patches.h5", "w")
     test_fp = tables.open_file("../data/test_patches.h5", "w")
@@ -265,7 +266,7 @@ def main():
 
             # Note to future: never use pts["X"], only pts["x"]. the capitalized version scales the numbers to 
             # remove the decimal bc that's how laspy stores the underlying data
-            t1 = time.time()
+            t1 = time.perf_counter()
             xs, ys = reproject(pts["x"], pts["y"])
             zs = pts["HeightAboveGround"]
             if z_min is None:
@@ -275,16 +276,16 @@ def main():
                 z_max = zs.max()
                 print("z min, max:", zs.min(), zs.max())
             pts = np.stack([xs, ys, zs], axis=1)
-            print("  reprojection:", time.time() - t1, "sec")
+            print("  reprojection:", time.perf_counter() - t1, "sec")
 
-            t1 = time.time()
+            t1 = time.perf_counter()
             sep_pts = seperate_pts_by_grid(pts, grid_x, grid_y)
-            print("  seperation:", time.time() - t1, "sec")
+            print("  seperation:", time.perf_counter() - t1, "sec")
 
-            t1 = time.time()
+            t1 = time.perf_counter()
             train_lidar_patcher(sep_pts, z_min, z_max)
             test_lidar_patcher(sep_pts, z_min, z_max)
-            print("  add to patches:", time.time() - t1, "sec")
+            print("  add to patches:", time.perf_counter() - t1, "sec")
 
             print(count, "points complete")
 

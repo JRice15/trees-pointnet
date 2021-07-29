@@ -153,6 +153,10 @@ def main():
             f.write("gt {}:\n".format(i))
             f.write(str(y[i])+"\n")
 
+    patch_ids = test_gen.ids
+    assert len(pred) == len(patch_ids)
+    np.savez(os.path.join(EVAL_DIR, "full_predictions.npz"), pred=pred, patch_ids=patch_ids)
+
     """
     Evaluate Metrics
     """
@@ -202,24 +206,27 @@ def main():
         for i in range(0, 10*5, 5):
             x, y, patchname = test_gen.get_patch(i)
             ylocs = y[y[...,2] == 1][...,:2]
-            raster_plot(ylocs, GT_VIS_DIR+"/{}_gt".format(patchname))
+            raster_plot(ylocs, GT_VIS_DIR+"/{}_gt".format(patchname), gaussian_sigma=ARGS.mmd_sigma)
 
             if ARGS.mode in ["mmd", "pwtt"]:
                 gt_ntrees = len(ylocs)
 
                 x_weights = x[...,-1]
                 x_locs = x[...,:2]
-                raster_plot(x_locs, weights=x_weights, scale=True, clip=1, filename=GT_VIS_DIR+"/{}_lidar".format(patchname))
+                raster_plot(x_locs, gaussian_sigma=ARGS.mmd_sigma, weights=x_weights, sqrt_scale=True, clip=1, 
+                    filename=GT_VIS_DIR+"/{}_lidar".format(patchname))
 
                 pred = model.predict(np.expand_dims(x, 0))[0]
                 pred_locs = pred[...,:2]
                 pred_weights = pred[...,2]
-                raster_plot(pred_locs, weights=pred_weights, filename=GT_VIS_DIR+"/{}_pred".format(patchname))
+                raster_plot(pred_locs, gaussian_sigma=ARGS.mmd_sigma, weights=pred_weights, 
+                    filename=GT_VIS_DIR+"/{}_pred".format(patchname))
 
                 sorted_preds = pred[np.argsort(pred_weights)][::-1]
                 topk_locs = sorted_preds[...,:2][:gt_ntrees]
                 topk_weights = sorted_preds[...,2][:gt_ntrees]
-                raster_plot(topk_locs, weights=topk_weights, filename=GT_VIS_DIR+"/{}_pred_topk".format(patchname))
+                raster_plot(topk_locs, gaussian_sigma=ARGS.mmd_sigma, weights=topk_weights, 
+                    filename=GT_VIS_DIR+"/{}_pred_topk".format(patchname))
 
 
 if __name__ == "__main__":

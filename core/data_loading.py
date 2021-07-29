@@ -15,10 +15,11 @@ class LidarPatchGen(keras.utils.Sequence):
     loads data from a patches h5 file.
     The file should have this structure:
 
+    / [attributes: gridrows, gridcols, gridsize, grid_min_x, grid_min_y]
     /gt: group [attributes: min_trees, max_trees]
     /lidar: group [attributes: min_points, max_points]
-    /gt/patchN: dataset N, shape (numtrees, 2)
-    /lidar/patchN: dataset N, shape (numpts, 3)
+    /gt/patchX_Y: dataset, patch from grid column X row Y, shape (numtrees, 2)
+    /lidar/patchX_Y: dataset, patch from grid column X row Y, shape (numpts, 3)
     """
 
     def __init__(self, filename, name=None, skip_freq=None, keep_freq=None, batchsize=None):
@@ -52,6 +53,9 @@ class LidarPatchGen(keras.utils.Sequence):
         self.min_points = self.file["lidar"].attrs["min_points"]
         self.max_trees = self.file["gt"].attrs["max_trees"]
         self.min_trees = self.file["gt"].attrs["min_trees"]
+        self.gridsize = self.file.attrs["gridsize"]
+        self.grid_min_x = self.file.attrs["grid_min_x"]
+        self.grid_min_y = self.file.attrs["grid_min_y"]
         self.nattributes = self.file["lidar"][list(self.file["lidar"].keys())[0]].shape[-1]
         self.npoints = ARGS.npoints
 
@@ -91,9 +95,10 @@ class LidarPatchGen(keras.utils.Sequence):
         """
         __getitem__ for nonragged outputs
         """
-        t1 = time.time()
+        t1 = time.perf_counter()
         idx = idx * self.batch_size
         end_idx = idx + self.batch_size
+        self._y_batch.fill(0)
         for i,patch in enumerate(self.ids[idx:end_idx]):
             # select npoints even spaced points randomly from batch
             x_node = self.file['lidar/'+patch]
@@ -107,7 +112,6 @@ class LidarPatchGen(keras.utils.Sequence):
             top_offset = leftover - rand_offset
             self._x_batch[i] = self.file['lidar/'+patch][rand_offset:num_x_pts-top_offset:step]
             # select all gt y points, or just y count
-            self._y_batch.fill(0)
             if self.y_counts_only:
                 self._y_batch[i] = self.file['gt/'+patch].shape[0]
             else:
@@ -117,14 +121,14 @@ class LidarPatchGen(keras.utils.Sequence):
                 self._y_batch[i,:ydata.shape[0],:2] = ydata
         x = tf.constant(self._x_batch, dtype=tf.float32)
         y = tf.constant(self._y_batch, dtype=tf.float32)
-        self.batch_time += time.time() - t1
+        self.batch_time += time.perf_counter() - t1
         return x, y
 
     def _ragged_getitem(self, idx):
         """
         __getitem__ for ragged outputs
         """
-        t1 = time.time()
+        t1 = time.perf_counter()
         idx = idx * self.batch_size
         end_idx = idx + self.batch_size
         x = []
@@ -137,7 +141,7 @@ class LidarPatchGen(keras.utils.Sequence):
                 y.append(self.file['gt/'+i][:])
         x = tf.ragged.constant(x, ragged_rank=1, inner_shape=(self.nattributes,), dtype=tf.float32)
         y = tf.constant(y, dtype=tf.float32)
-        self.batch_time += time.time() - t1
+        self.batch_time += time.perf_counter() - t1
         return x, y
 
     def load_all(self):
@@ -145,7 +149,7 @@ class LidarPatchGen(keras.utils.Sequence):
         load all examples into one big array. should be used for the validation
         patch generator, because keras doesn't accept a Sequence for val data
         """
-        self.init_rng()
+        self.sorted()
         x_batches = []
         y_batches = []
         for i in range(len(self)):

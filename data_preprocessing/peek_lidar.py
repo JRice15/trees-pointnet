@@ -23,10 +23,8 @@ with h5py.File("../data/train_patches.h5", "r") as f:
     ROWS = f.attrs["gridrows"]
     COLS = f.attrs["gridcols"]
 
-class ARGS:
-    subdivide = int((ROWS - 1) / 44)
 
-grid_x, grid_y = load_grid(ARGS)
+grid_x, grid_y = load_grid(int((ROWS - 1) / 44))
 
 
 fig, axlist = plt.subplots(2,2)
@@ -100,11 +98,11 @@ with h5py.File("../data/test_patches.h5", "r") as f:
         x = f["lidar/"+patchname][:]
         y = f["gt/"+patchname][:]
         
-        raster_plot(y, filename="output/example_patches/{}_gt".format(patchname))
+        raster_plot(y, filename="output/example_patches/{}_gt".format(patchname), gaussian_sigma=0.05)
 
         xlocs = x[...,:2]
         xweights = x[...,2]
-        raster_plot(xlocs, weights=xweights, scale=True,
+        raster_plot(xlocs, weights=xweights, sqrt_scale=True, gaussian_sigma=0.05, 
             filename="output/example_patches/{}_lidar_full.png".format(patchname))
 
         step = len(x) // 3000
@@ -114,12 +112,13 @@ with h5py.File("../data/test_patches.h5", "r") as f:
             assert len(x_sampled) == 3000
             xlocs = x_sampled[...,:2]
             xweights = x_sampled[...,2]
-            raster_plot(xlocs, weights=xweights, scale=True,
+            raster_plot(xlocs, weights=xweights, sqrt_scale=True, gaussian_sigma=0.05, 
                 filename="output/example_patches/{}_lidar_sampled3k.png".format(patchname))
 
 
 with h5py.File("../data/train_patches.h5", "r") as f:
     assert len(f["lidar"].keys()) == len(f["gt"].keys())
+    print("First 10 Lidar, GT patches:")
     print(list(f["lidar"].keys())[:10])
     print(list(f["gt"].keys())[:10])
 
