@@ -245,7 +245,7 @@ def reproject(xs, ys):
 def main():
     very_start_time = time.perf_counter()
     parser = argparse.ArgumentParser()
-    parser.add_argument("--file",required=True,help="input laz/las file")
+    parser.add_argument("--lasfile",required=True,help="input las file")
     parser.add_argument("--naipfile",required=True,help="input naip tif file")
     parser.add_argument("--subdivide",type=int,default=1,help="number of times to split each grid square")
     ARGS = parser.parse_args()
@@ -271,17 +271,17 @@ def main():
     test_fp.create_group("/", "ndvi")
 
     # add attributes
-    train_fp.get_node("/")._v_attrs["gridrows"] = ROWS
-    train_fp.get_node("/")._v_attrs["gridcols"] = COLS
-    train_fp.get_node("/")._v_attrs["gridsize"] = GRID_SIZE
-    train_fp.get_node("/")._v_attrs["grid_min_x"] = grid_x.min()
-    train_fp.get_node("/")._v_attrs["grid_min_y"] = grid_y.min()
+    for fp in (train_fp, test_fp):
+        fp.get_node("/")._v_attrs["lasfile"] = ARGS.lasfile
+        fp.get_node("/")._v_attrs["naipfile"] = ARGS.naipfile
+        fp.get_node("/")._v_attrs["gridrows"] = ROWS
+        fp.get_node("/")._v_attrs["gridrows"] = ROWS
+        fp.get_node("/")._v_attrs["gridrows"] = ROWS
+        fp.get_node("/")._v_attrs["gridcols"] = COLS
+        fp.get_node("/")._v_attrs["gridsize"] = GRID_SIZE
+        fp.get_node("/")._v_attrs["grid_min_x"] = grid_x.min()
+        fp.get_node("/")._v_attrs["grid_min_y"] = grid_y.min()
 
-    test_fp.get_node("/")._v_attrs["gridrows"] = ROWS
-    test_fp.get_node("/")._v_attrs["gridcols"] = COLS
-    test_fp.get_node("/")._v_attrs["gridsize"] = GRID_SIZE
-    test_fp.get_node("/")._v_attrs["grid_min_x"] = grid_x.min()
-    test_fp.get_node("/")._v_attrs["grid_min_y"] = grid_y.min()
 
     # seperate test gt
     sep_test_gt = seperate_pts_by_grid(test_gt, grid_x, grid_y)
@@ -324,7 +324,7 @@ def main():
     chunk_size = 1_000_000
     count = 0
     z_max = None
-    with laspy.open(ARGS.file, "r") as reader:
+    with laspy.open(ARGS.lasfile, "r") as reader:
         while True:
             pts = reader.read_points(chunk_size)
             if pts is None:
