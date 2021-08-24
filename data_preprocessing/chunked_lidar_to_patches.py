@@ -131,7 +131,7 @@ def load_grid(subdivide):
     return grid_x, grid_y
 
 
-def load_naip(grid_x_y=None):
+def load_naip(naipfile, grid_x_y=None):
     with h5py.File("../data/test_patches.h5", "r") as f:
         COLS = f.attrs["gridcols"]
         ROWS = f.attrs["gridrows"]
@@ -144,10 +144,8 @@ def load_naip(grid_x_y=None):
     else:
         grid_x, grid_y = grid_x_y
 
-    # this array is indexed from the top left corner if looking at it as an image (ie in imshow)
-    # so y indexes are inverted frm our grid
-    # im = tifffile.imread("../../SaMo Trees Data/SaMo_NAIP_60cmm/SaMo_NAIP_60cm.tif")
-    raster = rasterio.open("../../SaMo Trees Data/SaMo_NAIP_60cmm/SaMo_NAIP_60cm.tif")
+    # raster = rasterio.open("../../SaMo Trees Data/SaMo_NAIP_60cmm/SaMo_NAIP_60cm.tif")
+    raster = rasterio.open(naipfile)
     NAIP_X_MIN, NAIP_Y_MIN, NAIP_X_MAX, NAIP_Y_MAX = raster.bounds
     assert str(raster.crs).lower() == "epsg:26911"
     im = raster.read()
@@ -248,6 +246,7 @@ def main():
     very_start_time = time.perf_counter()
     parser = argparse.ArgumentParser()
     parser.add_argument("--file",required=True,help="input laz/las file")
+    parser.add_argument("--naipfile",required=True,help="input naip tif file")
     parser.add_argument("--subdivide",type=int,default=1,help="number of times to split each grid square")
     ARGS = parser.parse_args()
 
@@ -316,7 +315,7 @@ def main():
     test_gt_patcher = make_patcher(test_fp, "gt", grid_x, grid_y, inds=test_patch_inds)
 
     # get NAIP
-    naip_patches, naip_raster = load_naip(grid_x_y=(grid_x, grid_y))
+    naip_patches, naip_raster = load_naip(ARGS.naipfile, grid_x_y=(grid_x, grid_y))
 
     # add gt to patches
     train_gt_patcher(sep_train_gt)
