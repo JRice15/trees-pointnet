@@ -59,9 +59,6 @@ plt.close()
 with tables.open_file("../data/train_patches.h5", "r") as train_fp, \
         tables.open_file("../data/test_patches.h5", "r") as test_fp:
 
-    print(train_fp)
-    print(test_fp)
-
     train_attrs = train_fp.get_node("/lidar")._v_attrs
     test_attrs = test_fp.get_node("/lidar")._v_attrs
     for i in train_attrs._f_list():

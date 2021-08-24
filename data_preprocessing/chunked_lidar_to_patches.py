@@ -322,7 +322,7 @@ def main():
     train_gt_patcher(sep_train_gt)
     test_gt_patcher(filtered_sep_test_gt)
 
-    chunk_size = 10_000_000
+    chunk_size = 1_000_000
     count = 0
     z_max = None
     with laspy.open(ARGS.file, "r") as reader:

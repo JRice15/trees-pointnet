@@ -53,6 +53,7 @@ parser.add_argument("--reducelr-patience",type=int,default=20,help="number of ep
 parser.add_argument("--npoints",type=int,default=300,help="number of points to run per patch. In ragged or non-ragged, "
         "patches with fewer points will be skipped. Also in non-ragged, patches with more points with be truncated to npoints")
 parser.add_argument("--dropout",type=float,default=0.3,help="dropout rate")
+parser.add_argument("--ndvi",action="store_true",help="whether to use pointwise NDVi channel")
 
 # loss parameters
 parser.add_argument("--mmd-sigma",type=float,default=0.02,
@@ -92,7 +93,7 @@ with open(os.path.join(MODEL_DIR, "params.json"), "w") as f:
 load data
 """
 
-train_gen, val_gen = data_loading.get_train_val_gens(val_split=0.1, val_as_gen=ARGS.ragged)
+train_gen, val_gen = data_loading.get_train_val_gens(val_split=0.1)
 train_gen.summary()
 val_gen.summary()
 inpt_shape = train_gen.get_batch_shape()[0][1:]

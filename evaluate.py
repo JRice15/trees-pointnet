@@ -82,11 +82,9 @@ def load_model(model_path, ARGS):
 
     model = keras.models.load_model(model_path, custom_objects=custom_objs)
 
-    metrics = None
     # additional metrics not used in training
     if ARGS.mode == "count":
-        metrics = [
-            "mean_squared_error",
+        metrics += [
             "mean_absolute_error",
             "RootMeanSquaredError",
             "mean_absolute_percentage_error",
