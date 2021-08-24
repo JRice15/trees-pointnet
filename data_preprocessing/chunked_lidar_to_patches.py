@@ -9,6 +9,7 @@ import laspy
 import numpy as np
 import pyproj
 import shapely
+import rasterio
 import tables
 
 
@@ -27,7 +28,7 @@ GRID_SIZE = None
 
 def load_train_gt():
     """
-    Load GT
+    Load ground truth tree locations
     """
 
     gt = gpd.read_file("../data/SaMo_trees.csv")
@@ -57,7 +58,7 @@ def load_train_gt():
 
 def load_test_gt():
     """
-    Load Test GT (Grid Squares Handpicked by Milo)
+    Load Test GT (test grid squares handpicked by Milo)
     """
 
     test_gt = gpd.read_file("../data/Patches/Patches.shp")
@@ -122,13 +123,63 @@ def load_grid(subdivide):
     print("min:", grid_y.min(axis=0), "max:", grid_y.max(axis=0))
 
     global ROWS, COLS
-    ROWS = len(grid_x)
-    COLS = len(grid_y)
+    COLS = len(grid_x)
+    ROWS = len(grid_y)
 
     print(ROWS, "rows,", COLS, "cols")
 
     return grid_x, grid_y
 
+
+def load_naip(grid_x_y=None):
+    with h5py.File("../data/test_patches.h5", "r") as f:
+        COLS = f.attrs["gridcols"]
+        ROWS = f.attrs["gridrows"]
+        GRIDSIZE = f.attrs["gridsize"]
+        MIN_X = f.attrs["grid_min_x"]
+        MIN_Y = f.attrs["grid_min_y"]
+
+    if grid_x_y is None:
+        grid_x, grid_y = load_grid(int((ROWS - 1) / 44))
+    else:
+        grid_x, grid_y = grid_x_y
+
+    # this array is indexed from the top left corner if looking at it as an image (ie in imshow)
+    # so y indexes are inverted frm our grid
+    # im = tifffile.imread("../../SaMo Trees Data/SaMo_NAIP_60cmm/SaMo_NAIP_60cm.tif")
+    raster = rasterio.open("../../SaMo Trees Data/SaMo_NAIP_60cmm/SaMo_NAIP_60cm.tif")
+    NAIP_X_MIN, NAIP_Y_MIN, NAIP_X_MAX, NAIP_Y_MAX = raster.bounds
+    assert str(raster.crs).lower() == "epsg:26911"
+    im = raster.read()
+    im = np.moveaxis(im, 0, -1) / 256 # channels last, float
+    print("naip shape", im.shape)
+    print("gridsize", GRIDSIZE)
+
+    y,x,z = im.shape
+
+    xpixelwidth = (NAIP_X_MAX - NAIP_X_MIN) / x
+    ypixelwidth = (NAIP_Y_MAX - NAIP_Y_MIN) / y
+    assert np.isclose(xpixelwidth, 0.6) and np.isclose(ypixelwidth, 0.6)
+    pix_per_square = GRIDSIZE / round(xpixelwidth, 1)
+    assert np.isclose(pix_per_square, 128)
+    pix_per_square = int(pix_per_square)
+
+    # create dict of patch ids to images
+    out = {}
+    for x in range(0, len(grid_x)):
+        for y in range(0, len(grid_y)):
+            y_ind, x_ind = raster.index(grid_x[x], grid_y[y])
+            patch = im[y_ind:y_ind+pix_per_square, x_ind-pix_per_square:x_ind]
+            out["patch{}_{}".format(x,y)] = patch
+
+    return out, raster
+
+
+def naip2ndvi(im):
+    nir = im[...,3]
+    red = im[...,0]
+    ndvi = (nir - red) / (nir + red)
+    return ndvi
 
 def seperate_pts_by_grid(pts, grid_x, grid_y):
     """
@@ -151,9 +202,12 @@ def seperate_pts_by_grid(pts, grid_x, grid_y):
 
 def make_patcher(fp, group, grid_x, grid_y, inds=None):
     """factory function to make add_to_patches func"""
-    def add_to_patches(sep_pts, zmin=None, zmax=None):
+    def add_to_patches(sep_pts, raster=None):
         """
         take the output from seperate_pts_by_grid (list of np.array|None), and add each to the corresponding patch
+        args:
+            sep_pts: nested list of points seperated by grid square (see seperate_pts_by_grid)
+            raster: optional 4 channel naip raster
         """
         nonlocal fp, group, grid_x, grid_y, inds
         atom = tables.Float32Atom()
@@ -162,11 +216,19 @@ def make_patcher(fp, group, grid_x, grid_y, inds=None):
         for (x,y) in inds:
             pt_group = sep_pts[y][x]
             if pt_group is not None:
-                # normalize points to 0,1
-                pt_group[:,0] = (pt_group[:,0] - grid_x[x] + GRID_SIZE) / GRID_SIZE
-                pt_group[:,1] = (pt_group[:,1] - grid_y[y] + GRID_SIZE) / GRID_SIZE
-                if zmin is not None:
-                    pt_group[:,2] = (pt_group[:,2] - zmin) / (zmax - zmin)
+                # # normalize x,y points to 0-1
+                # pt_group[:,0] = (pt_group[:,0] - grid_x[x] + GRID_SIZE) / GRID_SIZE
+                # pt_group[:,1] = (pt_group[:,1] - grid_y[y] + GRID_SIZE) / GRID_SIZE
+                # normalize zs
+                # if zmin is not None:
+                #     pt_group[:,2] = (pt_group[:,2] - zmin) / (zmax - zmin)
+                if raster is not None:
+                    xys = pt_group[:,:2]
+                    naip = raster.sample(xys) # returns generator
+                    # convert to float
+                    naip = np.array([i for i in naip]) / 256
+                    ndvi = naip2ndvi(naip).reshape(-1, 1)
+                    pt_group = np.concatenate([pt_group, ndvi], axis=-1)
                 try:
                     earray = fp.get_node("/"+group+"/patch{}_{}".format(x,y))
                 except tables.NoSuchNodeError:
@@ -183,9 +245,10 @@ def reproject(xs, ys):
 
 
 def main():
+    very_start_time = time.perf_counter()
     parser = argparse.ArgumentParser()
     parser.add_argument("--file",required=True,help="input laz/las file")
-    parser.add_argument("--subdivide",type=int,default=1)
+    parser.add_argument("--subdivide",type=int,default=1,help="number of times to split each grid square")
     ARGS = parser.parse_args()
 
     """
@@ -203,8 +266,10 @@ def main():
     # create train data
     train_fp.create_group("/", "gt")
     train_fp.create_group("/", "lidar")
+    train_fp.create_group("/", "ndvi")
     test_fp.create_group("/", "gt")
     test_fp.create_group("/", "lidar")
+    test_fp.create_group("/", "ndvi")
 
     # add attributes
     train_fp.get_node("/")._v_attrs["gridrows"] = ROWS
@@ -250,13 +315,16 @@ def main():
     test_lidar_patcher = make_patcher(test_fp, "lidar", grid_x, grid_y, inds=test_patch_inds)
     test_gt_patcher = make_patcher(test_fp, "gt", grid_x, grid_y, inds=test_patch_inds)
 
+    # get NAIP
+    naip_patches, naip_raster = load_naip(grid_x_y=(grid_x, grid_y))
+
     # add gt to patches
     train_gt_patcher(sep_train_gt)
     test_gt_patcher(filtered_sep_test_gt)
 
     chunk_size = 10_000_000
     count = 0
-    z_min, z_max = None, None
+    z_max = None
     with laspy.open(ARGS.file, "r") as reader:
         while True:
             pts = reader.read_points(chunk_size)
@@ -269,13 +337,13 @@ def main():
             t1 = time.perf_counter()
             xs, ys = reproject(pts["x"], pts["y"])
             zs = pts["HeightAboveGround"]
-            if z_min is None:
-                # we can't know the absolute min and max z when we only look at it in chunks.
-                # so, let's use the min/max from the first chunk as a good estimate of the whole
-                z_min = zs.min()
-                z_max = zs.max()
-                print("z min, max:", zs.min(), zs.max())
+            if z_max is None:
+                z_max = np.percentile(zs, 99.5)
+            else:
+                z_max = max(np.percentile(zs, 99.5), z_max)
             pts = np.stack([xs, ys, zs], axis=1)
+            # filter negative zs
+            pts = pts[pts[...,2] >= -1]
             print("  reprojection:", time.perf_counter() - t1, "sec")
 
             t1 = time.perf_counter()
@@ -283,8 +351,8 @@ def main():
             print("  seperation:", time.perf_counter() - t1, "sec")
 
             t1 = time.perf_counter()
-            train_lidar_patcher(sep_pts, z_min, z_max)
-            test_lidar_patcher(sep_pts, z_min, z_max)
+            train_lidar_patcher(sep_pts, naip_raster)
+            test_lidar_patcher(sep_pts, naip_raster)
             print("  add to patches:", time.perf_counter() - t1, "sec")
 
             print(count, "points complete")
@@ -292,6 +360,18 @@ def main():
             train_fp.flush()
             test_fp.flush()
 
+    """
+    add NDVI
+    """
+    print("Adding NDVI patches")
+    t1 = time.perf_counter()
+    for patchname in train_fp.get_node("/lidar")._v_children.keys():
+        ndvi = naip2ndvi(naip_patches[patchname])
+        train_fp.create_array("/ndvi", patchname, ndvi)
+    for patchname in test_fp.get_node("/lidar")._v_children.keys():
+        ndvi = naip2ndvi(naip_patches[patchname])
+        test_fp.create_array("/ndvi", patchname, ndvi)
+    print("  done: ", time.perf_counter() - t1, "sec")
     
     """
     save length attributes
@@ -305,6 +385,7 @@ def main():
     print("min, max points in train patches:", min(train_patch_lens), max(train_patch_lens))
     train_fp.get_node("/lidar")._v_attrs["min_points"] = min(train_patch_lens)
     train_fp.get_node("/lidar")._v_attrs["max_points"] = max(train_patch_lens)
+    train_fp.get_node("/lidar")._v_attrs["z_max"] = z_max
 
     print("min, max gt trees in train patches:", min(train_gt_lens), max(train_gt_lens))
     train_fp.get_node("/gt")._v_attrs["min_trees"] = min(train_gt_lens + test_gt_lens)
@@ -313,6 +394,7 @@ def main():
     print("min, max points in test patches:", min(test_patch_lens), max(test_patch_lens))
     test_fp.get_node("/lidar")._v_attrs["min_points"] = min(test_patch_lens)
     test_fp.get_node("/lidar")._v_attrs["max_points"] = max(test_patch_lens)
+    test_fp.get_node("/lidar")._v_attrs["z_max"] = z_max
 
     print("min, max gt trees in test patches:", min(test_gt_lens), max(test_gt_lens))
     test_fp.get_node("/gt")._v_attrs["min_trees"] = min(train_gt_lens + test_gt_lens)
@@ -320,6 +402,8 @@ def main():
 
     train_fp.close()
     test_fp.close()
+
+    print("Total time:", (time.perf_counter() - very_start_time)/60, "min")
 
 
 if __name__ == "__main__":

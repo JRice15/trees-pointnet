@@ -164,7 +164,7 @@ def mmd_output_flow_2(global_feature, out_channels):
     x = global_feature
 
     x = pointnet_dense(512, "outmlp_dense1")(x)
-    x = pointnet_dense(256, "outmlp_dense2")(x)
+    x = pointnet_dense(512, "outmlp_dense2")(x)
     x = pointnet_dense(128*4, "outmlp_dense3")(x)
     x = layers.Reshape((128, 4))(x)
     x = pointnet_conv(out_channels, 1, bn=False, activation=False, name="out_channels_conv")(x)

@@ -111,6 +111,9 @@ class LidarPatchGen(keras.utils.Sequence):
                 rand_offset = self.random.choice(leftover)
             top_offset = leftover - rand_offset
             self._x_batch[i] = self.file['lidar/'+patch][rand_offset:num_x_pts-top_offset:step]
+            min_xyz = np.amin(self._x_batch[i], axis=0)
+            max_xyz = np.amax(self._x_batch[i], axis=0)
+            self._x_batch[i] = (self._x_batch[i] - min_xyz) / (max_xyz - min_xyz)
             # select all gt y points, or just y count
             if self.y_counts_only:
                 self._y_batch[i] = self.file['gt/'+patch].shape[0]

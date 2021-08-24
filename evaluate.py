@@ -142,6 +142,7 @@ def main():
     print("Generating Raw Predictions")
 
     x, y = test_gen.load_all()
+    patch_ids = np.copy(test_gen.ids)
     y = np.squeeze(y.numpy())
     pred = np.squeeze(model.predict(x))
 
@@ -153,7 +154,6 @@ def main():
             f.write("gt {}:\n".format(i))
             f.write(str(y[i])+"\n")
 
-    patch_ids = test_gen.ids
     assert len(pred) == len(patch_ids)
     np.savez(os.path.join(EVAL_DIR, "full_predictions.npz"), pred=pred, patch_ids=patch_ids)
 
@@ -171,6 +171,45 @@ def main():
 
     with open(os.path.join(EVAL_DIR, "results.json"), "w") as f:
         json.dump(results, f, indent=2)
+    
+    """
+    Visualizations
+    """
+    print("Generating visualizations")
+
+    # data visualizations
+    if ARGS.mode not in ["count"]:
+        GT_VIS_DIR = os.path.join(EVAL_DIR, "visualizations")
+        os.makedirs(GT_VIS_DIR, exist_ok=True)
+        # grab random 10 examples
+
+        for i in range(0, 10*5, 5):
+            x_i = x[i]
+            y_i = y[i]
+            pred_i = pred[i]
+            patchname = patch_ids[i]
+            ylocs = y_i[y_i[...,2] == 1][...,:2]
+            raster_plot(ylocs, GT_VIS_DIR+"/{}_gt".format(patchname), gaussian_sigma=ARGS.mmd_sigma)
+
+            if ARGS.mode in ["mmd", "pwtt"]:
+                gt_ntrees = len(ylocs)
+                x_locs = x_i[...,:2]
+                x_heights = x_i[...,2]
+
+                raster_plot(x_locs, gaussian_sigma=ARGS.mmd_sigma, weights=x_heights, mode="max",
+                    filename=GT_VIS_DIR+"/{}_lidar".format(patchname))
+
+
+                pred_locs = pred_i[...,:2]
+                pred_weights = pred_i[...,2]
+                raster_plot(pred_locs, gaussian_sigma=ARGS.mmd_sigma, weights=pred_weights, 
+                    filename=GT_VIS_DIR+"/{}_pred".format(patchname), mode="sum")
+
+                sorted_preds = pred_i[np.argsort(pred_weights)][::-1]
+                topk_locs = sorted_preds[...,:2][:gt_ntrees]
+                topk_weights = sorted_preds[...,2][:gt_ntrees]
+                raster_plot(topk_locs, gaussian_sigma=ARGS.mmd_sigma, weights=topk_weights, 
+                    filename=GT_VIS_DIR+"/{}_pred_topk".format(patchname), mode="sum")
 
     """
     Mode-specific evaluations
@@ -191,42 +230,7 @@ def main():
         plt.legend()
         plt.savefig(os.path.join(EVAL_DIR, "errors_hist.png"))
         plt.close()
-    
-    """
-    Visualizations
-    """
-    print("Generating visualizations")
 
-    # data visualizations
-    if ARGS.mode not in ["count"]:
-        test_gen.sorted()
-        GT_VIS_DIR = os.path.join(EVAL_DIR, "visualizations")
-        os.makedirs(GT_VIS_DIR, exist_ok=True)
-        # grab random 10 examples
-        for i in range(0, 10*5, 5):
-            x, y, patchname = test_gen.get_patch(i)
-            ylocs = y[y[...,2] == 1][...,:2]
-            raster_plot(ylocs, GT_VIS_DIR+"/{}_gt".format(patchname), gaussian_sigma=ARGS.mmd_sigma)
-
-            if ARGS.mode in ["mmd", "pwtt"]:
-                gt_ntrees = len(ylocs)
-
-                x_weights = x[...,-1]
-                x_locs = x[...,:2]
-                raster_plot(x_locs, gaussian_sigma=ARGS.mmd_sigma, weights=x_weights, sqrt_scale=True, clip=1, 
-                    filename=GT_VIS_DIR+"/{}_lidar".format(patchname))
-
-                pred = model.predict(np.expand_dims(x, 0))[0]
-                pred_locs = pred[...,:2]
-                pred_weights = pred[...,2]
-                raster_plot(pred_locs, gaussian_sigma=ARGS.mmd_sigma, weights=pred_weights, 
-                    filename=GT_VIS_DIR+"/{}_pred".format(patchname))
-
-                sorted_preds = pred[np.argsort(pred_weights)][::-1]
-                topk_locs = sorted_preds[...,:2][:gt_ntrees]
-                topk_weights = sorted_preds[...,2][:gt_ntrees]
-                raster_plot(topk_locs, gaussian_sigma=ARGS.mmd_sigma, weights=topk_weights, 
-                    filename=GT_VIS_DIR+"/{}_pred_topk".format(patchname))
 
 
 if __name__ == "__main__":

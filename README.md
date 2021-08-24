@@ -1,5 +1,10 @@
 # Urban Trees Pointnet
 
+## Setting up
+
+Create a conda environment with tensorflow 2.4 (or 2.4-gpu), using the provided
+yml file
+
 ## How to run
 
 ### data preprocessing

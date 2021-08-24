@@ -5,9 +5,11 @@ import sys
 import geopandas as gpd
 import h5py
 import matplotlib.pyplot as plt
+import matplotlib
 import numpy as np
 import seaborn
 import tables
+import tifffile
 
 seaborn.set()
 
@@ -16,6 +18,8 @@ sys.path.append("../core")
 from viz_utils import raster_plot
 
 from chunked_lidar_to_patches import load_grid
+
+matplotlib.rc_file_defaults()
 
 os.makedirs("output/example_patches", exist_ok=True)
 
@@ -44,7 +48,7 @@ for i,fname in enumerate(("train", "test")):
                         num = 0
                     full_lens[-1].append(num)
 
-        x, y = np.meshgrid(grid_y, grid_x, indexing='xy')
+        x, y = np.meshgrid(grid_x, grid_y, indexing='xy')
         plt.pcolormesh(x, y, full_lens, shading='auto')
         plt.colorbar()
         plt.title("{} {}".format(fname, kind))
@@ -54,6 +58,9 @@ plt.close()
 
 with tables.open_file("../data/train_patches.h5", "r") as train_fp, \
         tables.open_file("../data/test_patches.h5", "r") as test_fp:
+
+    print(train_fp)
+    print(test_fp)
 
     train_attrs = train_fp.get_node("/lidar")._v_attrs
     test_attrs = test_fp.get_node("/lidar")._v_attrs
@@ -91,19 +98,24 @@ with tables.open_file("../data/train_patches.h5", "r") as train_fp, \
 
 
 with h5py.File("../data/test_patches.h5", "r") as f:
+    print("generating visualizations")
     # vizualize 10 patches
     keys = sorted(list(f["lidar"].keys()))
     for i in range(0, len(keys), len(keys)//20):
         patchname = keys[i]
         x = f["lidar/"+patchname][:]
         y = f["gt/"+patchname][:]
+        ndvi = f["ndvi/"+patchname][:]
         
-        raster_plot(y, filename="output/example_patches/{}_gt".format(patchname), gaussian_sigma=0.05)
-
         xlocs = x[...,:2]
         xweights = x[...,2]
-        raster_plot(xlocs, weights=xweights, sqrt_scale=True, gaussian_sigma=0.05, 
+        raster_plot(xlocs, weights=xweights, mode="max", gaussian_sigma=0.04, mark=y,
             filename="output/example_patches/{}_lidar_full.png".format(patchname))
+
+        xlocs = x[...,:2]
+        x_ndvi = x[...,3]
+        raster_plot(xlocs, weights=x_ndvi, mode="max", gaussian_sigma=0.04, mark=y,
+            filename="output/example_patches/{}_lidar_ndvi.png".format(patchname))
 
         step = len(x) // 3000
         if step > 0:
@@ -112,8 +124,27 @@ with h5py.File("../data/test_patches.h5", "r") as f:
             assert len(x_sampled) == 3000
             xlocs = x_sampled[...,:2]
             xweights = x_sampled[...,2]
-            raster_plot(xlocs, weights=xweights, sqrt_scale=True, gaussian_sigma=0.05, 
+            raster_plot(xlocs, weights=xweights, mode="max", gaussian_sigma=0.04, mark=y,
                 filename="output/example_patches/{}_lidar_sampled3k.png".format(patchname))
+
+        plt.imshow(ndvi)
+        plt.colorbar()
+        plt.tight_layout()
+        plt.savefig("output/example_patches/"+patchname+"_NAIP.png")
+        plt.clf()
+        plt.close()
+
+
+    xys = [f["gt/"+key][:] for key in keys]
+    xys = np.concatenate(xys, axis=0)
+    xs, ys = xys[:,0], xys[:,1]
+
+    trees = gpd.GeoDataFrame(
+        geometry=gpd.points_from_xy(xs, ys),
+        crs="EPSG:26911")
+    
+    trees.to_file("output/test_patches.shp")
+
 
 
 with h5py.File("../data/train_patches.h5", "r") as f:
@@ -123,25 +154,25 @@ with h5py.File("../data/train_patches.h5", "r") as f:
     print(list(f["gt"].keys())[:10])
 
 
-if ARGS.subdivide == 1:
-    """
-    verify correct patches are selected for test
-    """
-    with h5py.File("../data/test_patches.h5", "r") as f:
-        keys = list(f["gt"].keys())
-        keys = [re.sub(r"patch", "", i) for i in keys]
-        keys = [i.split("_") for i in keys]
-        keys = [(int(x), int(y)) for x,y in keys]
-        keys.sort()
+# if ROWS == 44:
+#     """
+#     verify correct patches are selected for test
+#     """
+#     with h5py.File("../data/test_patches.h5", "r") as f:
+#         keys = list(f["gt"].keys())
+#         keys = [re.sub(r"patch", "", i) for i in keys]
+#         keys = [i.split("_") for i in keys]
+#         keys = [(int(x), int(y)) for x,y in keys]
+#         keys.sort()
 
-    # a few of the test patches, hand indexed. These are indexed from 1, like the grid
-    expected = [
-        (25,7),
-        (29,8),
-        (32,10),
-        (21,10),
-        (25,14)
-    ]
+#     # a few of the test patches, hand indexed. These are indexed from 1, like the grid
+#     expected = [
+#         (25,7),
+#         (29,8),
+#         (32,10),
+#         (21,10),
+#         (25,14)
+#     ]
 
-    expected.sort()
-    assert all([i in keys for i in expected])
+#     expected.sort()
+#     assert all([i in keys for i in expected])
