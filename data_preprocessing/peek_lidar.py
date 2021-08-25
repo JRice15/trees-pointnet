@@ -7,18 +7,14 @@ import h5py
 import matplotlib.pyplot as plt
 import matplotlib
 import numpy as np
-import seaborn
 import tables
 
-seaborn.set()
 
 sys.path.append("../core")
 
 from viz_utils import raster_plot
 
 from chunked_lidar_to_patches import load_grid
-
-matplotlib.rc_file_defaults()
 
 os.makedirs("output/example_patches", exist_ok=True)
 
