@@ -177,7 +177,7 @@ def main():
     print("Generating visualizations")
 
     # data visualizations
-    if ARGS.mode not in ["count"]:
+    if ARGS.mode in ["mmd", "pwtt"]:
         GT_VIS_DIR = os.path.join(EVAL_DIR, "visualizations")
         os.makedirs(GT_VIS_DIR, exist_ok=True)
         # grab random 10 examples
@@ -188,28 +188,28 @@ def main():
             pred_i = pred[i]
             patchname = patch_ids[i]
             ylocs = y_i[y_i[...,2] == 1][...,:2]
-            raster_plot(ylocs, GT_VIS_DIR+"/{}_gt".format(patchname), gaussian_sigma=ARGS.mmd_sigma,
-                        mode="max")
 
-            if ARGS.mode in ["mmd", "pwtt"]:
-                gt_ntrees = len(ylocs)
-                x_locs = x_i[...,:2]
-                x_heights = x_i[...,2]
+            gt_ntrees = len(ylocs)
+            x_locs = x_i[...,:2]
+            x_heights = x_i[...,2]
 
-                raster_plot(x_locs, gaussian_sigma=ARGS.mmd_sigma, weights=x_heights, mode="max",
-                    filename=GT_VIS_DIR+"/{}_lidar".format(patchname))
+            raster_plot(x_locs, gaussian_sigma=ARGS.mmd_sigma, weights=x_heights, mode="max",
+                filename=GT_VIS_DIR+"/{}_lidar_height".format(patchname), mark=ylocs, zero_one_bounds=True)
+            if ARGS.ndvi:
+                x_ndvi = x_i[...,3]
+                raster_plot(x_locs, gaussian_sigma=ARGS.mmd_sigma, weights=x_ndvi, mode="max",
+                    filename=GT_VIS_DIR+"/{}_lidar_ndvi".format(patchname), mark=ylocs, zero_one_bounds=True)
 
+            pred_locs = pred_i[...,:2]
+            pred_weights = pred_i[...,2]
+            raster_plot(pred_locs, gaussian_sigma=ARGS.mmd_sigma, weights=pred_weights, 
+                filename=GT_VIS_DIR+"/{}_pred".format(patchname), mode="sum", mark=ylocs, zero_one_bounds=True)
 
-                pred_locs = pred_i[...,:2]
-                pred_weights = pred_i[...,2]
-                raster_plot(pred_locs, gaussian_sigma=ARGS.mmd_sigma, weights=pred_weights, 
-                    filename=GT_VIS_DIR+"/{}_pred".format(patchname), mode="sum")
-
-                sorted_preds = pred_i[np.argsort(pred_weights)][::-1]
-                topk_locs = sorted_preds[...,:2][:gt_ntrees]
-                topk_weights = sorted_preds[...,2][:gt_ntrees]
-                raster_plot(topk_locs, gaussian_sigma=ARGS.mmd_sigma, weights=topk_weights, 
-                    filename=GT_VIS_DIR+"/{}_pred_topk".format(patchname), mode="sum")
+            sorted_preds = pred_i[np.argsort(pred_weights)][::-1]
+            topk_locs = sorted_preds[...,:2][:gt_ntrees]
+            topk_weights = sorted_preds[...,2][:gt_ntrees]
+            raster_plot(topk_locs, gaussian_sigma=ARGS.mmd_sigma, weights=topk_weights, 
+                filename=GT_VIS_DIR+"/{}_pred_topk".format(patchname), mode="sum", mark=ylocs, zero_one_bounds=True)
 
     """
     Mode-specific evaluations

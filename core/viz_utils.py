@@ -19,7 +19,7 @@ def gaussian(x, center, sigma=0.02):
 
 
 def raster_plot(pts, filename, gaussian_sigma, weights=None, title=None, clip=None, 
-        sqrt_scale=False, mode="sum", mark=None):
+        sqrt_scale=False, mode="sum", mark=None, zero_one_bounds=False):
     """
     create raster plot of points, with optional weights
     args:
@@ -28,8 +28,12 @@ def raster_plot(pts, filename, gaussian_sigma, weights=None, title=None, clip=No
         mode: max, or sum. method of generating y values in raster
         mark: points to mark with a green x, of shape (n,2) where n is number of points
     """
-    x = np.linspace(pts[:,0].min(), pts[:,0].max())
-    y = np.linspace(pts[:,1].min(), pts[:,1].max())
+    if zero_one_bounds:
+        x = np.linspace(0, 1)
+        y = np.linspace(0, 1)
+    else:
+        x = np.linspace(pts[:,0].min(), pts[:,0].max())
+        y = np.linspace(pts[:,1].min(), pts[:,1].max())
     size_factor = x.max() - x.min()
     x, y = np.meshgrid(x, y)
     gridpts = np.stack([x,y], axis=-1)

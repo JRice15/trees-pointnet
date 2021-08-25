@@ -103,9 +103,8 @@ with h5py.File("../data/test_patches.h5", "r") as f:
         xlocs = x[...,:2]
         xweights = x[...,2]
         raster_plot(xlocs, weights=xweights, mode="max", gaussian_sigma=0.04, mark=y,
-            filename="output/example_patches/{}_lidar_full.png".format(patchname))
+            filename="output/example_patches/{}_lidar_height.png".format(patchname))
 
-        xlocs = x[...,:2]
         x_ndvi = x[...,3]
         raster_plot(xlocs, weights=x_ndvi, mode="max", gaussian_sigma=0.04, mark=y,
             filename="output/example_patches/{}_lidar_ndvi.png".format(patchname))
@@ -118,7 +117,7 @@ with h5py.File("../data/test_patches.h5", "r") as f:
             xlocs = x_sampled[...,:2]
             xweights = x_sampled[...,2]
             raster_plot(xlocs, weights=xweights, mode="max", gaussian_sigma=0.04, mark=y,
-                filename="output/example_patches/{}_lidar_sampled3k.png".format(patchname))
+                filename="output/example_patches/{}_lidar_height_sampled3k.png".format(patchname))
 
         plt.imshow(ndvi)
         plt.colorbar()
