@@ -10,8 +10,6 @@ import matplotlib.pyplot as plt
 import seaborn
 
 
-seaborn.set()
-
 
 def gaussian(x, center, sigma=0.02):
     const = (2 * np.pi * sigma) ** -0.5

@@ -13,11 +13,9 @@ from tensorflow.keras.optimizers import Adam
 
 import matplotlib
 import matplotlib.pyplot as plt
-import seaborn
 
 from core import ARGS, DATA_DIR
 
-seaborn.set()
 
 
 class MyModelCheckpoint(tf.keras.callbacks.ModelCheckpoint):
