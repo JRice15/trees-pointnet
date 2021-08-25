@@ -177,7 +177,7 @@ def main():
     print("Generating visualizations")
 
     # data visualizations
-    if ARGS.mode in ["mmd", "pwtt"]:
+    if ARGS.mode in ["mmd", "pwtt", "pwmmd"]:
         GT_VIS_DIR = os.path.join(EVAL_DIR, "visualizations")
         os.makedirs(GT_VIS_DIR, exist_ok=True)
         # grab random 10 examples

@@ -172,13 +172,13 @@ def mmd_output_flow_2(global_feature, out_channels):
     return x
 
 
+
 def pointnet(inpt_shape, output_channels, reg_weight=0.001):
     """
     args:
-        nattributes: number of attributes per point (x,y,z, r,g,b, etc)
         output_channels: num features per output point
     """
-
+    npoints, nattributes = inpt_shape
     inpt = layers.Input(inpt_shape, ragged=ARGS.ragged, 
                 batch_size=ARGS.batchsize if ARGS.ragged else None) # (B,N,K)
     xy_locs = inpt[...,:2]
@@ -218,20 +218,21 @@ def pointnet(inpt_shape, output_channels, reg_weight=0.001):
         output = cls_output_flow(global_feature, output_channels)
     elif ARGS.mode in ["mmd"]:
         output = mmd_output_flow_2(global_feature, output_channels)
+    elif ARGS.mode in ["pwmmd"]:
+        output = seg_output_flow(local_features, global_feature, output_channels)
     else:
         raise NotImplementedError()
     
     # optional post processing for some methods
-    if ARGS.mode in ["mmd"]:
+    if ARGS.mode in ["mmd", "pwmmd"]:
         assert output_channels == 3
         pts = output[...,:2]
         confs = output[...,-1:]
         # limit location coords to 0-1
         pts = layers.Activation("sigmoid")(pts)
-        # limit to >= 0
+        # limit confidence to >= 0
         confs = layers.Activation("softplus")(confs)
         output = layers.Concatenate(axis=-1)([pts, confs])
-
     if ARGS.mode in ["pwtt"]:
         # limit to 0 to 1
         output = customlayers.Activation("sigmoid", name="pwtt-sigmoid")(output)

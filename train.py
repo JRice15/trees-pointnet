@@ -31,6 +31,7 @@ modes_w_aliases = {
     "pwtt": ["pointwise-treetop"],
     "mmd": ["max-mean-discrepancy"],
     "count": [],
+    "pwmmd": ["pointwise-mmd"]
 }
 
 all_modes = list(modes_w_aliases.keys()) + list(itertools.chain.from_iterable(modes_w_aliases.values()))
@@ -56,7 +57,7 @@ parser.add_argument("--dropout",type=float,default=0.3,help="dropout rate")
 parser.add_argument("--ndvi",action="store_true",help="whether to use pointwise NDVi channel")
 
 # loss parameters
-parser.add_argument("--mmd-sigma",type=float,default=0.02,
+parser.add_argument("--mmd-sigma",type=float,default=0.04,
         help="max-mean-discrepancy mode: sigma on kernel")
 parser.add_argument("--mmd-kernel",default="gaussian",
         help="max-mean-discrepancy mode: type of kernel")
@@ -104,9 +105,10 @@ create model
 
 # map modes to number of output features and points
 output_channels_map = {
-    "pwtt": 1, # confidence, xys are appended
+    "pwtt": 1,  # confidence, xys are appended
     "count": 1, # count
-    "mmd": 3, # x,y,confidence
+    "mmd": 3,   # x,y,confidence
+    "pwmmd": 3, # x,y,confidence
 }
 
 model = pointnet(

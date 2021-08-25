@@ -24,7 +24,7 @@ def get_loss(ARGS):
             return nonrag_pointwise_treetop(ARGS)
     if ARGS.mode == "count":
         return keras.losses.mse, [keras.metrics.mse]
-    if ARGS.mode == "mmd":
+    if ARGS.mode in ["mmd", "pwmmd"]:
         return max_mean_discrepancy(ARGS)
 
     raise ValueError("No loss for mode '{}'".format(ARGS.mode))
