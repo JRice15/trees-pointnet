@@ -9,7 +9,6 @@ import matplotlib
 import numpy as np
 import seaborn
 import tables
-import tifffile
 
 seaborn.set()
 

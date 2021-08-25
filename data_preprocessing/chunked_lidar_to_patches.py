@@ -261,17 +261,13 @@ def main():
 
     train_fp = tables.open_file("../data/train_patches.h5", "w")
     test_fp = tables.open_file("../data/test_patches.h5", "w")
-    atom = tables.Float32Atom()
-    # create train data
-    train_fp.create_group("/", "gt")
-    train_fp.create_group("/", "lidar")
-    train_fp.create_group("/", "ndvi")
-    test_fp.create_group("/", "gt")
-    test_fp.create_group("/", "lidar")
-    test_fp.create_group("/", "ndvi")
 
-    # add attributes
+    # add groups and attributes
     for fp in (train_fp, test_fp):
+        fp.create_group("/", "gt")
+        fp.create_group("/", "lidar")
+        fp.create_group("/", "ndvi")
+
         fp.get_node("/")._v_attrs["lasfile"] = ARGS.lasfile
         fp.get_node("/")._v_attrs["naipfile"] = ARGS.naipfile
         fp.get_node("/")._v_attrs["gridrows"] = ROWS
