@@ -15,7 +15,6 @@ dependencies:
     - pytables=3.6.1
     - python=3.9.4
     - scipy=1.6.3
-    - seaborn=0.11.1
     - shapely=1.7.1
     - pip:
         - laspy==2.0.0a1

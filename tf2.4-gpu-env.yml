@@ -6,7 +6,6 @@ dependencies:
   - numpy=1.19
   - pydot
   - matplotlib
-  - seaborn
   - pip
   - pip:
     - gast==0.3.3

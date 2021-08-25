@@ -24,6 +24,8 @@ from core.models import pointnet
 from core.utils import MyModelCheckpoint, output_model
 from core.viz_utils import raster_plot
 
+matplotlib.rc_file_defaults()
+
 
 """
 parse args
@@ -141,6 +143,7 @@ def main():
     patch_ids = np.copy(test_gen.ids)
     y = np.squeeze(y.numpy())
     pred = np.squeeze(model.predict(x))
+    x = np.squeeze(x.numpy())
 
     with open(os.path.join(EVAL_DIR, "sample_predictions.txt"), "w") as f:
         f.write("First 10 predictions, ground truths:\n")
@@ -185,7 +188,8 @@ def main():
             pred_i = pred[i]
             patchname = patch_ids[i]
             ylocs = y_i[y_i[...,2] == 1][...,:2]
-            raster_plot(ylocs, GT_VIS_DIR+"/{}_gt".format(patchname), gaussian_sigma=ARGS.mmd_sigma)
+            raster_plot(ylocs, GT_VIS_DIR+"/{}_gt".format(patchname), gaussian_sigma=ARGS.mmd_sigma,
+                        mode="max")
 
             if ARGS.mode in ["mmd", "pwtt"]:
                 gt_ntrees = len(ylocs)

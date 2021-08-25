@@ -7,8 +7,8 @@ import numpy as np
 
 import matplotlib
 import matplotlib.pyplot as plt
-import seaborn
 
+matplotlib.rc_file_defaults()
 
 
 def gaussian(x, center, sigma=0.02):

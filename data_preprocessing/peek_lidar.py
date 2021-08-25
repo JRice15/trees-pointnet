@@ -9,6 +9,7 @@ import matplotlib
 import numpy as np
 import tables
 
+matplotlib.rc_file_defaults()
 
 sys.path.append("../core")
 
