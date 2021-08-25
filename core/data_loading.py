@@ -25,7 +25,7 @@ class LidarPatchGen(keras.utils.Sequence):
     /ndvi/patchX_Y: dataset, square NDVI image from grid column X row Y, shape ~(128,128)
     """
 
-    def __init__(self, filename, name=None, skip_freq=None, keep_freq=None):
+    def __init__(self, filename, name=None, skip_freq=None, keep_freq=None, batchsize=None):
         """
         args:
             skip_freq: every skip_freq patches will be skipped (designated for validation)
@@ -40,7 +40,7 @@ class LidarPatchGen(keras.utils.Sequence):
         """
         assert not (skip_freq is not None and keep_freq is not None)
         self.name = name
-        self.batch_size = ARGS.batchsize
+        self.batch_size = ARGS.batchsize if batchsize is None else batchsize
         self.use_ndvi = ARGS.ndvi
         self.filename = filename
         self.file = h5py.File(self.filename, "r")
