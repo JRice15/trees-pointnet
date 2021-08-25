@@ -143,6 +143,7 @@ def main():
     patch_ids = np.copy(test_gen.ids)
     y = np.squeeze(y.numpy())
     pred = np.squeeze(model.predict(x))
+    x = np.squeeze(x.numpy())
 
     with open(os.path.join(EVAL_DIR, "sample_predictions.txt"), "w") as f:
         f.write("First 10 predictions, ground truths:\n")
