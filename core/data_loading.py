@@ -21,8 +21,8 @@ class LidarPatchGen(keras.utils.Sequence):
     /gt/patchX_Y: dataset, patch from grid column X row Y, shape (numtrees, 2)
         channels: x, y
     /lidar/patchX_Y: dataset, patch from grid column X row Y, shape (numpts, 4)
-        channels: x, y, z (height above ground), ndvi
-    /ndvi/patchX_Y: dataset, square NDVI image from grid column X row Y, shape ~(128,128)
+        channels: x, y, height above ground, ndvi
+    /naip/patchX_Y: dataset, square NAIP image from grid column X row Y, shape ~(128,128)
     """
 
     def __init__(self, filename, name=None, skip_freq=None, keep_freq=None, batchsize=None):
@@ -61,7 +61,8 @@ class LidarPatchGen(keras.utils.Sequence):
     def init_data(self):
         self.max_points = self.file["lidar"].attrs["max_points"]
         self.min_points = self.file["lidar"].attrs["min_points"]
-        self.z_max = self.file["lidar"].attrs["z_max"]
+        # self.z_max = self.file["lidar"].attrs["z_max"]
+        self.z_max = 50 # manual z max
         self.max_trees = self.file["gt"].attrs["max_trees"]
         self.min_trees = self.file["gt"].attrs["min_trees"]
         self.gridsize = self.file.attrs["gridsize"]
@@ -99,7 +100,7 @@ class LidarPatchGen(keras.utils.Sequence):
     def __len__(self):
         return self.num_ids // self.batch_size
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx, ):
         return self._ragged_getitem(idx) if ARGS.ragged else self._nonrag_getitem(idx)
 
     def _nonrag_getitem(self, idx):
@@ -131,7 +132,7 @@ class LidarPatchGen(keras.utils.Sequence):
             min_xyz = np.append(min_xy, 0)
             max_xyz = np.append(max_xy, self.z_max)
             if self.use_ndvi:
-                # ndvi channel
+                # ndvi channel varies from -1 to 1
                 min_xyz = np.append(min_xyz, -1)
                 max_xyz = np.append(max_xyz, 1)
             self._x_batch[i] = (self._x_batch[i] - min_xyz) / (max_xyz - min_xyz)
@@ -153,6 +154,8 @@ class LidarPatchGen(keras.utils.Sequence):
     def _ragged_getitem(self, idx):
         """
         __getitem__ for ragged outputs
+        PROBABLY DOESNT WORK ANYMORE, I haven't kept the ragged code up to date
+        since it is much slower and less effective
         """
         t1 = time.perf_counter()
         idx = idx * self.batch_size
@@ -189,6 +192,8 @@ class LidarPatchGen(keras.utils.Sequence):
     def get_patch(self, *, i=None, xy=None):
         """
         get the full i'th patch, or patch{x}_{y}, from this dataset
+        returns:
+            x, y, patch_id
         """
         # set temporary sorted ids
         old_ids = self.ids
@@ -203,6 +208,12 @@ class LidarPatchGen(keras.utils.Sequence):
         self.ids = old_ids
         self.batch_size = old_batchsize
         return x[0], y[0], id
+
+    def get_naip(self, patchname):
+        """
+        get naip image. Channels: R-G-B-NIR
+        """
+        return self.file["/naip/{}".format(patchname)][:]
 
     def get_batch_shape(self):
         """

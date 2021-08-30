@@ -266,7 +266,7 @@ def main():
     for fp in (train_fp, test_fp):
         fp.create_group("/", "gt")
         fp.create_group("/", "lidar")
-        fp.create_group("/", "ndvi")
+        fp.create_group("/", "naip")
 
         fp.get_node("/")._v_attrs["lasfile"] = ARGS.lasfile
         fp.get_node("/")._v_attrs["naipfile"] = ARGS.naipfile
@@ -339,6 +339,9 @@ def main():
             pts = np.stack([xs, ys, zs], axis=1)
             # filter negative zs
             pts = pts[pts[...,2] >= -1]
+            # filter too large zs
+            pts = pts[pts[...,2] < 120]
+
             print("  reprojection:", time.perf_counter() - t1, "sec")
 
             t1 = time.perf_counter()
@@ -356,16 +359,14 @@ def main():
             test_fp.flush()
 
     """
-    add NDVI
+    add NAIP images
     """
-    print("Adding NDVI patches")
+    print("Adding NAIP patches")
     t1 = time.perf_counter()
     for patchname in train_fp.get_node("/lidar")._v_children.keys():
-        ndvi = naip2ndvi(naip_patches[patchname])
-        train_fp.create_array("/ndvi", patchname, ndvi)
+        train_fp.create_array("/naip", patchname, naip_patches[patchname])
     for patchname in test_fp.get_node("/lidar")._v_children.keys():
-        ndvi = naip2ndvi(naip_patches[patchname])
-        test_fp.create_array("/ndvi", patchname, ndvi)
+        test_fp.create_array("/naip", patchname, naip_patches[patchname])
     print("  done: ", time.perf_counter() - t1, "sec")
     
     """

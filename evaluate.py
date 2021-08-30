@@ -211,6 +211,14 @@ def main():
             raster_plot(topk_locs, gaussian_sigma=ARGS.mmd_sigma, weights=topk_weights, 
                 filename=GT_VIS_DIR+"/{}_pred_topk".format(patchname), mode="sum", mark=ylocs, zero_one_bounds=True)
 
+            naip = test_gen.get_naip(patchname)
+            plt.imshow(naip[...,:3]) # only use RGB
+            plt.colorbar()
+            plt.tight_layout()
+            plt.savefig("output/example_patches/"+patchname+"_NAIP.png")
+            plt.clf()
+            plt.close()
+
     """
     Mode-specific evaluations
     """

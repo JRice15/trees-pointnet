@@ -89,16 +89,23 @@ with tables.open_file("../data/train_patches.h5", "r") as train_fp, \
     plt.savefig("output/trees_per_patch")
     plt.close()
 
+    train_heights = [i[:,2].max() for i in train_fp.get_node("/lidar")]
+    test_heights = [i[:,2].max() for i in train_fp.get_node("/lidar")]
+    plt.hist([train_heights, test_heights], label=["train", "test"], density=True)
+    plt.legend()
+    plt.savefig("output/patch_max_heights")
+    plt.close()
+
 
 with h5py.File("../data/test_patches.h5", "r") as f:
     print("generating visualizations")
-    # vizualize 10 patches
+    # vizualize 20 patches
     keys = sorted(list(f["lidar"].keys()))
     for i in range(0, len(keys), len(keys)//20):
         patchname = keys[i]
         x = f["lidar/"+patchname][:]
         y = f["gt/"+patchname][:]
-        ndvi = f["ndvi/"+patchname][:]
+        naip = f["naip/"+patchname][:]
         
         xlocs = x[...,:2]
         xweights = x[...,2]
@@ -119,7 +126,7 @@ with h5py.File("../data/test_patches.h5", "r") as f:
             raster_plot(xlocs, weights=xweights, mode="max", gaussian_sigma=0.04, mark=y,
                 filename="output/example_patches/{}_lidar_height_sampled3k.png".format(patchname))
 
-        plt.imshow(ndvi)
+        plt.imshow(naip[...,:3])
         plt.colorbar()
         plt.tight_layout()
         plt.savefig("output/example_patches/"+patchname+"_NAIP.png")
