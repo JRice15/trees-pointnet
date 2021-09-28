@@ -47,11 +47,10 @@ def seperate_pts(gt_bounds, x, y, z=None):
     else:
         pts = np.stack((x, y, z), axis=-1)
         for left,bottom,right,top in gt_bounds:
-            out.append(
-                pts[
+            selected = pts[
                     (x >= left) & (x < right) & (y <= top) & (y > bottom) & (z > 0) & (z < 120)  
                 ]
-            )
+            out.append(selected)
     return out
         
 
@@ -132,9 +131,8 @@ def load_gt_trees(filename, gt_crs=None):
             raise ValueError("Provide a 'gt_crs' key for this region")
         gt_raw = pd.read_csv(filename)
         gt_raw.columns = [x.lower() for x in gt_raw.columns]
-        points = gpd.points_from_xy(gt_raw["longitude"], gt_raw["latitude"])
-        gt = gpd.GeoDataFrame(geometry=points, crs=gt_crs)
-
+        geom = gpd.points_from_xy(gt_raw["longitude"], gt_raw["latitude"])
+        gt = gpd.GeoDataFrame(geometry=geom, crs=gt_crs)
     else:
         raise NotImplementedError("Cannot handle file {}".format(filename))
 

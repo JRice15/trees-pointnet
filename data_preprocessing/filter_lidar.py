@@ -21,6 +21,10 @@ pipeline = []
 
 pipeline.append(ARGS.infile)
 pipeline.append({
+    "type": "reprojection",
+    "out_crs": "EPSG:26911"
+})
+pipeline.append({
     "type": "filters.hag_nn"
 })
 pipeline.append({
