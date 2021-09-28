@@ -17,6 +17,13 @@ import rasterio
 import numba
 
 
+def naip2ndvi(im):
+    nir = im[...,3]
+    red = im[...,0]
+    ndvi = (nir - red) / (nir + red)
+    return ndvi
+
+
 # @numba.njit
 def seperate_pts(gt_bounds, x, y, z=None):
     """
@@ -50,7 +57,7 @@ def seperate_pts(gt_bounds, x, y, z=None):
 
 
 def load_lidar(las_file, grid_bounds):
-    chunk_size = 1_000_000
+    chunk_size = 500_000
     count = 0
     out = None
     with laspy.open(las_file, "r") as reader:
@@ -71,7 +78,7 @@ def load_lidar(las_file, grid_bounds):
             else:
                 for i,existing_pts in enumerate(out):
                     out[i] = np.concatenate((existing_pts, xyz_sep[i]), axis=0)
-            
+
             count += len(pts)
             print(count, "points loaded")
 
@@ -79,7 +86,7 @@ def load_lidar(las_file, grid_bounds):
             if count > 0:
                 # print(out)
                 return out
-        
+
     return out
 
 
@@ -124,8 +131,9 @@ def load_gt_trees(filename, gt_crs=None):
         if gt_crs is None:
             raise ValueError("Provide a 'gt_crs' key for this region")
         gt_raw = pd.read_csv(filename)
-        gt = gpd.GeoDataFrame(
-                geometry=gpd.points_from_xy(gt_raw["longitude"], gt_raw["latitude"], crs=gt_crs))
+        gt_raw.columns = [x.lower() for x in gt_raw.columns]
+        points = gpd.points_from_xy(gt_raw["longitude"], gt_raw["latitude"])
+        gt = gpd.GeoDataFrame(geometry=points, crs=gt_crs)
 
     else:
         raise NotImplementedError("Cannot handle file {}".format(filename))
@@ -138,6 +146,26 @@ def load_gt_trees(filename, gt_crs=None):
     gt = np.stack([x, y], axis=1)
 
     return gt
+
+def load_naip(naipfile, grid_bounds):
+
+    raster = rasterio.open(naipfile)
+    assert str(raster.crs).lower() == "epsg:26911"
+    im = raster.read()
+    im = np.moveaxis(im, 0, -1) / 256 # channels last, float
+    assert im.shape[-1] == 4
+    print("naip shape", im.shape)
+    print("naip bounds", raster.bounds)
+
+    # list of NAIP patches corresponding to test grid squares
+    out = []
+    for left,bottom,right,top in grid_bounds:
+        y_min, x_min = raster.index(left, top)
+        y_max, x_max = raster.index(right, bottom)
+        patch = im[y_min:y_max, x_min:x_max]
+        out.append(patch)
+
+    return out, raster
 
 
 
@@ -156,6 +184,7 @@ def main():
     parser.add_argument("--specs",required=True,help="json file with dataset specs")
     parser.add_argument("--outname",required=True,help="name of output h5 file (to be placed within the `../data` directory)")
     parser.add_argument("--subdivide",type=int,default=2,help="number of times to divide each grid square (resulting grid squares is subidivde**2 times the original")
+    parser.add_argument("--overwrite",action="store_true")
     ARGS = parser.parse_args()
 
     with open(ARGS.specs, "r") as f:
@@ -166,9 +195,13 @@ def main():
     try:
         os.makedirs(OUTDIR)
     except FileExistsError:
-        print("This will overwrite previously created dataset info stored under {}".format(OUTDIR))
-        print("Press enter to continue, otherwise ctrl-C or D or whatever stops programs on your system", end=" ")
-        input()
+        if not ARGS.overwrite:
+            print("This will overwrite previously created dataset info stored under {}".format(OUTDIR))
+            print("Press enter to continue, otherwise ctrl-C or D or whatever stops programs on your system", end=" ")
+            input()
+
+    with open(OUTDIR.joinpath("data_sources.json"), "w") as f:
+        json.dump(data_specs, f, indent=2)
 
     with h5py.File(OUTDIR.joinpath("dataset.h5").as_posix(), "w") as hf:
         for region_name, region_spec in data_specs.items():
@@ -176,9 +209,11 @@ def main():
 
             benchmark("start")
 
+            # grid definition
             grid_bounds = load_grid_bounds(region_spec["grid"], subdivide=ARGS.subdivide)
             benchmark("grid")
 
+            # ground truth trees
             gt_crs = region_spec.get("gt_crs", None) # default to None if key doesn't exist
             gt_trees = load_gt_trees(region_spec["gt"], gt_crs=gt_crs)
             benchmark("gt")
@@ -190,14 +225,38 @@ def main():
             sep_gt_trees = [v for i,v in enumerate(sep_gt_trees) if valid_patch[i]]
             benchmark("grid filtering")
 
+            # lidar points
             sep_lidar = load_lidar(region_spec["lidar"], grid_bounds)
+            for i,lidar_patch in enumerate(sep_lidar):
+                if len(lidar_patch) < 100: # fewer than 100 points in a patch
+                    raise ValueError(
+                        "Lidar patch {} with only {} points. Grid square bounds {}".format(i, len(lidar_patch), grid_bounds[i])
+                    )
             benchmark("lidar")
 
+            # naip
+            naip_patches, naip_raster = load_naip(region_spec["naip"], grid_bounds)
+            benchmark("load naip")
+
+            # add NDVI channel to lidar
+            lidar_w_naip = []
+            for pt_group in sep_lidar:
+                xys = pt_group[:,:2]
+                naip = naip_raster.sample(xys) # returns generator
+                # convert to float
+                naip = np.array([i for i in naip]) / 256
+                ndvi = naip2ndvi(naip).reshape(-1, 1)
+                pt_group = np.concatenate([pt_group, ndvi], axis=-1)
+                lidar_w_naip.append(pt_group)
+
+            benchmark("add NDVI to lidar")
+
+            # write to hdf5
             hf.create_dataset("/grids/{}".format(region_name), data=grid_bounds)
             for i in range(len(sep_gt_trees)):
                 hf.create_dataset("/gt/{}_{}".format(region_name, i), data=sep_gt_trees[i])
-                hf.create_dataset("/lidar/{}_{}".format(region_name, i), data=sep_lidar[i])
-
+                hf.create_dataset("/lidar/{}_{}".format(region_name, i), data=lidar_w_naip[i])
+                hf.create_dataset("/naip/{}_{}".format(region_name, i), data=naip_patches[i])
 
 
 if __name__ == "__main__":
