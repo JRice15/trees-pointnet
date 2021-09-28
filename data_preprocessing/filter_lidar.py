@@ -13,11 +13,24 @@ import pdal
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--infile",required=True)
-parser.add_argument("--outfile",required=True)
+parser.add_argument("--outfile",default=None,help="optional outfile name, defaults to same directory as infile with generated suffix")
 parser.add_argument("--subsample",type=int,default=1,help="optional subsampling factor")
 ARGS = parser.parse_args()
 
+if ARGS.outfile is None:
+    if ARGS.infile[-4:] in (".laz", ".las"):
+        outfile = ARGS.infile[:-4] + "_HAG_epsg26911"
+        if ARGS.subsample > 1:
+            outfile += "_subsample{}x".format(ARGS.subsample)
+        outfile += ".laz"
+        ARGS.outfile = outfile
+    else:
+        raise ValueError("unrecognized file extension, not .las or .laz")
+
 pipeline = []
+
+print("Reading   ", ARGS.infile)
+print("Writing to", ARGS.outfile)
 
 pipeline.append(ARGS.infile)
 pipeline.append({
