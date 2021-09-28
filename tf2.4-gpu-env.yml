@@ -7,5 +7,6 @@ dependencies:
   - pydot
   - matplotlib
   - pip
+  - hyperopt
   - pip:
     - gast==0.3.3

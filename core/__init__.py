@@ -9,6 +9,7 @@ import shutil
 import time
 import json
 from pprint import pprint
+from pathlib import PurePath
 
 import h5py
 import numpy as np
@@ -21,9 +22,9 @@ ARGS = argparse.Namespace()
 
 """ set global constants """
 
-MAIN_DIR = os.path.dirname(os.path.dirname(__file__))
-DATA_DIR = os.path.join(MAIN_DIR, "data")
-os.makedirs(os.path.join(MAIN_DIR, "models"), exist_ok=True)
+MAIN_DIR = PurePath(os.path.dirname(os.path.dirname(__file__)))
+DATA_DIR = MAIN_DIR.joinpath("data")
+os.makedirs(MAIN_DIR.joinpath("models"), exist_ok=True)
 
 
 try:
@@ -42,3 +43,4 @@ try:
     tf.compat.v1.set_random_seed(9999)
 except ModuleNotFoundError:
     pass
+    # we don't always need tensorflow, so it's ok if we don't have it here

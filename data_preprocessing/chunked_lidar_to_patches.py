@@ -214,12 +214,6 @@ def make_patcher(fp, group, grid_x, grid_y, inds=None):
         for (x,y) in inds:
             pt_group = sep_pts[y][x]
             if pt_group is not None:
-                # # normalize x,y points to 0-1
-                # pt_group[:,0] = (pt_group[:,0] - grid_x[x] + GRID_SIZE) / GRID_SIZE
-                # pt_group[:,1] = (pt_group[:,1] - grid_y[y] + GRID_SIZE) / GRID_SIZE
-                # normalize zs
-                # if zmin is not None:
-                #     pt_group[:,2] = (pt_group[:,2] - zmin) / (zmax - zmin)
                 if raster is not None:
                     xys = pt_group[:,:2]
                     naip = raster.sample(xys) # returns generator

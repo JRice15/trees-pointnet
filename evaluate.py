@@ -1,3 +1,7 @@
+"""
+This file is mostly a wrapper around LidarPatchGen.evaluate_model(...)
+"""
+
 import contextlib
 import datetime
 import glob
@@ -5,6 +9,7 @@ import json
 import argparse
 import os
 from pprint import pprint
+from pathlib import PurePath
 import time
 
 import h5py
@@ -21,82 +26,10 @@ from tensorflow.keras.optimizers import Adam
 from core import DATA_DIR, MAIN_DIR, ARGS, data_loading
 from core.losses import get_loss
 from core.models import pointnet
-from core.utils import MyModelCheckpoint, output_model
+from core.tf_utils import MyModelCheckpoint, output_model, load_saved_model, generate_predictions
 from core.viz_utils import raster_plot
 
 matplotlib.rc_file_defaults()
-
-
-"""
-parse args
-"""
-
-def parse_evaluation_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--name",required=True,help="name of model to run, with possible timestamp in front")
-    parser.add_argument("--test",action="store_true",help="run minimal functionality for testing")
-    parser.parse_args(namespace=ARGS)
-
-def init_evaluation_args():
-    ALL_MODELS_DIR = os.path.join(MAIN_DIR, "models/")
-
-    matching_models = [i for i in glob.glob(os.path.join(ALL_MODELS_DIR, ARGS.name+"*", "model_*.tf"))]
-    if len(matching_models) > 1:
-        print("Multiple models match 'name' argument:")
-        print(" ", matching_models)
-        print("Defaulting to the most recent:")
-        # all the names begin with a date/time string, so sorting gives order by time
-        matching_models.sort()
-        MODEL_PATH = matching_models[-1]
-        print(" ", MODEL_PATH)
-        print("You can add the timestamp string to '--name' to specify a different model")
-    elif len(matching_models) == 0:
-        print("No matching models!")
-        exit()
-    else:
-        MODEL_PATH = matching_models[0]
-    MODEL_DIR = os.path.dirname(MODEL_PATH)
-    EVAL_DIR = os.path.join(MODEL_DIR, "evaluation")
-    os.makedirs(EVAL_DIR, exist_ok=True)
-
-    # load original params into ARGS object
-    params_file = os.path.join(MODEL_DIR, "params.json")
-    with open(params_file, "r") as f:
-        params = json.load(f)
-    params.pop("name")
-    params.pop("test")
-    for k,v in params.items():
-        setattr(ARGS, k, v)
-
-    pprint(vars(ARGS))
-
-    return MODEL_PATH, MODEL_DIR, EVAL_DIR
-
-def load_model(model_path, ARGS):
-    print("Loading model", model_path)
-    loss_fun, metrics = get_loss(ARGS)
-
-    custom_objs = {loss_fun.__name__: loss_fun}
-    if metrics is not None:
-        custom_objs.update({m.__name__:m for m in metrics})
-
-    model = keras.models.load_model(model_path, custom_objects=custom_objs)
-
-    # additional metrics not used in training
-    if ARGS.mode == "count":
-        metrics += [
-            "mean_absolute_error",
-            "RootMeanSquaredError",
-            "mean_absolute_percentage_error",
-        ]
-
-    model.compile(
-        optimizer=model.optimizer,
-        loss=model.loss,
-        metrics=metrics
-    )
-    return model
-
 
 def errors_plot(pred, y, results_dir):
     x_w = np.empty(pred.shape)
@@ -124,123 +57,62 @@ def count_errors(pred, y):
 
 
 def main():
-    MODEL_PATH, MODEL_DIR, EVAL_DIR = init_evaluation_args()
+    """
+    Parse arguments
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--name",required=True,help="name of model to run, with possible timestamp in front")
+    parser.add_argument("--test",action="store_true",help="run minimal functionality for testing")
+    parser.parse_args(namespace=ARGS)
+
+
+    MODEL_DIR = MODEL_PATH.parent
+    EVAL_DIR = MODEL_DIR.joinpath("evaluation")
+    os.makedirs(EVAL_DIR, exist_ok=True)
+
+    # load original params into ARGS object
+    params_file = MODEL_DIR.joinpath("params.json")
+    with open(params_file, "r") as f:
+        params = json.load(f)
+    params.pop("name")
+    params.pop("test")
+    for k,v in params.items():
+        setattr(ARGS, k, v)
+
+    pprint(vars(ARGS))
 
     """
-    Setup Testing
+    Evaluation
     """
-    model = load_model(MODEL_PATH, ARGS)
+
+    model = load_saved_model(MODEL_PATH.as_posix(), ARGS)
 
     test_gen = data_loading.get_test_gen()
     test_gen.summary()
 
-    """
-    Raw predictions
-    """
-    print("Generating Raw Predictions")
+    test_gen.evaluate_model(model, EVAL_DIR)
 
-    x, y = test_gen.load_all()
-    patch_ids = np.copy(test_gen.ids)
-    y = np.squeeze(y.numpy())
-    pred = np.squeeze(model.predict(x))
-    x = np.squeeze(x.numpy())
+    # """
+    # Mode-specific evaluations
+    # """
+    # print("Evaluating errors")
 
-    with open(os.path.join(EVAL_DIR, "sample_predictions.txt"), "w") as f:
-        f.write("First 10 predictions, ground truths:\n")
-        for i in range(min(10, len(pred))):
-            f.write("pred {}:\n".format(i))
-            f.write(str(pred[i])+"\n")
-            f.write("gt {}:\n".format(i))
-            f.write(str(y[i])+"\n")
+    # # error between target and prediction scalar labels
+    # if ARGS.mode in ["count"]:
+    #     errors_plot(pred, y, EVAL_DIR)
 
-    assert len(pred) == len(patch_ids)
-    np.savez(os.path.join(EVAL_DIR, "full_predictions.npz"), pred=pred, patch_ids=patch_ids)
+    # # error histogram
+    # if ARGS.mode in ["count", "pwtt"]:
+    #     errors = count_errors(pred, y)
 
-    """
-    Evaluate Metrics
-    """
-    print("Evaluating metrics")
-
-    metric_vals = model.evaluate(test_gen)
-    results = {model.metrics_names[i]:v for i,v in enumerate(metric_vals)}
-
-    print() # newline
-    for k,v in results.items():
-        print(k+":", v)
-
-    with open(os.path.join(EVAL_DIR, "results.json"), "w") as f:
-        json.dump(results, f, indent=2)
-    
-    """
-    Visualizations
-    """
-    print("Generating visualizations")
-
-    # data visualizations
-    if ARGS.mode in ["mmd", "pwtt", "pwmmd"]:
-        GT_VIS_DIR = os.path.join(EVAL_DIR, "visualizations")
-        os.makedirs(GT_VIS_DIR, exist_ok=True)
-        # grab random 10 examples
-
-        for i in range(0, 10*5, 5):
-            x_i = x[i]
-            y_i = y[i]
-            pred_i = pred[i]
-            patchname = patch_ids[i]
-            ylocs = y_i[y_i[...,2] == 1][...,:2]
-
-            gt_ntrees = len(ylocs)
-            x_locs = x_i[...,:2]
-            x_heights = x_i[...,2]
-
-            raster_plot(x_locs, gaussian_sigma=ARGS.mmd_sigma, weights=x_heights, mode="max",
-                filename=GT_VIS_DIR+"/{}_lidar_height".format(patchname), mark=ylocs, zero_one_bounds=True)
-            if ARGS.ndvi:
-                x_ndvi = x_i[...,3]
-                raster_plot(x_locs, gaussian_sigma=ARGS.mmd_sigma, weights=x_ndvi, mode="max",
-                    filename=GT_VIS_DIR+"/{}_lidar_ndvi".format(patchname), mark=ylocs, zero_one_bounds=True)
-
-            pred_locs = pred_i[...,:2]
-            pred_weights = pred_i[...,2]
-            raster_plot(pred_locs, gaussian_sigma=ARGS.mmd_sigma, weights=pred_weights, 
-                filename=GT_VIS_DIR+"/{}_pred".format(patchname), mode="sum", mark=ylocs, zero_one_bounds=True)
-
-            sorted_preds = pred_i[np.argsort(pred_weights)][::-1]
-            topk_locs = sorted_preds[...,:2][:gt_ntrees]
-            topk_weights = sorted_preds[...,2][:gt_ntrees]
-            raster_plot(topk_locs, gaussian_sigma=ARGS.mmd_sigma, weights=topk_weights, 
-                filename=GT_VIS_DIR+"/{}_pred_topk".format(patchname), mode="sum", mark=ylocs, zero_one_bounds=True)
-
-            naip = test_gen.get_naip(patchname)
-            plt.imshow(naip[...,:3]) # only use RGB
-            plt.colorbar()
-            plt.tight_layout()
-            plt.savefig("output/example_patches/"+patchname+"_NAIP.png")
-            plt.clf()
-            plt.close()
-
-    """
-    Mode-specific evaluations
-    """
-    print("Evaluating errors")
-
-    # error between target and prediction scalar labels
-    if ARGS.mode in ["count"]:
-        errors_plot(pred, y, EVAL_DIR)
-
-    # error histogram
-    if ARGS.mode in ["count", "pwtt"]:
-        errors = count_errors(pred, y)
-
-        plt.hist(errors)
-        plt.title("Errors (pred - gt)")
-        plt.vlines(np.mean(errors), 0, plt.ylim()[1], label="mean", colors="black")
-        plt.legend()
-        plt.savefig(os.path.join(EVAL_DIR, "errors_hist.png"))
-        plt.close()
+    #     plt.hist(errors)
+    #     plt.title("Errors (pred - gt)")
+    #     plt.vlines(np.mean(errors), 0, plt.ylim()[1], label="mean", colors="black")
+    #     plt.legend()
+    #     plt.savefig(os.path.join(EVAL_DIR, "errors_hist.png"))
+    #     plt.close()
 
 
 
 if __name__ == "__main__":
-    parse_evaluation_args()
     main()

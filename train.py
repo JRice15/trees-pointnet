@@ -15,36 +15,37 @@ from tensorflow import keras
 from tensorflow.keras import Model
 from tensorflow.keras import backend as K
 from tensorflow.keras import callbacks, layers
-from tensorflow.keras.optimizers import Adam
+from tensorflow.keras import optimizers
 import matplotlib.pyplot as plt
 
 from core import DATA_DIR, MAIN_DIR, ARGS, data_loading
 from core.losses import get_loss
 from core.models import pointnet
-from core.utils import MyModelCheckpoint, output_model
+from core.tf_utils import MyModelCheckpoint, output_model
 
 """
 parse args
 """
 
-modes_w_aliases = {
-    "pwtt": ["pointwise-treetop"],
-    "mmd": ["max-mean-discrepancy"],
-    "count": [],
-    "pwmmd": ["pointwise-mmd"]
+optimizer_options = {
+    "adam": optimizers.Adam,
+    "adadelta": optimizers.Adadelta,
+    "nadam": optimizers.Nadam,
+    "adamax": optimizers.Adamax,
 }
 
-all_modes = list(modes_w_aliases.keys()) + list(itertools.chain.from_iterable(modes_w_aliases.values()))
+valid_modes = ["pwtt", "mmd", "count", "pwmmd"]
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--name",required=True,help="name to save this model under or load")
 parser.add_argument("--mode",required=True,help="training mode, which determines which output flow and loss target to use",
-    choices=all_modes)
+    choices=valid_modes)
 parser.add_argument("--ragged",action="store_true")
 parser.add_argument("--test",action="store_true",help="run minimal batches and epochs to test functionality")
 
 # training hyperparameters
-parser.add_argument("--epochs",type=int,default=250)
+parser.add_argument("--optimizer",choices=list(optimizer_options.keys()))
+parser.add_argument("--epochs",type=int,default=500)
 parser.add_argument("--batchsize",type=int,default=16)
 parser.add_argument("--lr",type=float,default=0.001,help="initial learning rate")
 parser.add_argument("--reducelr-factor",type=float,default=0.2,help="factor to multiply lr by for reducelronplateau")
@@ -73,10 +74,6 @@ ARGS = parser.parse_args(namespace=ARGS)
 if ARGS.test:
     ARGS.epochs = 6
     ARGS.batchsize = 2
-for name,aliases in modes_w_aliases.items():
-    if ARGS.mode in aliases:
-        ARGS.mode = name
-        break
 
 pprint(vars(ARGS))
 
@@ -120,20 +117,21 @@ output_model(model, MODEL_DIR)
 
 loss, metrics = get_loss(ARGS)
 
+optim = optimizer_options[ARGS.optimizer]
 model.compile(
     loss=loss, 
     metrics=metrics,
-    optimizer=Adam(ARGS.lr)
+    optimizer=optim(ARGS.lr)
 )
 
-callback_list = [
-    callbacks.History(),
-    callbacks.ReduceLROnPlateau(factor=ARGS.reducelr_factor, patience=ARGS.reducelr_patience,
+callback_dict = {
+    "history": callbacks.History(),
+    "reducelr": callbacks.ReduceLROnPlateau(factor=ARGS.reducelr_factor, patience=ARGS.reducelr_patience,
         min_lr=1e-6, verbose=1),
-    callbacks.EarlyStopping(verbose=1, patience=int(ARGS.reducelr_patience*2.5)),
-    MyModelCheckpoint(MODEL_PATH, verbose=1, 
+    "earlystopping": callbacks.EarlyStopping(verbose=1, patience=int(ARGS.reducelr_patience*2.5)),
+    "modelcheckpoint": MyModelCheckpoint(MODEL_PATH, verbose=1, 
         epoch_per_save=(5 if not ARGS.test else 1), save_best_only=True)
-]
+}
 
 """
 train model
@@ -145,13 +143,32 @@ if not ARGS.ragged:
             x=train_gen,
             validation_data=val_gen.load_all(),
             epochs=ARGS.epochs,
-            callbacks=callback_list,
+            callbacks=list(callback_dict.values()),
             batch_size=ARGS.batchsize,
         )
     except KeyboardInterrupt:
-        H = callback_list[0]
+        # allow manual stopping by user
+        H = callback_dict["history"]
+    except Exception as e:
+        # otherwise log then throw the error
+        import traceback
+        # create signal file
+        with open(MODEL_DIR.joinpath("training_failed.txt"), "w") as f:
+            traceback.print_exc(file=f)
+        raise e
+
+    val_gen.evaluate_model(model, MODEL_DIR.joinpath())
+
 
     os.makedirs(os.path.join(MODEL_DIR, "training"))
+
+    # save validation loss
+    with open(MODEL_DIR.joinpath("training/validation_results"), "w") as f:
+        val_results = {
+            "best_val_loss": callback_dict["modelcheckpoint"].best_val_loss()
+        }
+        json.dump(val_results, f)
+    # save metric plots
     for k in H.history.keys():
         if not k.startswith("val_"):
             plt.plot(H.history[k])
