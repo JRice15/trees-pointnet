@@ -58,15 +58,11 @@ def seperate_pts(gt_bounds, x, y, z=None):
 
 
 def load_lidar(las_file, grid_bounds):
-    chunk_size = 5_00_000
+    chunk_size = 20_00_000
     count = 0
     out = None
     with laspy.open(las_file, "r") as reader:
-        while True:
-            pts = reader.read_points(chunk_size)
-            if pts is None:
-                break
-
+        for pts in reader.chunk_iterator(chunk_size):
             # Note to future: never use pts["X"], only pts["x"]. the capitalized version scales the numbers to 
             # remove the decimal bc that's how laspy stores the underlying data
             x = pts["x"]
@@ -81,7 +77,7 @@ def load_lidar(las_file, grid_bounds):
                     out[i] = np.concatenate((existing_pts, xyz_sep[i]), axis=0)
 
             count += len(pts)
-            print("    ", count, "points loaded")
+            print("    ", count, "of", reader.header.point_count, "lidar points loaded")
 
             # # TEMP
             # if count > 0:
