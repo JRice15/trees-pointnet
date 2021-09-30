@@ -95,7 +95,7 @@ def load_grid_bounds(grid_filename, subdivide):
             subdivide=2 results in 4 squares per original, while subdivide=3 results in 9
     """
     grid = gpd.read_file(grid_filename)
-    if str(grid.crs).lower() == "epsg:26911":
+    if str(grid.crs).lower() != "epsg:26911":
         print("! Warning: grid is not in epsg:26911. Transformation may warp its information")
         grid = grid.to_crs("epsg:26911")
 
