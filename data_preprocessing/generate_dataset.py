@@ -58,7 +58,7 @@ def seperate_pts(gt_bounds, x, y, z=None):
 
 
 def load_lidar(las_file, grid_bounds):
-    chunk_size = 20_00_000
+    chunk_size = 5_000_000
     count = 0
     out = None
     with laspy.open(las_file, "r") as reader:
@@ -77,7 +77,7 @@ def load_lidar(las_file, grid_bounds):
                     out[i] = np.concatenate((existing_pts, xyz_sep[i]), axis=0)
 
             count += len(pts)
-            print("    ", count, "of", reader.header.point_count, "lidar points loaded")
+            print("   {:.3f}% complete: {} of {} lidar points".format(count/reader.header.point_count*100, count, reader.header.point_count))
 
             # # TEMP
             # if count > 0:
