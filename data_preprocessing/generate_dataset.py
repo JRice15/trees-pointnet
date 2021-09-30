@@ -3,6 +3,7 @@ import os
 import sys
 import time
 import json
+from pprint import pprint
 from pathlib import PurePath
 
 import geopandas as gpd
@@ -79,12 +80,12 @@ def load_lidar(las_file, grid_bounds):
                     out[i] = np.concatenate((existing_pts, xyz_sep[i]), axis=0)
 
             count += len(pts)
-            print(count, "points loaded")
+            print("    ", count, "points loaded")
 
-            # TEMP
-            if count > 0:
-                # print(out)
-                return out
+            # # TEMP
+            # if count > 0:
+            #     # print(out)
+            #     return out
 
     return out
 
@@ -174,7 +175,68 @@ def benchmark(name, _cache={}):
     if "last" in _cache:
         print("  ", name, t - _cache["last"])
     _cache["last"] = t
-        
+
+
+def generate_region_h5(outfile, region_spec, subdivide=1):
+    """
+    load and format the data in an hdf5 outfile based on the region_specs
+    returns:
+        result status (str)
+    """
+    benchmark("start")
+
+    # grid definition
+    grid_bounds = load_grid_bounds(region_spec["grid"], subdivide=subdivide)
+    benchmark("grid")
+
+    # ground truth trees
+    gt_crs = region_spec.get("gt_crs", None) # default to None if key doesn't exist
+    gt_trees = load_gt_trees(region_spec["gt"], gt_crs=gt_crs)
+    benchmark("gt")
+
+    # remove grid squares that have no gt trees
+    sep_gt_trees = seperate_pts(grid_bounds, gt_trees[:,0], gt_trees[:,1])
+    valid_patch = [len(i) >= 3 for i in sep_gt_trees]
+    grid_bounds = np.array([v for i,v in enumerate(grid_bounds) if valid_patch[i]])
+    sep_gt_trees = [v for i,v in enumerate(sep_gt_trees) if valid_patch[i]]
+    benchmark("grid filtering")
+
+    # lidar points
+    sep_lidar = load_lidar(region_spec["lidar"], grid_bounds)
+    for i,lidar_patch in enumerate(sep_lidar):
+        if len(lidar_patch) < 100: # fewer than 100 points in a patch
+            print("! Lidar patch {} with only {} points. Grid square bounds {}".format(i, len(lidar_patch), grid_bounds[i]))
+            return "Fail: too few lidar points in a grid square"
+    benchmark("lidar")
+
+    # naip
+    naip_patches, naip_raster = load_naip(region_spec["naip"], grid_bounds)
+    benchmark("load naip")
+
+    # add NDVI channel to lidar
+    lidar_w_naip = []
+    for pt_group in sep_lidar:
+        xys = pt_group[:,:2]
+        naip = naip_raster.sample(xys) # returns generator
+        # convert to float
+        naip = np.array([i for i in naip]) / 256
+        ndvi = naip2ndvi(naip).reshape(-1, 1)
+        pt_group = np.concatenate([pt_group, ndvi], axis=-1)
+        lidar_w_naip.append(pt_group)
+
+    benchmark("add NDVI to lidar")
+
+    with h5py.File(outfile.as_posix(), "w") as hf:
+        # write to hdf5
+        hf.create_dataset("/grid", data=grid_bounds)
+        for i in range(len(sep_gt_trees)):
+            hf.create_dataset("/gt/patch{}".format(i), data=sep_gt_trees[i])
+            hf.create_dataset("/lidar/patch{}".format(i), data=lidar_w_naip[i])
+            hf.create_dataset("/naip/patch{}".format(i), data=naip_patches[i])
+
+    return "Success"
+
+
 
 def main():
 
@@ -187,6 +249,10 @@ def main():
 
     with open(ARGS.specs, "r") as f:
         data_specs = json.load(f)
+
+    # make sure no spaces in region name keys
+    if any([" " in i for i in data_specs.keys()]):
+        raise ValueError("No spaces allowed in specs region name keys")
 
     OUTDIR = PurePath("../data/generated/{}".format(ARGS.outname))
 
@@ -201,61 +267,22 @@ def main():
     with open(OUTDIR.joinpath("data_sources.json"), "w") as f:
         json.dump(data_specs, f, indent=2)
 
-    with h5py.File(OUTDIR.joinpath("dataset.h5").as_posix(), "w") as hf:
-        for region_name, region_spec in data_specs.items():
+    statuses = {}
+
+    for region_name, region_spec in data_specs.items():
+        outfile = OUTDIR.joinpath(region_name + ".h5")
+        if os.path.exists(outfile):
+            print("\n" + region_name, "already generated")
+            statuses[region_name] = "Already present"
+        else:
             print("\nLoading region:", region_name)
+            try:
+                status = generate_region_h5(outfile, region_spec, subdivide=ARGS.subdivide)
+                statuses[region_name] = status
+            except Exception as e:
+                statuses[region_name] = "Fail: " + str(e)
 
-            benchmark("start")
-
-            # grid definition
-            grid_bounds = load_grid_bounds(region_spec["grid"], subdivide=ARGS.subdivide)
-            benchmark("grid")
-
-            # ground truth trees
-            gt_crs = region_spec.get("gt_crs", None) # default to None if key doesn't exist
-            gt_trees = load_gt_trees(region_spec["gt"], gt_crs=gt_crs)
-            benchmark("gt")
-
-            # remove grid squares that have no gt trees
-            sep_gt_trees = seperate_pts(grid_bounds, gt_trees[:,0], gt_trees[:,1])
-            valid_patch = [len(i) >= 3 for i in sep_gt_trees]
-            grid_bounds = np.array([v for i,v in enumerate(grid_bounds) if valid_patch[i]])
-            sep_gt_trees = [v for i,v in enumerate(sep_gt_trees) if valid_patch[i]]
-            benchmark("grid filtering")
-
-            # lidar points
-            sep_lidar = load_lidar(region_spec["lidar"], grid_bounds)
-            for i,lidar_patch in enumerate(sep_lidar):
-                if len(lidar_patch) < 100: # fewer than 100 points in a patch
-                    raise ValueError(
-                        "Lidar patch {} with only {} points. Grid square bounds {}".format(i, len(lidar_patch), grid_bounds[i])
-                    )
-            benchmark("lidar")
-
-            # naip
-            naip_patches, naip_raster = load_naip(region_spec["naip"], grid_bounds)
-            benchmark("load naip")
-
-            # add NDVI channel to lidar
-            lidar_w_naip = []
-            for pt_group in sep_lidar:
-                xys = pt_group[:,:2]
-                naip = naip_raster.sample(xys) # returns generator
-                # convert to float
-                naip = np.array([i for i in naip]) / 256
-                ndvi = naip2ndvi(naip).reshape(-1, 1)
-                pt_group = np.concatenate([pt_group, ndvi], axis=-1)
-                lidar_w_naip.append(pt_group)
-
-            benchmark("add NDVI to lidar")
-
-            # write to hdf5
-            hf.create_dataset("/grids/{}".format(region_name), data=grid_bounds)
-            for i in range(len(sep_gt_trees)):
-                hf.create_dataset("/gt/{}_{}".format(region_name, i), data=sep_gt_trees[i])
-                hf.create_dataset("/lidar/{}_{}".format(region_name, i), data=lidar_w_naip[i])
-                hf.create_dataset("/naip/{}_{}".format(region_name, i), data=naip_patches[i])
-
+    pprint(statuses)
 
 if __name__ == "__main__":
     main()
