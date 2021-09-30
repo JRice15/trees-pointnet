@@ -3,6 +3,7 @@ import os
 import sys
 import time
 import json
+import traceback
 from pprint import pprint
 from pathlib import PurePath
 
@@ -278,8 +279,10 @@ def main():
             print("\nLoading region:", region_name)
             try:
                 status = generate_region_h5(outfile, region_spec, subdivide=ARGS.subdivide)
+                print(status)
                 statuses[region_name] = status
             except Exception as e:
+                traceback.print_exc()
                 statuses[region_name] = "Fail: " + str(e)
 
     pprint(statuses)
