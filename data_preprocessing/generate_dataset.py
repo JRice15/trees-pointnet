@@ -15,7 +15,7 @@ import numpy as np
 import shapely
 import rasterio
 # import tables
-import numba
+# import numba
 
 
 def naip2ndvi(im):
@@ -57,7 +57,7 @@ def seperate_pts(gt_bounds, x, y, z=None):
 
 
 def load_lidar(las_file, grid_bounds):
-    chunk_size = 500_000
+    chunk_size = 5_00_000
     count = 0
     out = None
     with laspy.open(las_file, "r") as reader:
