@@ -95,7 +95,9 @@ def load_grid_bounds(grid_filename, subdivide):
             subdivide=2 results in 4 squares per original, while subdivide=3 results in 9
     """
     grid = gpd.read_file(grid_filename)
-    assert str(grid.crs).lower() == "epsg:26911"
+    if str(grid.crs).lower() == "epsg:26911":
+        print("! Warning: grid is not in epsg:26911. Transformation may warp its information")
+        grid = grid.to_crs("epsg:26911")
 
     # the grid is perfectly aligned with the CRS, so the polygon bounds give us the
     # edges of each grid square
@@ -212,7 +214,9 @@ def generate_region_h5(outfile, region_spec, subdivide=1):
 
     # add NDVI channel to lidar
     lidar_w_naip = []
-    for pt_group in sep_lidar:
+    n_groups = len(sep_lidar)
+    for n,pt_group in enumerate(sep_lidar):
+        print("Adding NDVI", n, "of", n_groups)
         xys = pt_group[:,:2]
         naip = naip_raster.sample(xys) # returns generator
         # convert to float
@@ -257,7 +261,7 @@ def main():
         os.makedirs(OUTDIR)
     except FileExistsError:
         if not ARGS.overwrite:
-            print("This will overwrite previously created dataset info stored under {}".format(OUTDIR))
+            print("This may overwrite previously created dataset metadata stored under {}".format(OUTDIR))
             print("Press enter to continue, otherwise ctrl-C or D or whatever stops programs on your system", end=" ")
             input()
 
@@ -268,7 +272,7 @@ def main():
 
     for region_name, region_spec in data_specs.items():
         outfile = OUTDIR.joinpath(region_name + ".h5")
-        if os.path.exists(outfile):
+        if os.path.exists(outfile) and not ARGS.overwrite:
             print("\n" + region_name, "already generated")
             statuses[region_name] = "Already present"
         else:
