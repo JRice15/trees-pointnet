@@ -20,7 +20,9 @@ ARGS = parser.parse_args()
 
 if ARGS.outfile is None:
     if ARGS.infile[-4:] in (".laz", ".las"):
-        outfile = ARGS.infile[:-4] + "_HAG_epsg26911"
+        outfile = ARGS.infile[:-4] + "_HAG"
+        if ARGS.reproject:
+            outfile += "_" + ARGS.reproject
         if ARGS.subsample > 1:
             outfile += "_subsample{}x".format(ARGS.subsample)
         outfile += ".laz"
