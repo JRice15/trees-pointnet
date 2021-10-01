@@ -14,6 +14,7 @@ import pdal
 parser = argparse.ArgumentParser()
 parser.add_argument("--infile",required=True)
 parser.add_argument("--outfile",default=None,help="optional outfile name, defaults to same directory as infile with generated suffix")
+parser.add_argument("--reproject",default=None,help="optional CRS string to reproject to")
 parser.add_argument("--subsample",type=int,default=1,help="optional subsampling factor")
 ARGS = parser.parse_args()
 
@@ -33,10 +34,11 @@ print("Reading   ", ARGS.infile)
 print("Writing to", ARGS.outfile)
 
 pipeline.append(ARGS.infile)
-pipeline.append({
-    "type": "filters.reprojection",
-    "out_srs": "EPSG:26911"
-})
+if ARGS.reproject is not None:
+    pipeline.append({
+        "type": "filters.reprojection",
+        "out_srs": ARGS.reproject,
+    })
 pipeline.append({
     "type": "filters.hag_nn"
 })
