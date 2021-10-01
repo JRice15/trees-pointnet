@@ -89,15 +89,12 @@ def load_lidar(las_file, grid_bounds):
 
 def load_grid_bounds(grid_filename, subdivide):
     """ 
-    Load a EPSG:26911 grid definition
+    Load a grid definition
     args:
         subdivide: number of times to divide the side of each grid square. for example,
             subdivide=2 results in 4 squares per original, while subdivide=3 results in 9
     """
     grid = gpd.read_file(grid_filename)
-    if str(grid.crs).lower() != "epsg:26911":
-        print("! Warning: grid is not in epsg:26911. Transformation may warp its information")
-        grid = grid.to_crs("epsg:26911")
 
     # the grid is perfectly aligned with the CRS, so the polygon bounds give us the
     # edges of each grid square
@@ -113,30 +110,31 @@ def load_grid_bounds(grid_filename, subdivide):
                     new_grid_bounds.append([x, y, x+x_width, y+y_width])
         grid_bounds = np.array(new_grid_bounds)
 
-    return grid_bounds
+    return grid_bounds, str(grid.crs).lower()
 
 
-def load_gt_trees(filename, gt_crs=None):
+def load_gt_trees(filename, target_crs, given_crs=None):
     """
     load gt tree locations from a .gpkg or .csv file.
     args:
         filename
-        gt_crs: required if filename is a .csv
+        target_crs
+        given_crs: required if filename is a .csv
     """
     if filename.endswith(".gpkg"):
         gt = gpd.read_file(filename)
 
     elif filename.endswith(".csv"):
-        if gt_crs is None:
+        if given_crs is None:
             raise ValueError("Provide a 'gt_crs' key for this region")
         gt_raw = pd.read_csv(filename)
         gt_raw.columns = [x.lower() for x in gt_raw.columns]
         geom = gpd.points_from_xy(gt_raw["longitude"], gt_raw["latitude"])
-        gt = gpd.GeoDataFrame(geometry=geom, crs=gt_crs)
+        gt = gpd.GeoDataFrame(geometry=geom, crs=given_crs)
     else:
         raise NotImplementedError("Cannot handle file {}".format(filename))
 
-    gt = gt.to_crs("EPSG:26911")
+    gt = gt.to_crs(target_crs)
 
     x = gt["geometry"].x
     y = gt["geometry"].y
@@ -146,12 +144,20 @@ def load_gt_trees(filename, gt_crs=None):
     return gt
 
 def load_naip(naipfile, grid_bounds):
-
+    """
+    args:
+        naipfile: filename
+        grid bounds: np array of grid bounds
+    returns:
+        list of image patches corresponding to each grid square
+        rasterio raster object
+        raster crs
+    """
     raster = rasterio.open(naipfile)
-    assert str(raster.crs).lower() == "epsg:26911"
     im = raster.read()
     im = np.moveaxis(im, 0, -1) / 256 # channels last, float
-    assert im.shape[-1] == 4
+    if im.shape[-1] != 4:
+        raise ValueError("Wrong number of channels in NAIP. Expected 4, got {}".format(im.shape[-1]))
     print("naip shape", im.shape)
     print("naip bounds", raster.bounds)
 
@@ -163,7 +169,7 @@ def load_naip(naipfile, grid_bounds):
         patch = im[y_min:y_max, x_min:x_max]
         out.append(patch)
 
-    return out, raster
+    return out, raster, str(raster.crs).lower()
 
 
 
@@ -176,7 +182,7 @@ def benchmark(name, _cache={}):
     _cache["last"] = t
 
 
-def generate_region_h5(outfile, region_spec, subdivide=1):
+def generate_region_h5(outfile, metafile, region_spec, subdivide=1):
     """
     load and format the data in an hdf5 outfile based on the region_specs
     returns:
@@ -185,12 +191,12 @@ def generate_region_h5(outfile, region_spec, subdivide=1):
     benchmark("start")
 
     # grid definition
-    grid_bounds = load_grid_bounds(region_spec["grid"], subdivide=subdivide)
+    grid_bounds, grid_crs = load_grid_bounds(region_spec["grid"], subdivide=subdivide)
     benchmark("grid")
 
     # ground truth trees
     gt_crs = region_spec.get("gt_crs", None) # default to None if key doesn't exist
-    gt_trees = load_gt_trees(region_spec["gt"], gt_crs=gt_crs)
+    gt_trees = load_gt_trees(region_spec["gt"], target_crs=grid_crs, given_crs=gt_crs)
     benchmark("gt")
 
     # remove grid squares that have no gt trees
@@ -200,6 +206,13 @@ def generate_region_h5(outfile, region_spec, subdivide=1):
     sep_gt_trees = [v for i,v in enumerate(sep_gt_trees) if valid_patch[i]]
     benchmark("grid filtering")
 
+    # naip
+    naip_patches, naip_raster, naip_crs = load_naip(region_spec["naip"], grid_bounds)
+    benchmark("load naip")
+
+    if grid_crs != naip_crs:
+        raise ValueError("grid and NAIP crs do not match: {} {}".format(grid_crs, naip_crs))
+
     # lidar points
     sep_lidar = load_lidar(region_spec["lidar"], grid_bounds)
     for i,lidar_patch in enumerate(sep_lidar):
@@ -207,10 +220,6 @@ def generate_region_h5(outfile, region_spec, subdivide=1):
             print("! Lidar patch {} with only {} points. Grid square bounds {}".format(i, len(lidar_patch), grid_bounds[i]))
             return "Fail: too few lidar points in a grid square"
     benchmark("lidar")
-
-    # naip
-    naip_patches, naip_raster = load_naip(region_spec["naip"], grid_bounds)
-    benchmark("load naip")
 
     # add NDVI channel to lidar
     lidar_w_naip = []
@@ -225,7 +234,16 @@ def generate_region_h5(outfile, region_spec, subdivide=1):
         pt_group = np.concatenate([pt_group, ndvi], axis=-1)
         lidar_w_naip.append(pt_group)
 
+    naip_raster.close()
     benchmark("add NDVI to lidar")
+
+    meta = {
+        "crs": grid_crs,
+        "subdivide": subdivide,
+        "spec": region_spec
+    }
+    with open(metafile.as_posix(), "w") as f:
+        json.dump(meta, f, indent=2)
 
     with h5py.File(outfile.as_posix(), "w") as hf:
         # write to hdf5
@@ -235,12 +253,12 @@ def generate_region_h5(outfile, region_spec, subdivide=1):
             hf.create_dataset("/lidar/patch{}".format(i), data=lidar_w_naip[i])
             hf.create_dataset("/naip/patch{}".format(i), data=naip_patches[i])
 
+    benchmark("write to file")
     return "Success"
 
 
 
 def main():
-
     parser = argparse.ArgumentParser()
     parser.add_argument("--specs",required=True,help="json file with dataset specs")
     parser.add_argument("--outname",required=True,help="name of output h5 file (to be placed within the `../data` directory)")
@@ -256,29 +274,20 @@ def main():
         raise ValueError("No spaces allowed in specs region name keys")
 
     OUTDIR = PurePath("../data/generated/{}".format(ARGS.outname))
-
-    try:
-        os.makedirs(OUTDIR)
-    except FileExistsError:
-        if not ARGS.overwrite:
-            print("This may overwrite previously created dataset metadata stored under {}".format(OUTDIR))
-            print("Press enter to continue, otherwise ctrl-C or D or whatever stops programs on your system", end=" ")
-            input()
-
-    with open(OUTDIR.joinpath("data_sources.json"), "w") as f:
-        json.dump(data_specs, f, indent=2)
+    os.makedirs(OUTDIR, exist_ok=True)
 
     statuses = {}
 
     for region_name, region_spec in data_specs.items():
         outfile = OUTDIR.joinpath(region_name + ".h5")
+        metafile = OUTDIR.joinpath(region_name + "_meta.json")
         if os.path.exists(outfile) and not ARGS.overwrite:
             print("\n" + region_name, "already generated")
             statuses[region_name] = "Already present"
         else:
             print("\nLoading region:", region_name)
             try:
-                status = generate_region_h5(outfile, region_spec, subdivide=ARGS.subdivide)
+                status = generate_region_h5(outfile, metafile, region_spec, subdivide=ARGS.subdivide)
                 print(status)
                 statuses[region_name] = status
             except Exception as e:
