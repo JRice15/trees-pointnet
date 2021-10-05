@@ -218,7 +218,7 @@ def generate_region_h5(outfile, metafile, region_spec, subdivide=1):
     for i,lidar_patch in enumerate(sep_lidar):
         if len(lidar_patch) < 100: # fewer than 100 points in a patch
             print("! Lidar patch {} with only {} points. Grid square bounds {}".format(i, len(lidar_patch), grid_bounds[i]))
-            return "Fail: too few lidar points in a grid square"
+            # return "Fail: too few lidar points in a grid square"
     benchmark("lidar")
 
     # add NDVI channel to lidar

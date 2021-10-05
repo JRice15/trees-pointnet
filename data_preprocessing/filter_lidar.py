@@ -44,10 +44,10 @@ if ARGS.reproject is not None:
 pipeline.append({
     "type": "filters.hag_nn"
 })
-pipeline.append({
-    "type": "filters.range",
-    "limits": "HeightAboveGround[0.1:]" # hag >=0.1
-})
+# pipeline.append({
+#     "type": "filters.range",
+#     "limits": "HeightAboveGround[0.1:]" # hag >=0.1
+# })
 if ARGS.subsample > 1:
     pipeline.append({
         "type": "filters.decimation",
