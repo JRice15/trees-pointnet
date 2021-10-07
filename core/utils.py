@@ -10,7 +10,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from core import ARGS, DATA_DIR, MAIN_DIR
-from core.losses import get_loss
 
 matplotlib.rc_file_defaults()
 
