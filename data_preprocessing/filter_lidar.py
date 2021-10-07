@@ -37,6 +37,11 @@ print("Reading   ", ARGS.infile)
 print("Writing to", ARGS.outfile)
 
 pipeline.append(ARGS.infile)
+if ARGS.subsample > 1:
+    pipeline.append({
+        "type": "filters.decimation",
+        "step": ARGS.subsample,
+    })
 if ARGS.reproject is not None:
     pipeline.append({
         "type": "filters.reprojection",
@@ -49,11 +54,6 @@ pipeline.append({
     "type": "filters.range",
     "limits": "HeightAboveGround[0.0:]" # hag >=0.0
 })
-if ARGS.subsample > 1:
-    pipeline.append({
-        "type": "filters.decimation",
-        "step": ARGS.subsample,
-    })
 pipeline.append({
     "type": "writers.las",
     "scale_x": ARGS.scale,

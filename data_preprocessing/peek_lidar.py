@@ -1,6 +1,8 @@
 import os
 import re
 import sys
+import glob
+from pathlib import PurePath
 import argparse
 
 import geopandas as gpd
@@ -22,14 +24,18 @@ parser.add_argument("--dsname",required=True,help="name of the generated dataset
 ARGS = parser.parse_args()
 
 
-regions = os.listdir("../data/generated/"+ARGS.dsname+"/")
+regions = glob.glob("../data/generated/"+ARGS.dsname+"/*")
 
 for region_file in regions:
+    region_file = PurePath(region_file)
+    region_name = region_file.stem
+    print(region_name, region_file)
 
-    print(regions)
+    os.makedirs("output/{}/example_patches".format(region_name), exist_ok=True)
+
+    
+
     exit()
-
-    os.makedirs("output/example_patches", exist_ok=True)
 
     fig, axlist = plt.subplots(2,2,figsize=(12,9))
     for i,fname in enumerate(("train", "test")):
