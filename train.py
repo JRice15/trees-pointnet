@@ -18,7 +18,7 @@ from tensorflow.keras import callbacks, layers
 from tensorflow.keras import optimizers
 import matplotlib.pyplot as plt
 
-from core import DATA_DIR, MAIN_DIR, ARGS, data_loading
+from core import DATA_DIR, REPO_ROOT, ARGS, data_loading
 from core.losses import get_loss
 from core.models import pointnet
 from core.tf_utils import MyModelCheckpoint, output_model
@@ -80,7 +80,7 @@ pprint(vars(ARGS))
 # create model output dir
 now = datetime.datetime.now()
 modelname = ARGS.name + now.strftime("-%y%m%d-%H%M%S")
-MODEL_DIR = os.path.join(MAIN_DIR, "models/"+modelname)
+MODEL_DIR = os.path.join(REPO_ROOT, "models/"+modelname)
 os.makedirs(MODEL_DIR, exist_ok=False)
 MODEL_PATH = os.path.join(MODEL_DIR, "model_" + ARGS.name + ".tf")
 

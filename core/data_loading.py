@@ -1,4 +1,3 @@
-import atexit
 import json
 import os
 import sys
@@ -14,7 +13,7 @@ from tensorflow.keras import Model
 from tensorflow.keras import backend as K
 from tensorflow.keras import layers
 
-from core import ARGS
+from core import ARGS, REPO_ROOT
 from core.viz_utils import raster_plot
 
 
@@ -33,12 +32,9 @@ class LidarPatchGen(keras.utils.Sequence):
     /naip/patchX_Y: dataset, square NAIP image from grid column X row Y, shape ~(128,128)
     """
 
-    def __init__(self, filename, name=None, skip_freq=None, keep_freq=None, batchsize=None):
+    def __init__(self, patch_ids, name=None, batchsize=None):
         """
-        args:
-            skip_freq: every skip_freq patches will be skipped (designated for validation)
-            keep_freq: every keep_freq patches will be kept (designated for validation) 
-                (only one of skip_freq and keep_freq should be provided)
+        patch_ids: list(tuple), where each tuple is of the format (filename, patch number)
         in the ARGS global object:
             mode
             batchsize
@@ -50,11 +46,9 @@ class LidarPatchGen(keras.utils.Sequence):
         self.name = name
         self.batch_size = ARGS.batchsize if batchsize is None else batchsize
         self.use_ndvi = ARGS.ndvi
-        self.filename = filename
-        self.file = h5py.File(self.filename, "r")
-        atexit.register(self.close_file) # close file on completion
-        self.skip_freq = skip_freq
-        self.keep_freq = keep_freq
+        self.patch_ids = patch_ids
+        self.filenames = list(set([i[0] for i in self.patch_ids]))
+        self.files = {f:h5py.File(f, "r") for f in self.filenames}
         self.y_counts_only = False
         if ARGS.mode == "count":
             self.y_counts_only = True
@@ -67,37 +61,17 @@ class LidarPatchGen(keras.utils.Sequence):
         self.random = np.random.default_rng(seed=44)
 
     def init_data(self):
-        self.max_points = self.file["lidar"].attrs["max_points"]
-        self.min_points = self.file["lidar"].attrs["min_points"]
-        # self.z_max = self.file["lidar"].attrs["z_max"]
-        self.z_max = 50 # manual z max
         self.max_trees = self.file["gt"].attrs["max_trees"]
-        self.min_trees = self.file["gt"].attrs["min_trees"]
-        self.gridsize = self.file.attrs["gridsize"]
-        self.grid_min_x = self.file.attrs["grid_min_x"]
-        self.grid_min_y = self.file.attrs["grid_min_y"]
         self.nattributes = 3 + (1 if self.use_ndvi else 0)
         self.npoints = ARGS.npoints
+        self.z_max = 50 # for normalization
 
-        # load patch ids
-        all_ids = list(self.file['lidar'].keys())
-        if self.skip_freq is not None:
-            all_ids = set(all_ids) - set(all_ids[::self.skip_freq])
-            all_ids = list(all_ids)
-        elif self.keep_freq is not None:
-            all_ids = all_ids[::self.keep_freq]
-        # filter patches with too few points
-        len1 = len(all_ids)
-        all_ids = [i for i in all_ids if self.file['lidar/'+i].shape[0] >= self.npoints]
-        len2 = len(all_ids)
-        self.num_patches_filtered = len1 - len2
-
-        self.num_ids = len(all_ids)
+        self.num_ids = len(self.patch_ids)
         if ARGS.test:
             self.num_ids = 2
         # sort for reproducibility
-        self.ids = np.array(sorted(all_ids))
-        self.random.shuffle(self.ids)
+        self.patch_ids = np.sort(self.patch_ids)
+        self.random.shuffle(self.patch_ids)
         if not ARGS.ragged:
             self._x_batch = np.empty((self.batch_size, self.npoints, self.nattributes))
             if self.y_counts_only:
@@ -119,9 +93,11 @@ class LidarPatchGen(keras.utils.Sequence):
         idx = idx * self.batch_size
         end_idx = idx + self.batch_size
         self._y_batch.fill(0)
-        for i,patch in enumerate(self.ids[idx:end_idx]):
-            # select <npoints> evenly spaced points randomly from batch
-            x_node = self.file['lidar/'+patch]
+        for i,(filename,patch) in enumerate(self.patch_ids[idx:end_idx]):
+            # select <npoints> evenly spaced points randomly from batch.
+            #   this is done because indices must be in ascending order, and indexing with an arbitrary array is 
+            #   orders of magnitude slower than a simple slice
+            x_node = self.files[filename]['lidar/'+patch]
             num_x_pts = x_node.shape[0]
             step = num_x_pts // self.npoints
             leftover = num_x_pts % self.npoints
@@ -132,8 +108,9 @@ class LidarPatchGen(keras.utils.Sequence):
             top_offset = leftover - rand_offset
             # get data from file
             self._x_batch[i] = self.file['lidar/'+patch][rand_offset:num_x_pts-top_offset:step, :self.nattributes]
-            
+
             # normalize data
+            # x and y
             min_xy = np.amin(self._x_batch[i,:,:2], axis=0)
             max_xy = np.amax(self._x_batch[i,:,:2], axis=0)
             # z channel
@@ -154,6 +131,10 @@ class LidarPatchGen(keras.utils.Sequence):
                 self._y_batch[i,ydata.shape[0]:,2] = 0
                 self._y_batch[i,:ydata.shape[0],:2] = (ydata - min_xy) / (max_xy - min_xy)
 
+        # shuffle input points within each patch
+        #  this shuffles the points within each seperate patch in the same way, but that is random enough for me
+        self.random.shuffle(self._x_batch, axis=1)
+
         x = tf.constant(self._x_batch, dtype=tf.float32)
         y = tf.constant(self._y_batch, dtype=tf.float32)
         self.batch_time += time.perf_counter() - t1
@@ -165,12 +146,13 @@ class LidarPatchGen(keras.utils.Sequence):
         PROBABLY DOESNT WORK ANYMORE, I haven't kept the ragged code up to date
         since it is much slower and less effective
         """
+        raise NotImplementedError()
         t1 = time.perf_counter()
         idx = idx * self.batch_size
         end_idx = idx + self.batch_size
         x = []
         y = []
-        for i in self.ids[idx:end_idx]:
+        for i in self.patch_ids[idx:end_idx]:
             x.append(self.file['lidar/'+i][:])
             if self.y_counts_only:
                 y.append(self.file['gt/'+i].shape[0])
@@ -197,31 +179,41 @@ class LidarPatchGen(keras.utils.Sequence):
         y = tf.concat(y_batches, axis=0)
         return x, y
 
-    def get_patch(self, *, i=None, xy=None):
+    def get_patch(self, i=None, region=None):
         """
-        get the full i'th patch, or patch{x}_{y}, from this dataset
+        get the full i'th patch of the entire sorted dataset, or from a specific region
+        args:
+            i: int
+            region: str, region name
         returns:
             x, y, patch_id
         """
         # set temporary sorted ids
-        old_ids = self.ids
-        self.ids = sorted(self.ids)
+        old_ids = self.patch_ids
+        self.patch_ids = sorted(self.patch_ids)
         old_batchsize = self.batch_size
         self.batch_size = 1
         # get results
-        if i is None:
-            id = self.ids[i]
+        if region is None:
+            id = self.patch_ids[i]
             x, y = self[i]
+        else:
+            id = (region, "patch"+str(i))
+            index = self.patch_ids.index(id)
+            x, y = self[index]
         # restore correct values
-        self.ids = old_ids
+        self.patch_ids = old_ids
         self.batch_size = old_batchsize
         return x[0], y[0], id
 
-    def get_naip(self, patchname):
+    def get_naip(self, patch_id):
         """
         get naip image. Channels: R-G-B-NIR
+        args:
+            patch_id: tuple: (region name str, patch id str of the form "patch322")
         """
-        return self.file["/naip/{}".format(patchname)][:]
+        file, patchname = patch_id
+        return self.files[file]["/naip/"+patchname][:]
 
     def get_batch_shape(self):
         """
@@ -235,11 +227,11 @@ class LidarPatchGen(keras.utils.Sequence):
         return x.shape, y.shape
 
     def summary(self):
-        print("Dataset", self.name, "from", self.filename)
-        print("  skip_freq", self.skip_freq, "keep_freq", self.keep_freq)
+        print("Dataset", self.name, "from files:")
+        for filename in self.filenames:
+            print(" ", filename)
         print(" ", self.num_ids, "patches, in", len(self), "batches, batchsize", self.batch_size)
-        print("  raw patches:", self.min_points, "pts min,", self.max_points, "pts max")
-        print(" ", self.npoints, "points per patch.", self.num_patches_filtered, "patches filtered for having too few points")
+        print(" ", self.npoints, "points per patch.")
         try:
             print("  xbatch shape:", self._x_batch.shape)
             print("  ybatch shape:", self._y_batch.shape)
@@ -248,15 +240,16 @@ class LidarPatchGen(keras.utils.Sequence):
 
     def on_epoch_end(self):
         print("avg batch time:", self.batch_time / len(self))
+        print("total batch time:", self.batch_time)
         self.batch_time = 0
-        self.random.shuffle(self.ids)
+        self.random.shuffle(self.patch_ids)
 
     def sorted(self):
         """put ids in a reproducable order (sorted order)"""
         self.init_rng()
-        self.ids = sorted(self.ids)
+        self.patch_ids = sorted(self.patch_ids)
 
-    def close_file(self):
+    def __del__(self):
         try:
             self.file.close()
         except:
@@ -274,7 +267,7 @@ class LidarPatchGen(keras.utils.Sequence):
         generate predictions
         """
         x, y = self.load_all()
-        patch_ids = np.copy(self.ids)
+        patch_ids = np.copy(self.patch_ids)
         y = np.squeeze(y.numpy())
         pred = np.squeeze(model.predict(x))
         x = np.squeeze(x.numpy())
@@ -364,51 +357,42 @@ class LidarPatchGen(keras.utils.Sequence):
 
 
 
-
-def generator_wrapper(sequence):
-    """turn Keras Sequence to generator"""
-    def gen():
-        while True:
-            for i in range(len(sequence)):
-                yield sequence[i]
-    return gen
-
-def dataset_wrapper(sequence):
-    """
-    turn Keras Sequence to generator than tf.data.Dataset.
-    There is probably a better way to achieve this? I don't think it is any faster
-    """
-    if ARGS.ragged:
-        xspec = tf.RaggedTensorSpec(shape=(ARGS.batchsize, None, 3), dtype=tf.float32),
-    else:
-        x,y = sequence[0]
-        xspec = tf.TensorSpec(shape=x.shape, dtype=tf.float32)
-
-    train_gen = tf.data.Dataset.from_generator(
-        generator_wrapper(sequence),
-        output_signature=(
-            xspec,
-            tf.TensorSpec(shape=(), dtype=tf.float32)
-        )
-    )
-    return train_gen
+def get_tvt_split(dsname, regions, val_step, test_step):
+    train = []
+    val = []
+    test = []
+    for region in regions:
+        regionfile = REPO_ROOT.joinpath("data/generated/{}/{}.h5".format(dsname, region)).as_posix()
+        with h5py.File(regionfile, "r") as f:
+            patches = sorted(f["lidar"].keys())
+        patches = [(region_name, x) for x in patches]
+        test += patches[::test_step]
+        rest_patches = [x for x in patches if x not in test_patches]
+        val += rest_patches[::val_step]
+        train += [x for x in rest_patches if x not in val_patches]
+    return train, val, test
 
 
-
-def get_train_val_gens(val_split=0.1):
+def get_train_val_gens(dsname, regions, val_split=0.1, test_split=0.1):
     """
     returns:
         train Keras Sequence, val Sequence or raw data, test Sequence
     """
-    val_freq = int(1/val_split)
+    val_step = int(1/val_split)
+    test_step = int(1/val_split)
+    train, val, test = get_tvt_split(dsname, regions, val_step, test_step)
 
-    train_gen = LidarPatchGen("data/train_patches.h5", name="train", skip_freq=val_freq)
-    val_gen = LidarPatchGen("data/train_patches.h5", name="validation", keep_freq=val_freq)
+    train_gen = LidarPatchGen(train, name="train", skip_freq=val_freq)
+    val_gen = LidarPatchGen(val, name="validation", keep_freq=val_freq)
 
     return train_gen, val_gen
 
-def get_test_gen():
-    test_gen = LidarPatchGen("data/test_patches.h5", name="test", batchsize=1)
+def get_test_gen(val_split=0.1, test_split=0.1):
+    val_step = int(1/val_split)
+    test_step = int(1/val_split)
+    train, val, test = get_tvt_split(dsname, regions, val_step, test_step)
+
+    test_gen = LidarPatchGen(test, name="test", batchsize=1)
     return test_gen
 
 

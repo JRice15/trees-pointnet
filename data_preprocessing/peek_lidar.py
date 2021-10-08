@@ -32,8 +32,18 @@ for region_file in regions:
     print(region_name, region_file)
 
     os.makedirs("output/{}/example_patches".format(region_name), exist_ok=True)
+    outdir = PurePath("output/{}".format(region_name))
 
+    with h5py.File(region_file.as_posix(), "r") as hf:
+        grid = hf["/grid"][:]
     
+    grid_x = grid[:,0]
+    grid_y = grid[:,1]
+
+    plt.scatter(grid_x, grid_y)
+    plt.title("Patch locations")
+    plt.savefig(outdir.joinpath("patch_locations").as_posix)
+    plt.show()
 
     exit()
 

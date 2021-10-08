@@ -9,7 +9,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 
-from core import ARGS, DATA_DIR, MAIN_DIR
+from core import ARGS, DATA_DIR, REPO_ROOT
 
 matplotlib.rc_file_defaults()
 
@@ -69,7 +69,7 @@ def raster_plot(pts, filename, gaussian_sigma, weights=None, title=None, clip=No
 
 
 def glob_modeldir(modelname):
-    allmodels_dir = MAIN_DIR.joinpath("models/")
+    allmodels_dir = REPO_ROOT.joinpath("models/")
 
     matching_models = glob.glob(os.path.join(allmodels_dir.as_posix(), modelname+"*", "model_*.tf"))
     if len(matching_models) > 1:

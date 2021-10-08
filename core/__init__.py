@@ -22,9 +22,9 @@ ARGS = argparse.Namespace()
 
 """ set global constants """
 
-MAIN_DIR = PurePath(os.path.dirname(os.path.dirname(__file__)))
-DATA_DIR = MAIN_DIR.joinpath("data")
-os.makedirs(MAIN_DIR.joinpath("models"), exist_ok=True)
+REPO_ROOT = PurePath(os.path.dirname(os.path.dirname(__file__)))
+DATA_DIR = REPO_ROOT.joinpath("data")
+os.makedirs(REPO_ROOT.joinpath("models"), exist_ok=True)
 
 
 try:
