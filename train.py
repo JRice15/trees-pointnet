@@ -1,9 +1,11 @@
 import contextlib
 import datetime
 import json
+import glob
 import os
 import argparse
 from pprint import pprint
+from pathlib import PurePath
 import time
 import shutil
 import itertools
@@ -36,36 +38,50 @@ optimizer_options = {
 
 valid_modes = ["pwtt", "mmd", "count", "pwmmd"]
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--name",required=True,help="name to save this model under or load")
-parser.add_argument("--mode",required=True,help="training mode, which determines which output flow and loss target to use",
+parser = argparse.ArgumentParser(add_help=False)
+# main required args
+requiredgrp = parser.add_argument_group("required")
+requiredgrp.add_argument("--name",required=True,help="name to save this model under or load")
+requiredgrp.add_argument("--mode",required=True,help="training mode, which determines which output flow and loss target to use",
     choices=valid_modes)
-parser.add_argument("--ragged",action="store_true")
-parser.add_argument("--test",action="store_true",help="run minimal batches and epochs to test functionality")
+requiredgrp.add_argument("--dsname",required=True,help="name of generated dataset")
+
+# main optional
+optionalgrp = parser.add_argument_group("optional")
+optionalgrp.add_argument("--ragged",action="store_true")
+optionalgrp.add_argument("--regions",default="ALL",nargs="+",help="list of region names, defaults to all available")
+optionalgrp.add_argument("-h", "--help", action="help", help="show this message and exit")
 
 # training hyperparameters
-parser.add_argument("--optimizer",choices=list(optimizer_options.keys()))
-parser.add_argument("--epochs",type=int,default=500)
-parser.add_argument("--batchsize",type=int,default=16)
-parser.add_argument("--lr",type=float,default=0.001,help="initial learning rate")
-parser.add_argument("--reducelr-factor",type=float,default=0.2,help="factor to multiply lr by for reducelronplateau")
-parser.add_argument("--reducelr-patience",type=int,default=20,help="number of epochs with no valloss improvement to reduce lr")
+hypergrp = parser.add_argument_group("training hyperparameters")
+hypergrp.add_argument("--optimizer",choices=list(optimizer_options.keys()),default="adam")
+hypergrp.add_argument("--epochs",type=int,default=500)
+hypergrp.add_argument("--batchsize",type=int,default=16)
+hypergrp.add_argument("--lr",type=float,default=0.001,help="initial learning rate")
+hypergrp.add_argument("--reducelr-factor",type=float,default=0.2,help="factor to multiply lr by for reducelronplateau")
+hypergrp.add_argument("--reducelr-patience",type=int,default=20,help="number of epochs with no valloss improvement to reduce lr")
 
 # model parameters
-parser.add_argument("--npoints",type=int,default=300,help="number of points to run per patch. In ragged or non-ragged, "
+modelgrp = parser.add_argument_group("model parameters")
+modelgrp.add_argument("--npoints",type=int,default=300,help="number of points to run per patch. In ragged or non-ragged, "
         "patches with fewer points will be skipped. Also in non-ragged, patches with more points with be truncated to npoints")
-parser.add_argument("--dropout",type=float,default=0.3,help="dropout rate")
-parser.add_argument("--ndvi",action="store_true",help="whether to use pointwise NDVi channel")
+modelgrp.add_argument("--dropout",type=float,default=0.3,help="dropout rate")
+modelgrp.add_argument("--ndvi",action="store_true",help="whether to use pointwise NDVi channel")
 
 # loss parameters
-parser.add_argument("--mmd-sigma",type=float,default=0.04,
+lossgrp = parser.add_argument_group("loss parameters")
+lossgrp.add_argument("--mmd-sigma",type=float,default=0.04,
         help="max-mean-discrepancy mode: sigma on kernel")
-parser.add_argument("--mmd-kernel",default="gaussian",
+lossgrp.add_argument("--mmd-kernel",default="gaussian",
         help="max-mean-discrepancy mode: type of kernel")
-parser.add_argument("--dist-weight",type=float,default=0.9,
+lossgrp.add_argument("--dist-weight",type=float,default=0.9,
         help="pointnet-treetop mode: weight on distance vs count loss")
-parser.add_argument("--ortho-weight",type=float,default=0.001,
+lossgrp.add_argument("--ortho-weight",type=float,default=0.001,
         help="orthogonality regularization loss weight")
+
+# misc
+miscgrp = parser.add_argument_group("misc")
+miscgrp.add_argument("--test",action="store_true",help="run minimal batches and epochs to test functionality")
 
 
 ARGS = parser.parse_args(namespace=ARGS)
@@ -80,18 +96,23 @@ pprint(vars(ARGS))
 # create model output dir
 now = datetime.datetime.now()
 modelname = ARGS.name + now.strftime("-%y%m%d-%H%M%S")
-MODEL_DIR = os.path.join(REPO_ROOT, "models/"+modelname)
+MODEL_DIR = REPO_ROOT.joinpath("models/"+modelname)
 os.makedirs(MODEL_DIR, exist_ok=False)
-MODEL_PATH = os.path.join(MODEL_DIR, "model_" + ARGS.name + ".tf")
+MODEL_PATH = MODEL_DIR.joinpath("model_" + ARGS.name + ".tf")
 
-with open(os.path.join(MODEL_DIR, "params.json"), "w") as f:
+with open(MODEL_DIR.joinpath("params.json"), "w") as f:
     json.dump(vars(ARGS), f, indent=2)
+
+DATASET_DIR = DATA_DIR.joinpath("generated/"+ARGS.dsname)
+if ARGS.regions == "ALL":
+    regions = glob.glob(os.path.join(DATASET_DIR.as_posix(), "*"))
+    ARGS.regions = [PurePath(r).stem for r in regions]
 
 """
 load data
 """
 
-train_gen, val_gen = data_loading.get_train_val_gens(val_split=0.1)
+train_gen, val_gen = data_loading.get_train_val_gens(DATASET_DIR, ARGS.regions, val_split=0.1, test_split=0.1)
 train_gen.summary()
 val_gen.summary()
 inpt_shape = train_gen.get_batch_shape()[0][1:]

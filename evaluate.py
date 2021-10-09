@@ -27,7 +27,7 @@ from core import DATA_DIR, REPO_ROOT, ARGS, data_loading
 from core.losses import get_loss
 from core.models import pointnet
 from core.tf_utils import MyModelCheckpoint, output_model, load_saved_model, generate_predictions
-from core.viz_utils import raster_plot
+from core.utils import raster_plot
 
 matplotlib.rc_file_defaults()
 
@@ -65,9 +65,9 @@ def main():
     parser.add_argument("--test",action="store_true",help="run minimal functionality for testing")
     parser.parse_args(namespace=ARGS)
 
-
     MODEL_DIR = MODEL_PATH.parent
     EVAL_DIR = MODEL_DIR.joinpath("evaluation")
+    DATASET_DIR = DATA_DIR.joinpath("generated/"+ARGS.dsname)
     os.makedirs(EVAL_DIR, exist_ok=True)
 
     # load original params into ARGS object
@@ -87,7 +87,7 @@ def main():
 
     model = load_saved_model(MODEL_PATH.as_posix(), ARGS)
 
-    test_gen = data_loading.get_test_gen()
+    test_gen = data_loading.get_test_gen(DATASET_DIR, ARGS.regions, val_split=0.1, test_split=0.1)
     test_gen.summary()
 
     test_gen.evaluate_model(model, EVAL_DIR)
