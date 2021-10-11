@@ -99,14 +99,14 @@ modelname = ARGS.name + now.strftime("-%y%m%d-%H%M%S")
 MODEL_DIR = REPO_ROOT.joinpath("models/"+modelname)
 os.makedirs(MODEL_DIR, exist_ok=False)
 MODEL_PATH = MODEL_DIR.joinpath("model_" + ARGS.name + ".tf")
-
-with open(MODEL_DIR.joinpath("params.json"), "w") as f:
-    json.dump(vars(ARGS), f, indent=2)
-
 DATASET_DIR = DATA_DIR.joinpath("generated/"+ARGS.dsname)
 if ARGS.regions == "ALL":
     regions = glob.glob(os.path.join(DATASET_DIR.as_posix(), "*"))
     ARGS.regions = [PurePath(r).stem for r in regions]
+
+with open(MODEL_DIR.joinpath("params.json"), "w") as f:
+    json.dump(vars(ARGS), f, indent=2)
+
 
 """
 load data
@@ -178,17 +178,17 @@ if not ARGS.ragged:
             traceback.print_exc(file=f)
         raise e
 
-    val_gen.evaluate_model(model, MODEL_DIR.joinpath())
+    # evaluate on validation set
+    VAL_DIR = MODEL_DIR.joinpath("results_val")
+    val_gen.evaluate_model(model, VAL_DIR)
 
-
-    os.makedirs(os.path.join(MODEL_DIR, "training"))
-
-    # save validation loss
-    with open(MODEL_DIR.joinpath("training/validation_results"), "w") as f:
+    # save training data
+    os.makedirs(MODEL_DIR.joinpath("training"))
+    with open(MODEL_DIR.joinpath("training/stats.json"), "w") as f:
         val_results = {
             "best_val_loss": callback_dict["modelcheckpoint"].best_val_loss()
         }
-        json.dump(val_results, f)
+        json.dump(val_results, f, indent=2)
     # save metric plots
     for k in H.history.keys():
         if not k.startswith("val_"):
@@ -272,8 +272,8 @@ else:
 
         print("  Time taken: %.2fs" % (time.perf_counter() - start_time))
 
-train_gen.close_file()
-val_gen.close_file()
+del train_gen
+del val_gen
 
 
 """

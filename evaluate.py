@@ -26,10 +26,20 @@ from tensorflow.keras.optimizers import Adam
 from core import DATA_DIR, REPO_ROOT, ARGS, data_loading
 from core.losses import get_loss
 from core.models import pointnet
-from core.tf_utils import MyModelCheckpoint, output_model, load_saved_model, generate_predictions
-from core.utils import raster_plot
+from core.tf_utils import MyModelCheckpoint, output_model, load_saved_model
+from core.utils import raster_plot, glob_modeldir
 
 matplotlib.rc_file_defaults()
+
+def parse_eval_args():
+    """
+    Parse arguments
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--name",required=True,help="name of model to run, with possible timestamp in front")
+    parser.add_argument("--test",action="store_true",help="run minimal functionality for testing")
+    parser.parse_args(namespace=ARGS)
+
 
 def errors_plot(pred, y, results_dir):
     x_w = np.empty(pred.shape)
@@ -57,18 +67,8 @@ def count_errors(pred, y):
 
 
 def main():
-    """
-    Parse arguments
-    """
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--name",required=True,help="name of model to run, with possible timestamp in front")
-    parser.add_argument("--test",action="store_true",help="run minimal functionality for testing")
-    parser.parse_args(namespace=ARGS)
-
-    MODEL_DIR = MODEL_PATH.parent
-    EVAL_DIR = MODEL_DIR.joinpath("evaluation")
-    DATASET_DIR = DATA_DIR.joinpath("generated/"+ARGS.dsname)
-    os.makedirs(EVAL_DIR, exist_ok=True)
+    MODEL_DIR = glob_modeldir(ARGS.name)
+    MODEL_PATH = MODEL_DIR.joinpath("model_"+ARGS.name+".tf")
 
     # load original params into ARGS object
     params_file = MODEL_DIR.joinpath("params.json")
@@ -80,6 +80,10 @@ def main():
         setattr(ARGS, k, v)
 
     pprint(vars(ARGS))
+
+    EVAL_DIR = MODEL_DIR.joinpath("results_test")
+    DATASET_DIR = DATA_DIR.joinpath("generated/"+ARGS.dsname)
+    os.makedirs(EVAL_DIR, exist_ok=True)
 
     """
     Evaluation
@@ -115,4 +119,5 @@ def main():
 
 
 if __name__ == "__main__":
+    parse_eval_args()
     main()

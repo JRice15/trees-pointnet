@@ -64,6 +64,11 @@ class LidarPatchGen(keras.utils.Sequence):
         self.random = np.random.default_rng(seed=44)
 
     def init_data(self):
+        self.nattributes = 3 + (1 if self.use_ndvi else 0)
+        self.npoints = ARGS.npoints
+        self.z_max = 50 # for normalization
+
+        # get max gt trees
         maxtrees = 0
         for file in self.files.values():
             keys = file["gt"].keys()
@@ -72,11 +77,16 @@ class LidarPatchGen(keras.utils.Sequence):
                 max([file["gt/"+k].shape[0] for k in keys])
             )
         self.max_trees = maxtrees
-        self.nattributes = 3 + (1 if self.use_ndvi else 0)
-        self.npoints = ARGS.npoints
-        self.z_max = 50 # for normalization
+
+        # filter patch ids
+        orig_num_ids = len(self.patch_ids)
+        self.patch_ids = np.array([
+            i for i in self.patch_ids
+            if self.files[i[0]]["/lidar/"+i[1]].shape[0] >= self.npoints
+        ])
 
         self.num_ids = len(self.patch_ids)
+        self.num_filtered_ids = orig_num_ids - self.num_ids
         if ARGS.test:
             self.num_ids = 2
         # sort for reproducibility
@@ -242,7 +252,7 @@ class LidarPatchGen(keras.utils.Sequence):
         for filename in self.filenames:
             print(" ", filename)
         print(" ", self.num_ids, "patches, in", len(self), "batches, batchsize", self.batch_size)
-        print(" ", self.npoints, "points per patch.")
+        print(" ", self.npoints, "points per patch.", self.num_filtered_ids, "patches dropped for having too few lidar points")
         try:
             print("  xbatch shape:", self._x_batch.shape)
             print("  ybatch shape:", self._y_batch.shape)
@@ -279,13 +289,14 @@ class LidarPatchGen(keras.utils.Sequence):
         """
         generate predictions
         """
+        self.sorted()
         x, y = self.load_all()
         patch_ids = np.copy(self.patch_ids)
         y = np.squeeze(y.numpy())
         pred = np.squeeze(model.predict(x))
         x = np.squeeze(x.numpy())
 
-        assert len(pred) == len(patch_ids)
+        assert len(pred) == len(patch_ids), "{} {}".format(pred.shape, patch_ids.shape)
         np.savez(outdir.joinpath("predictions.npz").as_posix(), pred=pred, patch_ids=patch_ids)
 
         # save raw sample prediction
@@ -304,13 +315,14 @@ class LidarPatchGen(keras.utils.Sequence):
             print("Generating visualizations...")
             VIS_DIR = outdir.joinpath("visualizations")
             os.makedirs(VIS_DIR, exist_ok=True)
-            # grab random 10 examples
 
-            for i in range(0, 10*5, 5):
+            # grab random 10 examples
+            for i in range(0, self.num_ids, self.num_ids//10):
                 x_i = x[i]
                 y_i = y[i]
                 pred_i = pred[i]
-                patchname = patch_ids[i]
+                patch_id = patch_ids[i]
+                patchname = "_".join(patch_id)
                 ylocs = y_i[y_i[...,2] == 1][...,:2]
 
                 gt_ntrees = len(ylocs)
@@ -344,7 +356,7 @@ class LidarPatchGen(keras.utils.Sequence):
                 #     filename=VIS_DIR.joinpath("{}_pred_topk".format(patchname)), 
                 #     mode="sum", mark=ylocs, zero_one_bounds=True)
 
-                naip = self.get_naip(patchname)
+                naip = self.get_naip(patch_id)
                 plt.imshow(naip[...,:3]) # only use RGB
                 plt.colorbar()
                 plt.tight_layout()

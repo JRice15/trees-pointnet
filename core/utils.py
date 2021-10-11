@@ -78,12 +78,14 @@ def glob_modeldir(modelname):
         print("Defaulting to the most recent:")
         # all the names begin with a date/time string, so sorting gives order by time
         matching_models.sort()
-        model_dir = PurePath(matching_models[-1])
-        print(" ", model_dir)
+        model_path = PurePath(matching_models[-1])
     elif len(matching_models) == 0:
         print("No matching models!")
         exit()
     else:
-        model_dir = PurePath(matching_models[0])
+        model_path = PurePath(matching_models[0])
+
+    model_dir = model_path.parent
+    print(" ", model_dir)
 
     return model_dir

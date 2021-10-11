@@ -42,32 +42,33 @@ for region_file in regions:
 
     plt.scatter(grid_x, grid_y)
     plt.title("Patch locations")
-    plt.savefig(outdir.joinpath("patch_locations").as_posix)
+    plt.savefig(outdir.joinpath("patch_locations").as_posix())
     plt.show()
+
+    print(np.diff(np.sort(np.unique(grid_x))))
 
     exit()
 
-    fig, axlist = plt.subplots(2,2,figsize=(12,9))
-    for i,fname in enumerate(("train", "test")):
-        for j,kind in enumerate(("lidar", "gt")):
-            ax = axlist[i][j]
-            plt.sca(ax)
+    fig, axlist = plt.subplots(1,2,figsize=(12,9))
+    for i,kind in enumerate(("lidar", "gt")):
+        ax = axlist[i]
+        plt.sca(ax)
 
-            full_lens = []
-            with tables.open_file("../data/{}_patches.h5".format(fname), "r") as train_fp:
-                for y in range(ROWS):
-                    full_lens.append([])
-                    for x in range(COLS):
-                        try:
-                            num = train_fp.get_node("/{}/patch{}_{}".format(kind,x,y)).shape[0]
-                        except:
-                            num = 0
-                        full_lens[-1].append(num)
+        full_lens = []
+        with tables.open_file(region_file.as_posix(), "r") as fp:
+            for y in range(ROWS):
+                full_lens.append([])
+                for x in range(COLS):
+                    try:
+                        num = train_fp.get_node("/{}/patch{}_{}".format(kind,x,y)).shape[0]
+                    except:
+                        num = 0
+                    full_lens[-1].append(num)
 
-            x, y = np.meshgrid(grid_x, grid_y, indexing='xy')
-            plt.pcolormesh(x, y, full_lens, shading='auto')
-            plt.colorbar()
-            plt.title("{} {}".format(fname, kind))
+        x, y = np.meshgrid(grid_x, grid_y, indexing='xy')
+        plt.pcolormesh(x, y, full_lens, shading='auto')
+        plt.colorbar()
+        plt.title("{} {}".format(fname, kind))
 
     plt.savefig("output/patches_raster.png", dpi=200)
     plt.close()
