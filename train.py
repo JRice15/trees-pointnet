@@ -101,7 +101,7 @@ os.makedirs(MODEL_DIR, exist_ok=False)
 MODEL_PATH = MODEL_DIR.joinpath("model_" + ARGS.name + ".tf")
 DATASET_DIR = DATA_DIR.joinpath("generated/"+ARGS.dsname)
 if ARGS.regions == "ALL":
-    regions = glob.glob(os.path.join(DATASET_DIR.as_posix(), "*"))
+    regions = glob.glob(os.path.join(DATASET_DIR.as_posix(), "*.h5"))
     ARGS.regions = [PurePath(r).stem for r in regions]
 
 with open(MODEL_DIR.joinpath("params.json"), "w") as f:
