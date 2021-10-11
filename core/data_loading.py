@@ -284,6 +284,7 @@ class LidarPatchGen(keras.utils.Sequence):
             model: Keras Model to predict with
             outdir: pathlib.PurePath to save output to
         """
+        os.makedirs(outdir, exist_ok=True)
 
         """
         generate predictions
