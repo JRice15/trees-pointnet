@@ -335,7 +335,7 @@ class LidarPatchGen(keras.utils.Sequence):
                     mark=ylocs, zero_one_bounds=True)
                 
                 # lidar ndvi
-                if ARGS.ndvi:
+                if self.use_ndvi:
                     x_ndvi = x_i[...,3]
                     raster_plot(x_locs, gaussian_sigma=ARGS.mmd_sigma, weights=x_ndvi, mode="max",
                         filename=VIS_DIR.joinpath("{}_lidar_ndvi".format(patchname)), 

@@ -44,12 +44,12 @@ requiredgrp = parser.add_argument_group("required")
 requiredgrp.add_argument("--name",required=True,help="name to save this model under or load")
 requiredgrp.add_argument("--mode",required=True,help="training mode, which determines which output flow and loss target to use",
     choices=valid_modes)
-requiredgrp.add_argument("--dsname",required=True,help="name of generated dataset")
 
 # main optional
 optionalgrp = parser.add_argument_group("optional")
 optionalgrp.add_argument("--ragged",action="store_true")
 optionalgrp.add_argument("--regions",default="ALL",nargs="+",help="list of region names, defaults to all available")
+optionalgrp.add_argument("--dsname",help="name of generated dataset to use (required if multiple exist)")
 optionalgrp.add_argument("-h", "--help", action="help", help="show this message and exit")
 
 # training hyperparameters
@@ -98,12 +98,23 @@ now = datetime.datetime.now()
 modelname = ARGS.name + now.strftime("-%y%m%d-%H%M%S")
 MODEL_DIR = REPO_ROOT.joinpath("models/"+modelname)
 os.makedirs(MODEL_DIR, exist_ok=False)
-MODEL_PATH = MODEL_DIR.joinpath("model_" + ARGS.name + ".tf")
+MODEL_PATH = MODEL_DIR.joinpath("model.tf")
+
+if ARGS.dsname is None:
+    existing_datasets = [i for i in os.listdir(DATA_DIR.joinpath("generated")) 
+                        if os.path.isdir(DATA_DIR.joinpath("generated").joinpath(i))]
+    if len(existing_datasets) > 1:
+        raise ValueError("Multiple datasets exist in `data/generated`. Specify which with the --dsname argument")
+    elif len(existing_datasets) == 0:
+        raise ValueError("No dataset exists in `data/generated`")
+    ARGS.dsname = existing_datasets[0]
+
 DATASET_DIR = DATA_DIR.joinpath("generated/"+ARGS.dsname)
 if ARGS.regions == "ALL":
     regions = glob.glob(os.path.join(DATASET_DIR.as_posix(), "*.h5"))
     ARGS.regions = [PurePath(r).stem for r in regions]
 
+# save arguments to params file
 with open(MODEL_DIR.joinpath("params.json"), "w") as f:
     json.dump(vars(ARGS), f, indent=2)
 

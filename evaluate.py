@@ -67,7 +67,7 @@ def count_errors(pred, y):
 
 def main():
     MODEL_DIR = glob_modeldir(ARGS.name)
-    MODEL_PATH = MODEL_DIR.joinpath("model_"+ARGS.name+".tf")
+    MODEL_PATH = MODEL_DIR.joinpath("model.tf")
 
     # load original params into ARGS object
     params_file = MODEL_DIR.joinpath("params.json")

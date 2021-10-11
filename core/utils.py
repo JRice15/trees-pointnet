@@ -71,7 +71,7 @@ def raster_plot(pts, filename, gaussian_sigma, weights=None, title=None, clip=No
 def glob_modeldir(modelname):
     allmodels_dir = REPO_ROOT.joinpath("models/")
 
-    matching_models = glob.glob(os.path.join(allmodels_dir.as_posix(), modelname+"*", "model_*.tf"))
+    matching_models = glob.glob(os.path.join(allmodels_dir.as_posix(), modelname+"*", "model.tf"))
     if len(matching_models) > 1:
         print("Multiple models match 'name' argument:")
         print(" ", matching_models)
