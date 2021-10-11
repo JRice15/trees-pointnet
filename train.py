@@ -177,7 +177,16 @@ if not ARGS.ragged:
         with open(MODEL_DIR.joinpath("training_failed.txt"), "w") as f:
             traceback.print_exc(file=f)
         raise e
+    
+    if ARGS.test:
+        print("Exiting, test mode")
+        exit()
 
+    # initialize val gen with batchsize of 1
+    val_gen.batch_size = 1
+    val_gen.init_data()
+    val_gen.init_rng()
+    val_gen.summary()
     # evaluate on validation set
     VAL_DIR = MODEL_DIR.joinpath("results_val")
     val_gen.evaluate_model(model, VAL_DIR)

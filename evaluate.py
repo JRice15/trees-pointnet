@@ -37,7 +37,6 @@ def parse_eval_args():
     """
     parser = argparse.ArgumentParser()
     parser.add_argument("--name",required=True,help="name of model to run, with possible timestamp in front")
-    parser.add_argument("--test",action="store_true",help="run minimal functionality for testing")
     parser.parse_args(namespace=ARGS)
 
 
@@ -78,6 +77,7 @@ def main():
     params.pop("test")
     for k,v in params.items():
         setattr(ARGS, k, v)
+    ARGS.test = False
 
     pprint(vars(ARGS))
 

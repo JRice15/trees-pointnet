@@ -55,6 +55,9 @@ class LidarPatchGen(keras.utils.Sequence):
         self.y_counts_only = False
         if ARGS.mode == "count":
             self.y_counts_only = True
+        self.nattributes = 3 + (1 if self.use_ndvi else 0)
+        self.npoints = ARGS.npoints
+        self.z_max = 50 # for normalization
         self.init_rng()
         self.init_data()
         self.batch_time = 0
@@ -64,10 +67,6 @@ class LidarPatchGen(keras.utils.Sequence):
         self.random = np.random.default_rng(seed=44)
 
     def init_data(self):
-        self.nattributes = 3 + (1 if self.use_ndvi else 0)
-        self.npoints = ARGS.npoints
-        self.z_max = 50 # for normalization
-
         # get max gt trees
         maxtrees = 0
         for file in self.files.values():
