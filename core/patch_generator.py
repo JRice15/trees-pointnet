@@ -16,6 +16,7 @@ from tensorflow.keras import layers
 
 from core import ARGS, REPO_ROOT
 from core.utils import raster_plot
+from core.pts_to_gpkg import make_gt_gpkg, make_pred_gpkg
 
 
 class LidarPatchGen(keras.utils.Sequence):
@@ -44,13 +45,14 @@ class LidarPatchGen(keras.utils.Sequence):
             ragged: bool
         """
         self.name = name
+        self.dsname = ARGS.dsname
         self.batch_size = ARGS.batchsize if batchsize is None else batchsize
         self.use_ndvi = ARGS.ndvi
         self.patch_ids = np.array(patch_ids)
         self.dataset_dir = dataset_dir
-        self.filenames = list(set([i[0] for i in self.patch_ids]))
+        self.regions = list(set([i[0] for i in self.patch_ids]))
         self.files = {
-            f:h5py.File(dataset_dir.joinpath(f+".h5").as_posix(), "r") for f in self.filenames
+            f:h5py.File(dataset_dir.joinpath(f+".h5").as_posix(), "r") for f in self.regions
         }
         self.y_counts_only = False
         if ARGS.mode == "count":
@@ -83,11 +85,39 @@ class LidarPatchGen(keras.utils.Sequence):
             i for i in self.patch_ids
             if self.files[i[0]]["/lidar/"+i[1]].shape[0] >= self.npoints
         ])
-
         self.num_ids = len(self.patch_ids)
         self.num_filtered_ids = orig_num_ids - self.num_ids
         if ARGS.test:
             self.num_ids = 2
+
+        # get normalization data
+        self.norm_data = {}
+        for region,file in self.files.items():
+            min_xyz = []
+            max_xyz = []
+            # x
+            x = file["grid"][:,[0,2]]
+            min_xyz.append(x.min(axis=-1))
+            max_xyz.append(x.max(axis=-1))
+            # y
+            y = file["grid"][:,[1,3]]
+            min_xyz.append(y.min(axis=-1))
+            max_xyz.append(y.max(axis=-1))
+            # z, varies from 0 to custom z_max
+            gridlen = len(x)
+            min_xyz.append(np.zeros(gridlen))
+            max_xyz.append(np.ones(gridlen) * self.z_max)
+            # ndvi, varies from -1 to 1
+            if self.use_ndvi:
+                min_xyz.append(-np.ones(gridlen))
+                max_xyz.append(np.ones(gridlen))
+            min_xyz = np.array(min_xyz).T
+            max_xyz = np.array(max_xyz).T
+            self.norm_data[region] = {
+                "min_xyz": min_xyz,
+                "max_xyz": max_xyz
+            }
+
         # sort for reproducibility
         self.sorted()
         self.random.shuffle(self.patch_ids)
@@ -112,12 +142,13 @@ class LidarPatchGen(keras.utils.Sequence):
         idx = idx * self.batch_size
         end_idx = idx + self.batch_size
         self._y_batch.fill(0)
-        for i,(filename,patch) in enumerate(self.patch_ids[idx:end_idx]):
-            file = self.files[filename]
+        for i,(region,patchname) in enumerate(self.patch_ids[idx:end_idx]):
+            patch_num = int(patchname[5:]) # remove "patch" prefix from "patchNNN" to get patch number
+            file = self.files[region]
             # select <npoints> evenly spaced points randomly from batch.
             #   this is done because indices must be in ascending order, and indexing with an arbitrary array is 
             #   orders of magnitude slower than a simple slice
-            x_node = file['lidar/'+patch]
+            x_node = file['lidar/'+patchname]
             num_x_pts = x_node.shape[0]
             step = num_x_pts // self.npoints
             leftover = num_x_pts % self.npoints
@@ -127,26 +158,29 @@ class LidarPatchGen(keras.utils.Sequence):
                 rand_offset = self.random.choice(leftover)
             top_offset = leftover - rand_offset
             # get data from file
-            self._x_batch[i] = file['lidar/'+patch][rand_offset:num_x_pts-top_offset:step, :self.nattributes]
+            self._x_batch[i] = file['lidar/'+patchname][rand_offset:num_x_pts-top_offset:step, :self.nattributes]
 
             # normalize data
             # x and y
-            min_xy = np.amin(self._x_batch[i,:,:2], axis=0)
-            max_xy = np.amax(self._x_batch[i,:,:2], axis=0)
-            # z channel
-            min_xyz = np.append(min_xy, 0)
-            max_xyz = np.append(max_xy, self.z_max)
-            if self.use_ndvi:
-                # ndvi channel varies from -1 to 1
-                min_xyz = np.append(min_xyz, -1)
-                max_xyz = np.append(max_xyz, 1)
+            # min_xy = np.amin(self._x_batch[i,:,:2], axis=0)
+            # max_xy = np.amax(self._x_batch[i,:,:2], axis=0)
+            # # z channel
+            # min_xyz = np.append(min_xy, 0)
+            # max_xyz = np.append(max_xy, self.z_max)
+            # if self.use_ndvi:
+            #     # ndvi channel varies from -1 to 1
+            #     min_xyz = np.append(min_xyz, -1)
+            #     max_xyz = np.append(max_xyz, 1)
+            min_xyz = self.norm_data[region]["min_xyz"][patch_num]
+            max_xyz = self.norm_data[region]["max_xyz"][patch_num]
             self._x_batch[i] = (self._x_batch[i] - min_xyz) / (max_xyz - min_xyz)
             
             # select all gt y points, or just y count
             if self.y_counts_only:
-                self._y_batch[i] = file['gt/'+patch].shape[0]
+                self._y_batch[i] = file['gt/'+patchname].shape[0]
             else:
-                ydata = file['gt/'+patch][:]
+                min_xy, max_xy = min_xyz[:2], max_xyz[:2]
+                ydata = file['gt/'+patchname][:]
                 self._y_batch[i,:ydata.shape[0],2] = 1
                 self._y_batch[i,ydata.shape[0]:,2] = 0
                 self._y_batch[i,:ydata.shape[0],:2] = (ydata - min_xy) / (max_xy - min_xy)
@@ -247,9 +281,7 @@ class LidarPatchGen(keras.utils.Sequence):
         return x.shape, y.shape
 
     def summary(self):
-        print("Dataset", self.name, "from files:")
-        for filename in self.filenames:
-            print(" ", filename)
+        print("LidarPatchGen '{}' from dataset '{}' regions:".format(self.name, self.dsname),  ", ".join(self.regions))
         print(" ", self.num_ids, "patches, in", len(self), "batches, batchsize", self.batch_size)
         print(" ", self.npoints, "points per patch.", self.num_filtered_ids, "patches dropped for having too few lidar points")
         try:
@@ -271,19 +303,20 @@ class LidarPatchGen(keras.utils.Sequence):
         self.patch_ids = ids[sorting]
 
     def __del__(self):
-        try:
-            for file in self.files.values():
+        for file in self.files.values():
+            try:
                 file.close()
-        except:
-            pass # already closed, that's fine
+            except:
+                pass # already closed, that's fine
 
-    def evaluate_model(self, model, outdir):
+    def evaluate_model(self, model, model_dir):
         """
         generate predictions from a model on a LidarPatchGen dataset
         args:
             model: Keras Model to predict with
             outdir: pathlib.PurePath to save output to
         """
+        outdir = model_dir.joinpath("results_"+self.name)
         os.makedirs(outdir, exist_ok=True)
 
         """
@@ -296,9 +329,6 @@ class LidarPatchGen(keras.utils.Sequence):
         pred = np.squeeze(model.predict(x))
         x = np.squeeze(x.numpy())
 
-        assert len(pred) == len(patch_ids), "{} {}".format(pred.shape, patch_ids.shape)
-        np.savez(outdir.joinpath("predictions.npz").as_posix(), pred=pred, patch_ids=patch_ids)
-
         # save raw sample prediction
         with open(outdir.joinpath("sample_predictions.txt"), "w") as f:
             f.write("First 5 predictions, ground truths:\n")
@@ -307,6 +337,21 @@ class LidarPatchGen(keras.utils.Sequence):
                 f.write(str(pred[i])+"\n")
                 f.write("gt {}:\n".format(i))
                 f.write(str(y[i])+"\n")
+
+        # save predictions
+        assert len(pred) == len(patch_ids), "{} {}".format(pred.shape, patch_ids.shape)
+        # denorm_pred = np.copy(pred)
+        # for i,(region,patchname) in patch_ids:
+        #     patch_num = int(patchname[5:])
+        #     min_xy = self.norm_data[region]["min_xyz"][patch_num][:2]
+        #     max_xy = self.norm_data[region]["max_xyz"][patch_num][:2]
+        #     pred_xy = pred[i,:2]
+        #     denorm_pred[i,:2] = (pred_xy * (max_xy - min_xy)) + min_xy
+        rawpred_file = outdir.joinpath("predictions.npz")
+        np.savez(rawpred_file.as_posix(), pred=pred, patch_ids=patch_ids)
+
+        make_gt_gpkg(self)
+        make_pred_gpkg(self, model_dir, rawpred_file, outdir.joinpath("pred_gpkgs"))
 
         """
         data visualizations

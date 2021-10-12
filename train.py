@@ -20,10 +20,11 @@ from tensorflow.keras import callbacks, layers
 from tensorflow.keras import optimizers
 import matplotlib.pyplot as plt
 
-from core import DATA_DIR, REPO_ROOT, ARGS, data_loading
+from core import DATA_DIR, REPO_ROOT, ARGS, patch_generator
 from core.losses import get_loss
 from core.models import pointnet
 from core.tf_utils import MyModelCheckpoint, output_model
+from core.utils import get_dataset_dir
 
 """
 parse args
@@ -100,16 +101,8 @@ MODEL_DIR = REPO_ROOT.joinpath("models/"+modelname)
 os.makedirs(MODEL_DIR, exist_ok=False)
 MODEL_PATH = MODEL_DIR.joinpath("model.tf")
 
-if ARGS.dsname is None:
-    existing_datasets = [i for i in os.listdir(DATA_DIR.joinpath("generated")) 
-                        if os.path.isdir(DATA_DIR.joinpath("generated").joinpath(i))]
-    if len(existing_datasets) > 1:
-        raise ValueError("Multiple datasets exist in `data/generated`. Specify which with the --dsname argument")
-    elif len(existing_datasets) == 0:
-        raise ValueError("No dataset exists in `data/generated`")
-    ARGS.dsname = existing_datasets[0]
+DATASET_DIR, ARGS.dsname = get_dataset_dir(ARGS.dsname)
 
-DATASET_DIR = DATA_DIR.joinpath("generated/"+ARGS.dsname)
 if ARGS.regions == "ALL":
     regions = glob.glob(os.path.join(DATASET_DIR.as_posix(), "*.h5"))
     ARGS.regions = [PurePath(r).stem for r in regions]
@@ -123,7 +116,7 @@ with open(MODEL_DIR.joinpath("params.json"), "w") as f:
 load data
 """
 
-train_gen, val_gen = data_loading.get_train_val_gens(DATASET_DIR, ARGS.regions, val_split=0.1, test_split=0.1)
+train_gen, val_gen = patch_generator.get_train_val_gens(DATASET_DIR, ARGS.regions, val_split=0.1, test_split=0.1)
 train_gen.summary()
 val_gen.summary()
 inpt_shape = train_gen.get_batch_shape()[0][1:]
@@ -190,7 +183,7 @@ if not ARGS.ragged:
         raise e
     
     if ARGS.test:
-        print("Exiting, test mode")
+        print("Exiting, --test flag supplied")
         exit()
 
     # initialize val gen with batchsize of 1
@@ -199,8 +192,7 @@ if not ARGS.ragged:
     val_gen.init_rng()
     val_gen.summary()
     # evaluate on validation set
-    VAL_DIR = MODEL_DIR.joinpath("results_val")
-    val_gen.evaluate_model(model, VAL_DIR)
+    val_gen.evaluate_model(model, MODEL_DIR)
 
     # save training data
     os.makedirs(MODEL_DIR.joinpath("training"))

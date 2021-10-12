@@ -256,11 +256,11 @@ def pointnet(inpt_shape, output_channels, reg_weight=0.001):
 
 
 if __name__ == "__main__":
-    from core import data_loading
+    from core import patch_generator
 
     model = pointnet(None, 3, 1)
 
-    traingen, _, _ = data_loading.get_train_val_gen(ARGS.mode, ARGS.batchsize)
+    traingen, _, _ = patch_generator.get_train_val_gen(ARGS.mode, ARGS.batchsize)
 
     x, y = traingen[3]
 

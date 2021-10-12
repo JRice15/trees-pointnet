@@ -23,7 +23,7 @@ from tensorflow.keras import backend as K
 from tensorflow.keras import callbacks, layers
 from tensorflow.keras.optimizers import Adam
 
-from core import DATA_DIR, REPO_ROOT, ARGS, data_loading
+from core import DATA_DIR, REPO_ROOT, ARGS, patch_generator
 from core.losses import get_loss
 from core.models import pointnet
 from core.tf_utils import MyModelCheckpoint, output_model, load_saved_model
@@ -41,6 +41,7 @@ def parse_eval_args():
 
 
 def errors_plot(pred, y, results_dir):
+    """error plot for predicted vs gt counts"""
     x_w = np.empty(pred.shape)
     x_w.fill(1/pred.shape[0])
     y_w = np.empty(y.shape)
@@ -81,9 +82,7 @@ def main():
 
     pprint(vars(ARGS))
 
-    EVAL_DIR = MODEL_DIR.joinpath("results_test")
     DATASET_DIR = DATA_DIR.joinpath("generated/"+ARGS.dsname)
-    os.makedirs(EVAL_DIR, exist_ok=True)
 
     """
     Evaluation
@@ -91,10 +90,10 @@ def main():
 
     model = load_saved_model(MODEL_PATH.as_posix(), ARGS)
 
-    test_gen = data_loading.get_test_gen(DATASET_DIR, ARGS.regions, val_split=0.1, test_split=0.1)
+    test_gen = patch_generator.get_test_gen(DATASET_DIR, ARGS.regions, val_split=0.1, test_split=0.1)
     test_gen.summary()
 
-    test_gen.evaluate_model(model, EVAL_DIR)
+    test_gen.evaluate_model(model, MODEL_DIR)
 
     # """
     # Mode-specific evaluations
