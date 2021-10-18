@@ -5,11 +5,13 @@ import json
 import argparse
 import glob
 import traceback
+import shutil
 from pprint import pprint
 from pathlib import PurePath
 
 import geopandas as gpd
 import h5py
+import ray
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -72,19 +74,40 @@ def make_gt_gpkg(patchgen):
 
 def estimate_pred_thresh(patchgen, modeldir, step=0.05):
     print("Estimating optimal prediction threshold")
+    ray.init()
     thresholds = np.arange(0.2, 1, step)
     results = []
     for thresh in thresholds:
-        r = evaluate_preds_to_gpkg(patchgen, modeldir, threshold=thresh)
-        results.append(r["f1"])
-        print(" ", thresh, "f1:", r["f1"])
+        r = test_thresh.remote(patchgen.name, patchgen.dsname, patchgen.norm_data, modeldir, threshold=thresh)
+        results.append(r)
+    results = ray.get(results)
+    results = [i["f1"] for i in results]
+    best_f1 = np.max(results)
     best = thresholds[np.argmax(results)]
+    print("  best threshold:", best, "f1:", best_f1)
     with open(modeldir.joinpath("results_{}/optimal_threshold.json".format(patchgen.name)), "w") as f:
         json.dump(best, f)
+    outdir = modeldir.joinpath("results_"+patchgen.name+"/temp_pred_gpkgs")
+    shutil.rmtree(outdir.as_posix())
     return best
 
+@ray.remote
+def test_thresh(pg_name, pg_ds_name, pg_norm_data, *args, **kwargs):
+    """
+    Spin up one worker to test a threshold value
+    """
+    print("  testing threshold:", kwargs["threshold"])
+    # patch generator is not pickleable, so it can't be passed here. But we only need these few attributes from it
+    class dummy_patchgen:
+        name = pg_name
+        dsname = pg_ds_name
+        norm_data = pg_norm_data
+    out_subdir = "temp_pred_gpkgs/test_"+str(kwargs["threshold"])+"/"
+    output = evaluate_preds_to_gpkg(dummy_patchgen, *args, **kwargs, out_subdir=out_subdir)
+    return output
 
-def evaluate_preds_to_gpkg(patchgen, modeldir, resolution=50, threshold=0.6):
+def evaluate_preds_to_gpkg(patchgen, modeldir, resolution=50, threshold=0.6, 
+        save=False, out_subdir="pred_gpkgs"):
     """
     from prediction locations, guassian blur them on a grid, and find localmax points
     that are above threshold
@@ -94,7 +117,7 @@ def evaluate_preds_to_gpkg(patchgen, modeldir, resolution=50, threshold=0.6):
         threshold: min confidence to keep point
     """
     predfile = modeldir.joinpath("results_"+patchgen.name+"/predictions.npz")
-    outdir = modeldir.joinpath("results_"+patchgen.name+"/pred_gpkgs/")
+    outdir = modeldir.joinpath("results_"+patchgen.name+"/"+out_subdir)
     os.makedirs(outdir, exist_ok=True)
 
     regions_data = get_regions_data(patchgen.dsname)
@@ -114,6 +137,7 @@ def evaluate_preds_to_gpkg(patchgen, modeldir, resolution=50, threshold=0.6):
     patch_ids = npz["patch_ids"]
 
     all_results = []
+    successes = 0
     for region in regions_data:
         norm_data = patchgen.norm_data[region["name"]]
         for i in range(len(patch_ids)):
@@ -149,16 +173,17 @@ def evaluate_preds_to_gpkg(patchgen, modeldir, resolution=50, threshold=0.6):
                 make_gpkg(df, outfile)
                 gtfile = dataset_dir.joinpath("gt_gpkgs/{}_{}_gt.gpkg".format(patch_region, patchname)).as_posix()
                 results = pointmatch.main(gtfile, outfile)
+                successes += 1
             except Exception as e:
-                print("Error:")
-                traceback.print_exc()
+                # if not isinstance(e, AssertionError):
+                #     print("Error:")
+                #     traceback.print_exc()
                 results = {
                     "recall": 0,
                     "f1": 0,
                     "precision": 1,
                     "rmse": np.nan,
                 }
-            print(patch_region, patchname, results)
             all_results.append(results)
     
     accum_results = {}
@@ -168,5 +193,15 @@ def evaluate_preds_to_gpkg(patchgen, modeldir, resolution=50, threshold=0.6):
             accum_results[k] += r[k]
         accum_results[k] /= len(all_results)
     
+    if save:
+        resultsfile = modeldir.joinpath("results_"+patchgen.name+"/pointmatch_results.json")
+        output = {
+            "results": accum_results,
+            "pointmatch_success_rate": successes / len(all_results),
+            "threshold": threshold
+        }
+        with open(resultsfile.as_posix(), "w") as f:
+            json.dump(output, f, indent=2)
+
     return accum_results
 

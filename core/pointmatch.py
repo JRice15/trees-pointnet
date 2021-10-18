@@ -132,8 +132,6 @@ def main(gt_file, pred_file):
     # if args.test_crown:
     #     test_trees = read_pycrown(args.test_top, args.test_crown)
     # else:
-    print(gt_file)
-    print(pred_file)
     test_trees = read_test_trees(pred_file)
     ref_trees = read_trees(gt_file, test_trees.crs)
 

@@ -198,23 +198,22 @@ def main():
                                     val_batchsize=1)
     val_gen.summary()
     evaluate_model(val_gen, model, MODEL_DIR)
+    print("Evaluating with pointmatch")
     make_gt_gpkg(val_gen)
     thresh = estimate_pred_thresh(val_gen, MODEL_DIR)
-    results = evaluate_preds_to_gpkg(val_gen, MODEL_DIR, threshold=thresh)
+    results = evaluate_preds_to_gpkg(val_gen, MODEL_DIR, threshold=thresh, save=True)
     print("Validation pointmatch results:")
     pprint(results)
-    with open(MODEL_DIR.joinpath("results_validation/pointmatch_results.json"), "w") as f:
-        json.dump(results, f)
 
     test_gen = patch_generator.get_test_gen(DATASET_DIR, ARGS.regions, val_split=0.1, test_split=0.1)
     test_gen.summary()
     evaluate_model(test_gen, model, MODEL_DIR)
+    print("Evaluating with pointmatch")
     make_gt_gpkg(test_gen)
-    results = evaluate_preds_to_gpkg(test_gen, MODEL_DIR, threshold=thresh)
+    results = evaluate_preds_to_gpkg(test_gen, MODEL_DIR, threshold=thresh, save=True)
     print("Test pointmatch results:")
     pprint(results)
-    with open(MODEL_DIR.joinpath("results_test/pointmatch_results.json"), "w") as f:
-        json.dump(results, f)
+
 
 
 
