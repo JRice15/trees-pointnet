@@ -28,6 +28,7 @@ from core.losses import get_loss
 from core.models import pointnet
 from core.tf_utils import MyModelCheckpoint, output_model, load_saved_model
 from core.utils import raster_plot, glob_modeldir
+from core.pts_to_gpkg import estimate_pred_thresh, evaluate_preds_to_gpkg, make_gt_gpkg
 
 matplotlib.rc_file_defaults()
 
@@ -66,6 +67,109 @@ def count_errors(pred, y):
     return pred - y
 
 
+
+def evaluate_model(patchgen, model, model_dir):
+    """
+    generate predictions from a model on a LidarPatchGen dataset
+    args:
+        model: Keras Model to predict with
+        model_dir: pathlib.PurePath of model's output
+    """
+    outdir = model_dir.joinpath("results_"+patchgen.name)
+    os.makedirs(outdir, exist_ok=True)
+
+    """
+    generate predictions
+    """
+    print("Generating predictions")
+    patchgen.sorted()
+    x, y = patchgen.load_all()
+    x = np.squeeze(x.numpy())
+    y = np.squeeze(y.numpy())
+    patch_ids = np.copy(patchgen.patch_ids)
+    pred = np.squeeze(model.predict(x))
+
+    # save raw sample prediction
+    with open(outdir.joinpath("sample_predictions.txt"), "w") as f:
+        f.write("First 5 predictions, ground truths:\n")
+        for i in range(min(5, len(pred))):
+            f.write("pred {}:\n".format(i))
+            f.write(str(pred[i])+"\n")
+            f.write("gt {}:\n".format(i))
+            f.write(str(y[i])+"\n")
+
+    # save predictions
+    assert len(pred) == len(patch_ids), "{} {}".format(pred.shape, patch_ids.shape)
+    rawpred_file = outdir.joinpath("predictions.npz")
+    np.savez(rawpred_file.as_posix(), pred=pred, patch_ids=patch_ids)
+
+    """
+    data visualizations
+    """
+    if ARGS.mode in ["mmd", "pwtt", "pwmmd"]:
+        print("Generating visualizations...")
+        VIS_DIR = outdir.joinpath("visualizations")
+        os.makedirs(VIS_DIR, exist_ok=True)
+
+        # grab random 10 examples
+        patch_indexes = list(range(0, patchgen.num_ids, patchgen.num_ids//10))
+        for i in patch_indexes:
+            x_i = x[i]
+            y_i = y[i]
+            pred_i = pred[i]
+            patch_id = patch_ids[i]
+            patchname = "_".join(patch_id)
+            ylocs = y_i[y_i[...,2] == 1][...,:2]
+
+            gt_ntrees = len(ylocs)
+            x_locs = x_i[...,:2]
+            x_heights = x_i[...,2]
+
+            # lidar height
+            raster_plot(x_locs, gaussian_sigma=ARGS.mmd_sigma, weights=x_heights, mode="max",
+                filename=VIS_DIR.joinpath("{}_lidar_height".format(patchname)), 
+                mark=ylocs, zero_one_bounds=True)
+            
+            # lidar ndvi
+            if patchgen.use_ndvi:
+                x_ndvi = x_i[...,3]
+                raster_plot(x_locs, gaussian_sigma=ARGS.mmd_sigma, weights=x_ndvi, mode="max",
+                    filename=VIS_DIR.joinpath("{}_lidar_ndvi".format(patchname)), 
+                    mark=ylocs, zero_one_bounds=True)
+
+            # prediction raster
+            pred_locs = pred_i[...,:2]
+            pred_weights = pred_i[...,2]
+            raster_plot(pred_locs, gaussian_sigma=ARGS.mmd_sigma, weights=pred_weights, 
+                filename=VIS_DIR.joinpath("{}_pred".format(patchname)), 
+                mode="sum", mark=ylocs, zero_one_bounds=True)
+
+            naip = patchgen.get_naip(patch_id)
+            plt.imshow(naip[...,:3]) # only use RGB
+            plt.colorbar()
+            plt.tight_layout()
+            plt.savefig(VIS_DIR.joinpath(patchname+"_NAIP.png"))
+            plt.clf()
+            plt.close()
+
+    """
+    Evaluate Metrics
+    """
+    print("Evaluating metrics")
+
+    metric_vals = model.evaluate(patchgen)
+    results = {model.metrics_names[i]:v for i,v in enumerate(metric_vals)}
+
+    with open(outdir.joinpath("results.json"), "w") as f:
+        json.dump(results, f, indent=2)
+
+    print("\nResults on", patchgen.name, "dataset:")
+    for k,v in results.items():
+        print(k+":", v)
+
+
+
+
 def main():
     MODEL_DIR = glob_modeldir(ARGS.name)
     MODEL_PATH = MODEL_DIR.joinpath("model.tf")
@@ -90,30 +194,27 @@ def main():
 
     model = load_saved_model(MODEL_PATH.as_posix(), ARGS)
 
+    _, val_gen = patch_generator.get_train_val_gens(DATASET_DIR, ARGS.regions, val_split=0.1, test_split=0.1,
+                                    val_batchsize=1)
+    val_gen.summary()
+    evaluate_model(val_gen, model, MODEL_DIR)
+    make_gt_gpkg(val_gen)
+    thresh = estimate_pred_thresh(val_gen, MODEL_DIR)
+    results = evaluate_preds_to_gpkg(val_gen, MODEL_DIR, threshold=thresh)
+    print("Validation pointmatch results:")
+    pprint(results)
+    with open(MODEL_DIR.joinpath("results_validation/pointmatch_results.json"), "w") as f:
+        json.dump(results, f)
+
     test_gen = patch_generator.get_test_gen(DATASET_DIR, ARGS.regions, val_split=0.1, test_split=0.1)
     test_gen.summary()
-
-    test_gen.evaluate_model(model, MODEL_DIR)
-
-    # """
-    # Mode-specific evaluations
-    # """
-    # print("Evaluating errors")
-
-    # # error between target and prediction scalar labels
-    # if ARGS.mode in ["count"]:
-    #     errors_plot(pred, y, EVAL_DIR)
-
-    # # error histogram
-    # if ARGS.mode in ["count", "pwtt"]:
-    #     errors = count_errors(pred, y)
-
-    #     plt.hist(errors)
-    #     plt.title("Errors (pred - gt)")
-    #     plt.vlines(np.mean(errors), 0, plt.ylim()[1], label="mean", colors="black")
-    #     plt.legend()
-    #     plt.savefig(os.path.join(EVAL_DIR, "errors_hist.png"))
-    #     plt.close()
+    evaluate_model(test_gen, model, MODEL_DIR)
+    make_gt_gpkg(test_gen)
+    results = evaluate_preds_to_gpkg(test_gen, MODEL_DIR, threshold=thresh)
+    print("Test pointmatch results:")
+    pprint(results)
+    with open(MODEL_DIR.joinpath("results_test/pointmatch_results.json"), "w") as f:
+        json.dump(results, f)
 
 
 

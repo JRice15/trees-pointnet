@@ -4,6 +4,7 @@ import sys
 import json
 import argparse
 import glob
+import traceback
 from pprint import pprint
 from pathlib import PurePath
 
@@ -15,6 +16,7 @@ import pandas as pd
 
 from core import REPO_ROOT, DATA_DIR
 from core.utils import glob_modeldir, gaussian, gridify_pts, get_dataset_dir
+from core import pointmatch
 
 def get_regions_data(dsname):
     dataset_dir, dsname = get_dataset_dir(dsname)
@@ -31,7 +33,6 @@ def get_regions_data(dsname):
         {"ds": region_files[region],
          "meta": region_metas[region],
          "name": region,
-         "gt_outfile": region_files[region].parent.joinpath(region+"_gt.gpkg"),
         } for region in region_files.keys()
     ]
     return regions_data
@@ -51,25 +52,39 @@ def make_gpkg(df, filename):
 
 def make_gt_gpkg(patchgen):
     regions_data = get_regions_data(patchgen.dsname)
+    dataset_dir, dsname = get_dataset_dir(patchgen.dsname)
+    os.makedirs(dataset_dir.joinpath("gt_gpkgs"), exist_ok=True)
     for region in regions_data:
-        if not os.path.exists(region["gt_outfile"]):
-            Xs = np.array([])
-            Ys = np.array([])
-            with h5py.File(region["ds"], "r") as f:
-                patch_ids = [i for i in patchgen.patch_ids if i[0] == region["name"]]
-                for i,(region_name,patchname) in enumerate(patch_ids):
+        with h5py.File(region["ds"], "r") as f:
+            patch_ids = [i for i in patchgen.patch_ids if i[0] == region["name"]]
+            for i,(region_name,patchname) in enumerate(patch_ids):
+                outfile = dataset_dir.joinpath("gt_gpkgs/{}_{}_gt.gpkg".format(region_name, patchname))
+                if not os.path.exists(outfile):
                     pts = f["/gt/"+patchname][:,:2]
                     x = pts[:,0]
                     y = pts[:,1]
-                    Xs = np.concatenate([Xs, x])
-                    Ys = np.concatenate([Ys, y])
 
-            df = gpd.GeoDataFrame(geometry=gpd.points_from_xy(Xs, Ys), crs=region["meta"]["crs"])
+                    df = gpd.GeoDataFrame(geometry=gpd.points_from_xy(x, y), crs=region["meta"]["crs"])
 
-            make_gpkg(df, region["gt_outfile"].as_posix())
+                    make_gpkg(df, outfile.as_posix())
 
 
-def make_pred_gpkg(patchgen, modeldir, predfile, outdir, resolution=50, threshold=0.05):
+
+def estimate_pred_thresh(patchgen, modeldir, step=0.05):
+    print("Estimating optimal prediction threshold")
+    thresholds = np.arange(0.2, 1, step)
+    results = []
+    for thresh in thresholds:
+        r = evaluate_preds_to_gpkg(patchgen, modeldir, threshold=thresh)
+        results.append(r["f1"])
+        print(" ", thresh, "f1:", r["f1"])
+    best = thresholds[np.argmax(results)]
+    with open(modeldir.joinpath("results_{}/optimal_threshold.json".format(patchgen.name)), "w") as f:
+        json.dump(best, f)
+    return best
+
+
+def evaluate_preds_to_gpkg(patchgen, modeldir, resolution=50, threshold=0.6):
     """
     from prediction locations, guassian blur them on a grid, and find localmax points
     that are above threshold
@@ -78,9 +93,12 @@ def make_pred_gpkg(patchgen, modeldir, predfile, outdir, resolution=50, threshol
         resolution: width in "pixels" of the blur grid
         threshold: min confidence to keep point
     """
+    predfile = modeldir.joinpath("results_"+patchgen.name+"/predictions.npz")
+    outdir = modeldir.joinpath("results_"+patchgen.name+"/pred_gpkgs/")
     os.makedirs(outdir, exist_ok=True)
 
     regions_data = get_regions_data(patchgen.dsname)
+    dataset_dir, dsname = get_dataset_dir(patchgen.dsname)
 
     with open(modeldir.joinpath("params.json"), "r") as f:
         params = json.load(f)
@@ -95,10 +113,9 @@ def make_pred_gpkg(patchgen, modeldir, predfile, outdir, resolution=50, threshol
     pred = npz["pred"]
     patch_ids = npz["patch_ids"]
 
+    all_results = []
     for region in regions_data:
         norm_data = patchgen.norm_data[region["name"]]
-        x_coords = []
-        y_coords = []
         for i in range(len(patch_ids)):
             patch_region, patchname = patch_ids[i]
             patch_num = int(patchname[5:])
@@ -109,7 +126,7 @@ def make_pred_gpkg(patchgen, modeldir, predfile, outdir, resolution=50, threshol
             realgrid, gridcoords = gridify_pts((0,1,0,1), pred_i[:,:2], pred_i[:,2], 
                                         gaussian_sigma=sigma, mode="sum", 
                                         resolution=resolution)
-            grid = np.pad(realgrid, 1) # one row of zeros everywhere
+            grid = np.pad(realgrid, 1) # one row/col of zeros padding on all sides
             # mask of whether a pt is larger than all its neighbors
             localmax = (realgrid >= grid[2:,1:-1]) & (realgrid > grid[:-2,1:-1]) \
                         & (realgrid >= grid[1:-1,2:]) & (realgrid > grid[1:-1,:-2])
@@ -124,11 +141,32 @@ def make_pred_gpkg(patchgen, modeldir, predfile, outdir, resolution=50, threshol
             unnormed_coords = (pred_coords * (max_xy - min_xy)) + (min_xy)
             x = unnormed_coords[...,0]
             y = unnormed_coords[...,1]
-            x_coords = np.concatenate([x_coords, x])
-            y_coords = np.concatenate([y_coords, y])
         
-        df = gpd.GeoDataFrame(geometry=gpd.points_from_xy(x_coords, y_coords), crs=region["meta"]["crs"])
+            df = gpd.GeoDataFrame(geometry=gpd.points_from_xy(x, y), crs=region["meta"]["crs"])
 
-        make_gpkg(df, outdir.joinpath(region["name"]+"_pred.gpkg").as_posix())
-
+            try:
+                outfile = outdir.joinpath(patch_region+"_"+patchname+"_pred.gpkg").as_posix()
+                make_gpkg(df, outfile)
+                gtfile = dataset_dir.joinpath("gt_gpkgs/{}_{}_gt.gpkg".format(patch_region, patchname)).as_posix()
+                results = pointmatch.main(gtfile, outfile)
+            except Exception as e:
+                print("Error:")
+                traceback.print_exc()
+                results = {
+                    "recall": 0,
+                    "f1": 0,
+                    "precision": 1,
+                    "rmse": np.nan,
+                }
+            print(patch_region, patchname, results)
+            all_results.append(results)
+    
+    accum_results = {}
+    for k in all_results[0].keys():
+        accum_results[k] = 0
+        for r in all_results:
+            accum_results[k] += r[k]
+        accum_results[k] /= len(all_results)
+    
+    return accum_results
 

@@ -16,7 +16,6 @@ from tensorflow.keras import layers
 
 from core import ARGS, REPO_ROOT
 from core.utils import raster_plot
-from core.pts_to_gpkg import make_gt_gpkg, make_pred_gpkg
 
 
 class LidarPatchGen(keras.utils.Sequence):
@@ -309,121 +308,6 @@ class LidarPatchGen(keras.utils.Sequence):
             except:
                 pass # already closed, that's fine
 
-    def evaluate_model(self, model, model_dir):
-        """
-        generate predictions from a model on a LidarPatchGen dataset
-        args:
-            model: Keras Model to predict with
-            outdir: pathlib.PurePath to save output to
-        """
-        outdir = model_dir.joinpath("results_"+self.name)
-        os.makedirs(outdir, exist_ok=True)
-
-        """
-        generate predictions
-        """
-        self.sorted()
-        x, y = self.load_all()
-        patch_ids = np.copy(self.patch_ids)
-        y = np.squeeze(y.numpy())
-        pred = np.squeeze(model.predict(x))
-        x = np.squeeze(x.numpy())
-
-        # save raw sample prediction
-        with open(outdir.joinpath("sample_predictions.txt"), "w") as f:
-            f.write("First 5 predictions, ground truths:\n")
-            for i in range(min(5, len(pred))):
-                f.write("pred {}:\n".format(i))
-                f.write(str(pred[i])+"\n")
-                f.write("gt {}:\n".format(i))
-                f.write(str(y[i])+"\n")
-
-        # save predictions
-        assert len(pred) == len(patch_ids), "{} {}".format(pred.shape, patch_ids.shape)
-        # denorm_pred = np.copy(pred)
-        # for i,(region,patchname) in patch_ids:
-        #     patch_num = int(patchname[5:])
-        #     min_xy = self.norm_data[region]["min_xyz"][patch_num][:2]
-        #     max_xy = self.norm_data[region]["max_xyz"][patch_num][:2]
-        #     pred_xy = pred[i,:2]
-        #     denorm_pred[i,:2] = (pred_xy * (max_xy - min_xy)) + min_xy
-        rawpred_file = outdir.joinpath("predictions.npz")
-        np.savez(rawpred_file.as_posix(), pred=pred, patch_ids=patch_ids)
-
-        make_gt_gpkg(self)
-        make_pred_gpkg(self, model_dir, rawpred_file, outdir.joinpath("pred_gpkgs"))
-
-        """
-        data visualizations
-        """
-        if ARGS.mode in ["mmd", "pwtt", "pwmmd"]:
-            print("Generating visualizations...")
-            VIS_DIR = outdir.joinpath("visualizations")
-            os.makedirs(VIS_DIR, exist_ok=True)
-
-            # grab random 10 examples
-            for i in range(0, self.num_ids, self.num_ids//10):
-                x_i = x[i]
-                y_i = y[i]
-                pred_i = pred[i]
-                patch_id = patch_ids[i]
-                patchname = "_".join(patch_id)
-                ylocs = y_i[y_i[...,2] == 1][...,:2]
-
-                gt_ntrees = len(ylocs)
-                x_locs = x_i[...,:2]
-                x_heights = x_i[...,2]
-
-                # lidar height
-                raster_plot(x_locs, gaussian_sigma=ARGS.mmd_sigma, weights=x_heights, mode="max",
-                    filename=VIS_DIR.joinpath("{}_lidar_height".format(patchname)), 
-                    mark=ylocs, zero_one_bounds=True)
-                
-                # lidar ndvi
-                if self.use_ndvi:
-                    x_ndvi = x_i[...,3]
-                    raster_plot(x_locs, gaussian_sigma=ARGS.mmd_sigma, weights=x_ndvi, mode="max",
-                        filename=VIS_DIR.joinpath("{}_lidar_ndvi".format(patchname)), 
-                        mark=ylocs, zero_one_bounds=True)
-
-                # prediction raster
-                pred_locs = pred_i[...,:2]
-                pred_weights = pred_i[...,2]
-                raster_plot(pred_locs, gaussian_sigma=ARGS.mmd_sigma, weights=pred_weights, 
-                    filename=VIS_DIR.joinpath("{}_pred".format(patchname)), 
-                    mode="sum", mark=ylocs, zero_one_bounds=True)
-
-                # # top k predicted
-                # sorted_preds = pred_i[np.argsort(pred_weights)][::-1]
-                # topk_locs = sorted_preds[...,:2][:gt_ntrees]
-                # topk_weights = sorted_preds[...,2][:gt_ntrees]
-                # raster_plot(topk_locs, gaussian_sigma=ARGS.mmd_sigma, weights=topk_weights, 
-                #     filename=VIS_DIR.joinpath("{}_pred_topk".format(patchname)), 
-                #     mode="sum", mark=ylocs, zero_one_bounds=True)
-
-                naip = self.get_naip(patch_id)
-                plt.imshow(naip[...,:3]) # only use RGB
-                plt.colorbar()
-                plt.tight_layout()
-                plt.savefig(VIS_DIR.joinpath(patchname+"_NAIP.png"))
-                plt.clf()
-                plt.close()
-
-        """
-        Evaluate Metrics
-        """
-        print("Evaluating metrics")
-
-        metric_vals = model.evaluate(self)
-        results = {model.metrics_names[i]:v for i,v in enumerate(metric_vals)}
-
-        with open(outdir.joinpath("results.json"), "w") as f:
-            json.dump(results, f, indent=2)
-
-        print("\nResults on", self.name, "dataset:")
-        for k,v in results.items():
-            print(k+":", v)
-
 
 
 
@@ -443,7 +327,8 @@ def get_tvt_split(dataset_dir, regions, val_step, test_step):
     return train, val, test
 
 
-def get_train_val_gens(dataset_dir, regions, val_split=0.1, test_split=0.1):
+def get_train_val_gens(dataset_dir, regions, val_split=0.1, test_split=0.1,
+        val_batchsize=None):
     """
     returns:
         train Keras Sequence, val Sequence or raw data, test Sequence
@@ -453,7 +338,7 @@ def get_train_val_gens(dataset_dir, regions, val_split=0.1, test_split=0.1):
     train, val, test = get_tvt_split(dataset_dir, regions, val_step, test_step)
 
     train_gen = LidarPatchGen(train, dataset_dir, name="train")
-    val_gen = LidarPatchGen(val, dataset_dir, name="validation")
+    val_gen = LidarPatchGen(val, dataset_dir, name="validation", batchsize=val_batchsize)
 
     return train_gen, val_gen
 
