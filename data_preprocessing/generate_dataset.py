@@ -57,10 +57,10 @@ def seperate_pts(gt_bounds, x, y, z=None):
         
 
 
-def load_lidar(las_file, grid_bounds):
+def load_lidar(las_file, grid_bounds, out=None):
     chunk_size = 5_000_000
     count = 0
-    out = None
+    print("  reading", las_file)
     with laspy.open(las_file, "r") as reader:
         for pts in reader.chunk_iterator(chunk_size):
             # Note to future: never use pts["X"], only pts["x"]. the capitalized version scales the numbers to 
@@ -78,11 +78,6 @@ def load_lidar(las_file, grid_bounds):
 
             count += len(pts)
             print("   {:.3f}% complete: {} of {} lidar points".format(count/reader.header.point_count*100, count, reader.header.point_count))
-
-            # # TEMP
-            # if count > 0:
-            #     # print(out)
-            #     return out
 
     return out
 
@@ -214,7 +209,13 @@ def generate_region_h5(outfile, metafile, region_spec, subdivide=1):
         raise ValueError("grid and NAIP crs do not match: {} {}".format(grid_crs, naip_crs))
 
     # lidar points
-    sep_lidar = load_lidar(region_spec["lidar"], grid_bounds)
+    #   this allows loading from one or more .laz files
+    lidar_files = region_spec["lidar"]
+    if not isinstance(lidar_files, list):
+        lidar_files = [lidar_files]
+    sep_lidar = None
+    for fname in lidar_files:
+        sep_lidar = load_lidar(fname, grid_bounds, out=sep_lidar)
     for i,lidar_patch in enumerate(sep_lidar):
         if len(lidar_patch) < 100: # fewer than 100 points in a patch
             print("! Lidar patch {} with only {} points. Grid square bounds {}".format(i, len(lidar_patch), grid_bounds[i]))
