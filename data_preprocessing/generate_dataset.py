@@ -63,7 +63,7 @@ def load_lidar(las_file, grid_bounds, out=None):
     count = 0
     print("  reading", las_file)
     with laspy.open(las_file, "r") as reader:
-        for pts in tqdm(reader.chunk_iterator(chunk_size), total=(count/reader.header.point_count)//chunk_size):
+        for pts in tqdm(reader.chunk_iterator(chunk_size), total=(reader.header.point_count//chunk_size)):
             # Note to future: never use pts["X"], only pts["x"]. the capitalized version scales the numbers to 
             # remove the decimal bc that's how laspy stores the underlying data
             x = pts["x"]
