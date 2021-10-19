@@ -7,6 +7,7 @@ import traceback
 from pprint import pprint
 from pathlib import PurePath
 
+from tqdm import tqdm
 import geopandas as gpd
 import pandas as pd
 import h5py
@@ -62,7 +63,7 @@ def load_lidar(las_file, grid_bounds, out=None):
     count = 0
     print("  reading", las_file)
     with laspy.open(las_file, "r") as reader:
-        for pts in reader.chunk_iterator(chunk_size):
+        for pts in tqdm(reader.chunk_iterator(chunk_size), total=(count/reader.header.point_count)//chunk_size):
             # Note to future: never use pts["X"], only pts["x"]. the capitalized version scales the numbers to 
             # remove the decimal bc that's how laspy stores the underlying data
             x = pts["x"]
@@ -77,7 +78,7 @@ def load_lidar(las_file, grid_bounds, out=None):
                     out[i] = np.concatenate((existing_pts, xyz_sep[i]), axis=0)
 
             count += len(pts)
-            print("   {:.3f}% complete: {} of {} lidar points".format(count/reader.header.point_count*100, count, reader.header.point_count))
+            # print("   {:.3f}% complete: {} of {} lidar points".format(count/reader.header.point_count*100, count, reader.header.point_count))
 
     return out
 
