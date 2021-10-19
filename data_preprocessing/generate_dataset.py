@@ -121,9 +121,9 @@ def load_gt_trees(filename, target_crs, given_crs=None):
         target_crs
         given_crs: required if filename is a .csv
     """
-    if filename.endswith(".gpkg"):
+    if filename.endswith(".gpkg") or filename.endswith(".shp"):
         gt = gpd.read_file(filename)
-
+        
     elif filename.endswith(".csv"):
         if given_crs is None:
             raise ValueError("Provide a 'gt_crs' key for this region")
