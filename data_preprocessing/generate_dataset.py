@@ -226,8 +226,8 @@ def generate_region_h5(outfile, metafile, region_spec, subdivide=1):
     # add NDVI channel to lidar
     lidar_w_naip = []
     n_groups = len(sep_lidar)
-    for n,pt_group in enumerate(sep_lidar):
-        print("Adding NDVI", n, "of", n_groups)
+    print("Adding NDVI")
+    for n,pt_group in tqdm(enumerate(sep_lidar)):
         xys = pt_group[:,:2]
         naip = naip_raster.sample(xys) # returns generator
         # convert to float
