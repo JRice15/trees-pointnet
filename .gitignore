@@ -134,10 +134,7 @@ dmypy.json
 
 
 # data
-data/*
-!data/grid.gpkg
-!data/SaMo_trees.csv
-!data/Patches
+data/generated
 
 # model outputs
 model.png
