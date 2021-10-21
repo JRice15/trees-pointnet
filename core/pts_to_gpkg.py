@@ -81,15 +81,21 @@ def estimate_pred_thresh(patchgen, modeldir, step=0.05):
         r = test_thresh.remote(patchgen.name, patchgen.dsname, patchgen.norm_data, modeldir, threshold=thresh)
         results.append(r)
     results = ray.get(results)
-    results = [i["f1"] for i in results]
-    best_f1 = np.max(results)
-    best = thresholds[np.argmax(results)]
-    print("  best threshold:", best, "f1:", best_f1)
+    f1s = [i["f1"] for i in results]
+    best_f1 = np.max(f1s)
+    best_thresh = thresholds[np.argmax(f1s)]
+    print("  (threshold, f1) pairs:", zip(thresholds, f1s))
+    print("  best threshold:", best_thresh, "f1:", best_f1)
+    dct = {
+        "best_thresh": best_thresh,
+        "thresholds": thresholds.tolist(),
+        "f1s": f1s
+    }
     with open(modeldir.joinpath("results_{}/optimal_threshold.json".format(patchgen.name)), "w") as f:
-        json.dump(best, f)
+        json.dump(dct, f)
     outdir = modeldir.joinpath("results_"+patchgen.name+"/temp_pred_gpkgs")
     shutil.rmtree(outdir.as_posix())
-    return best
+    return best_thresh
 
 @ray.remote
 def test_thresh(pg_name, pg_ds_name, pg_norm_data, *args, **kwargs):

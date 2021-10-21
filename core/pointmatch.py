@@ -12,13 +12,12 @@ def read_test_trees(fname):
     add_buffer(trees)
     return trees
 
-def read_trees(fname, to_crs=TO_CRS):
+def read_trees(fname):
     try:
         trees = read_csv(fname)
     except pd.errors.ParserError: # not a csv, must be shp/gpkg
         trees = read_gpkg(fname)
-    if to_crs is not None:
-        trees = trees.to_crs(to_crs)
+    trees = trees.to_crs(TO_CRS)
     trees = trees[['geometry']]
     return trees
 
@@ -133,7 +132,7 @@ def main(gt_file, pred_file):
     #     test_trees = read_pycrown(args.test_top, args.test_crown)
     # else:
     test_trees = read_test_trees(pred_file)
-    ref_trees = read_trees(gt_file, test_trees.crs)
+    ref_trees = read_trees(gt_file)
 
     # if args.aoi:
     #     aoi_gdf = gpd.read_file(args.aoi)

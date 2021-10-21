@@ -35,9 +35,6 @@ try:
     from tensorflow.keras import layers
     from tensorflow.keras.optimizers import Adam
 
-    print("TF version:", tf.__version__)
-    print("Keras version:", keras.__version__)
-
     np.random.seed(9999)
     tf.random.set_seed(9999)
     tf.compat.v1.set_random_seed(9999)

@@ -192,7 +192,7 @@ if not ARGS.ragged:
     val_gen.init_rng()
     val_gen.summary()
     # evaluate on validation set
-    val_gen.evaluate_model(model, MODEL_DIR)
+    evaluate_model(val_gen, model, MODEL_DIR)
 
     # save training data
     os.makedirs(MODEL_DIR.joinpath("training"))
