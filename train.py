@@ -25,6 +25,7 @@ from core.losses import get_loss
 from core.models import pointnet
 from core.tf_utils import MyModelCheckpoint, output_model
 from core.utils import get_dataset_dir
+from evaluate import evaluate_model
 
 """
 parse args
