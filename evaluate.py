@@ -67,6 +67,53 @@ def count_errors(pred, y):
     return pred - y
 
 
+def plot_one_example(x, y, patch_id, outdir, pred=None, naip=None, has_ndvi=False):
+    """
+    generate raster plots for one example input and output from a dataset
+    args:
+        x: input from patch generator
+        y: targets from patch generator
+        patch_id
+        outdir: pathlib.PurePath
+        pred: prediction from network
+        naip: naip image
+        has_ndvi: bool, whether x has ndvi as last channel
+    """
+    patchname = "_".join(patch_id)
+    ylocs = y[y[...,2] == 1][...,:2]
+
+    gt_ntrees = len(ylocs)
+    x_locs = x[...,:2]
+    x_heights = x[...,2]
+
+    # lidar height
+    raster_plot(x_locs, gaussian_sigma=ARGS.mmd_sigma, weights=x_heights, mode="max",
+        filename=outdir.joinpath("{}_lidar_height".format(patchname)), 
+        mark=ylocs, zero_one_bounds=True)
+    
+    # lidar ndvi
+    if has_ndvi:
+        x_ndvi = x[...,3]
+        raster_plot(x_locs, gaussian_sigma=ARGS.mmd_sigma, weights=x_ndvi, mode="max",
+            filename=outdir.joinpath("{}_lidar_ndvi".format(patchname)), 
+            mark=ylocs, zero_one_bounds=True)
+
+    if pred is not None:
+        # prediction raster
+        pred_locs = pred[...,:2]
+        pred_weights = pred[...,2]
+        raster_plot(pred_locs, gaussian_sigma=ARGS.mmd_sigma, weights=pred_weights, 
+            filename=outdir.joinpath("{}_pred".format(patchname)), 
+            mode="sum", mark=ylocs, zero_one_bounds=True)
+
+    if naip is not None:
+        plt.imshow(naip[...,:3]) # only use RGB
+        plt.colorbar()
+        plt.tight_layout()
+        plt.savefig(outdir.joinpath(patchname+"_NAIP_RGB.png"))
+        plt.clf()
+        plt.close()
+
 
 def evaluate_model(patchgen, model, model_dir):
     """
@@ -118,39 +165,9 @@ def evaluate_model(patchgen, model, model_dir):
             y_i = y[i]
             pred_i = pred[i]
             patch_id = patch_ids[i]
-            patchname = "_".join(patch_id)
-            ylocs = y_i[y_i[...,2] == 1][...,:2]
-
-            gt_ntrees = len(ylocs)
-            x_locs = x_i[...,:2]
-            x_heights = x_i[...,2]
-
-            # lidar height
-            raster_plot(x_locs, gaussian_sigma=ARGS.mmd_sigma, weights=x_heights, mode="max",
-                filename=VIS_DIR.joinpath("{}_lidar_height".format(patchname)), 
-                mark=ylocs, zero_one_bounds=True)
-            
-            # lidar ndvi
-            if patchgen.use_ndvi:
-                x_ndvi = x_i[...,3]
-                raster_plot(x_locs, gaussian_sigma=ARGS.mmd_sigma, weights=x_ndvi, mode="max",
-                    filename=VIS_DIR.joinpath("{}_lidar_ndvi".format(patchname)), 
-                    mark=ylocs, zero_one_bounds=True)
-
-            # prediction raster
-            pred_locs = pred_i[...,:2]
-            pred_weights = pred_i[...,2]
-            raster_plot(pred_locs, gaussian_sigma=ARGS.mmd_sigma, weights=pred_weights, 
-                filename=VIS_DIR.joinpath("{}_pred".format(patchname)), 
-                mode="sum", mark=ylocs, zero_one_bounds=True)
-
             naip = patchgen.get_naip(patch_id)
-            plt.imshow(naip[...,:3]) # only use RGB
-            plt.colorbar()
-            plt.tight_layout()
-            plt.savefig(VIS_DIR.joinpath(patchname+"_NAIP.png"))
-            plt.clf()
-            plt.close()
+            plot_one_example(x_i, y_i, patch_id, pred=pred_i, naip=naip, 
+                has_ndvi=patchgen.use_ndvi, outdir=VIS_DIR)
 
     """
     Evaluate Metrics

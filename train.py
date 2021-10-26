@@ -24,8 +24,8 @@ from core import DATA_DIR, REPO_ROOT, ARGS, patch_generator
 from core.losses import get_loss
 from core.models import pointnet
 from core.tf_utils import MyModelCheckpoint, output_model
-from core.utils import get_dataset_dir
-from evaluate import evaluate_model
+from core.utils import get_dataset_dir, load_saved_model
+import evaluate
 
 """
 parse args
@@ -122,6 +122,15 @@ train_gen.summary()
 val_gen.summary()
 inpt_shape = train_gen.get_batch_shape()[0][1:]
 
+train_viz_dir = MODEL_DIR.joinpath("training/example_batch_viz/")
+os.makedirs(train_viz_dir, exist_ok=True)
+X,Y,ids = train_gen.__getitem__(1, return_ids=True)
+for i in range(len(X)):
+    naip = train_gen.get_naip(ids[i])
+    evaluate.plot_one_example(X[i], Y[i], ids[i], naip=naip, has_ndvi=ARGS.ndvi,
+        outdir=train_viz_dir)
+
+
 """
 create model
 """
@@ -186,6 +195,9 @@ if not ARGS.ragged:
     if ARGS.test:
         print("Exiting, --test flag supplied")
         exit()
+    
+    # load saved best model
+    model = load_saved_model(MODEL_PATH, ARGS)
 
     # initialize val gen with batchsize of 1
     val_gen.batch_size = 1
@@ -193,10 +205,9 @@ if not ARGS.ragged:
     val_gen.init_rng()
     val_gen.summary()
     # evaluate on validation set
-    evaluate_model(val_gen, model, MODEL_DIR)
+    evaluate.evaluate_model(val_gen, model, MODEL_DIR)
 
     # save training data
-    os.makedirs(MODEL_DIR.joinpath("training"))
     with open(MODEL_DIR.joinpath("training/stats.json"), "w") as f:
         val_results = {
             "best_val_loss": callback_dict["modelcheckpoint"].best_val_loss()
@@ -292,7 +303,6 @@ del val_gen
 """
 Testing phase
 """
-import evaluate
 
 # add qualified name with timestamp as name, so it is unambigous in case of multiple models with same name
 ARGS.name = modelname

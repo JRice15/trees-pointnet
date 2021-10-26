@@ -63,6 +63,11 @@ class LidarPatchGen(keras.utils.Sequence):
         self.init_data()
         self.batch_time = 0
 
+        if ARGS.ragged:
+            self._f_getitem = self._ragged_getitem
+        else:
+            self._f_getitem = self._nonrag_getitem
+
     def init_rng(self):
         """initialize or reinitialize the random number generatore"""
         self.random = np.random.default_rng(seed=44)
@@ -130,10 +135,10 @@ class LidarPatchGen(keras.utils.Sequence):
     def __len__(self):
         return self.num_ids // self.batch_size
 
-    def __getitem__(self, idx, ):
-        return self._ragged_getitem(idx) if ARGS.ragged else self._nonrag_getitem(idx)
+    def __getitem__(self, idx, return_ids=False):
+        return self._f_getitem(idx, return_ids=return_ids)
 
-    def _nonrag_getitem(self, idx):
+    def _nonrag_getitem(self, idx, return_ids=False):
         """
         __getitem__ for nonragged outputs
         """
@@ -191,6 +196,8 @@ class LidarPatchGen(keras.utils.Sequence):
         x = tf.constant(self._x_batch, dtype=tf.float32)
         y = tf.constant(self._y_batch, dtype=tf.float32)
         self.batch_time += time.perf_counter() - t1
+        if return_ids:
+            return x, y, self.patch_ids[idx:end_idx]
         return x, y
 
     def _ragged_getitem(self, idx):
