@@ -84,7 +84,7 @@ def estimate_pred_thresh(patchgen, modeldir, step=0.05):
     f1s = [i["f1"] for i in results]
     best_f1 = np.max(f1s)
     best_thresh = thresholds[np.argmax(f1s)]
-    print("  (threshold, f1) pairs:", zip(thresholds, f1s))
+    print("  (threshold, f1) pairs:", list(zip(thresholds, f1s)))
     print("  best threshold:", best_thresh, "f1:", best_f1)
     dct = {
         "best_thresh": best_thresh,
@@ -92,7 +92,7 @@ def estimate_pred_thresh(patchgen, modeldir, step=0.05):
         "f1s": f1s
     }
     with open(modeldir.joinpath("results_{}/optimal_threshold.json".format(patchgen.name)), "w") as f:
-        json.dump(dct, f)
+        json.dump(dct, f, indent=2)
     outdir = modeldir.joinpath("results_"+patchgen.name+"/temp_pred_gpkgs")
     shutil.rmtree(outdir.as_posix())
     return best_thresh
