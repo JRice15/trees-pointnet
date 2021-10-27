@@ -26,6 +26,7 @@ def gridify_pts(bounds, pts, weights, gaussian_sigma, mode="sum", resolution=50)
         bounds: (xmin, xmax, ymin, ymax) bounds
         pts: (x,y) locations within the bounds
         weights: corresponding weights, (negative weights will be set to zero)
+        mode: how to aggregate values at each grid location. "max"|"sum"|"second-highest"
     returns:
         gridvals: N x M grid of weighted values
         gridpts: N x M x 2 grid, representing the x,y coordinates of each pixel
@@ -36,17 +37,27 @@ def gridify_pts(bounds, pts, weights, gaussian_sigma, mode="sum", resolution=50)
     size_factor = (xmax-xmin + ymax-ymin) / 2 # mean side length of raster
     x, y = np.meshgrid(x, y)
     gridpts = np.stack([x,y], axis=-1)
-    gridvals = np.zeros_like(x)
+    if mode == "second-highest":
+        gridvals = np.zeros(x.shape + (2,), dtype=x.dtype)
+    else:
+        gridvals = np.zeros_like(x)
     for i,p in enumerate(pts):
-        vals = gaussian(gridpts, p, sigma=gaussian_sigma*size_factor)
+        new_vals = gaussian(gridpts, p, sigma=gaussian_sigma*size_factor)
         if weights is not None:
-            vals *= max(weights[i], 0)
+            new_vals *= max(weights[i], 0)
         if mode == "sum":
-            gridvals += vals
+            gridvals += new_vals
         elif mode == "max":
-            gridvals = np.maximum(gridvals, vals)
+            gridvals = np.maximum(gridvals, new_vals)
+        elif mode == "second-highest":
+            # stack along 'channels' to make 3 channels
+            gridvals = np.concatenate((gridvals, new_vals[..., None]), axis=-1)
+            # get largest two from each 3-item channel
+            gridvals = np.sort(gridvals, axis=-1)[..., -2:]
         else:
             raise ValueError("Unknown gridify_pts mode")
+    if mode == "second-highest":
+        return gridvals[...,-2], gridpts
     return gridvals, gridpts
 
 

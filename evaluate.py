@@ -86,8 +86,8 @@ def plot_one_example(x, y, patch_id, outdir, pred=None, naip=None, has_ndvi=Fals
     x_locs = x[...,:2]
     x_heights = x[...,2]
 
-    # lidar height
-    raster_plot(x_locs, gaussian_sigma=ARGS.mmd_sigma, weights=x_heights, mode="max",
+    # lidar height (second-highest mode, to avoid noise)
+    raster_plot(x_locs, gaussian_sigma=ARGS.mmd_sigma, weights=x_heights, mode="second-highest",
         filename=outdir.joinpath("{}_lidar_height".format(patchname)), 
         mark=ylocs, zero_one_bounds=True)
     

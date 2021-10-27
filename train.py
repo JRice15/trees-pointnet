@@ -23,8 +23,8 @@ import matplotlib.pyplot as plt
 from core import DATA_DIR, REPO_ROOT, ARGS, patch_generator
 from core.losses import get_loss
 from core.models import pointnet
-from core.tf_utils import MyModelCheckpoint, output_model
-from core.utils import get_dataset_dir, load_saved_model
+from core.tf_utils import MyModelCheckpoint, output_model, load_saved_model
+from core.utils import get_dataset_dir
 import evaluate
 
 """

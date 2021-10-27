@@ -34,6 +34,7 @@ def get_loss(ARGS):
 
 def max_mean_discrepancy(ARGS):
     """
+    DeepLoco loss
     from https://www.biorxiv.org/content/10.1101/267096v1.full
     """
     assert ARGS.mmd_sigma is not None
@@ -46,7 +47,8 @@ def max_mean_discrepancy(ARGS):
         diffs is x_locations - y_locations
         """
         sqr_dists = K.sum(K.square(diffs), axis=-1)
-        exponent = K.clip(-sqr_dists / exp_constant, None, 64)
+        exponent = -sqr_dists / exp_constant
+        exponent = K.clip(exponent, None, 64)
         return K.exp(exponent)
 
     exp_constant = ARGS.mmd_sigma
