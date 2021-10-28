@@ -26,10 +26,75 @@ def get_loss(ARGS):
         return keras.losses.mse, [keras.metrics.mse]
     if ARGS.mode in ["mmd", "pwmmd"]:
         return max_mean_discrepancy(ARGS)
+    if ARGS.mode == "gridmse":
+        return grid_mse(ARGS)
 
     raise ValueError("No loss for mode '{}'".format(ARGS.mode))
 
+@tf.function
+def tf_gaussian(x, center, sigma=0.02):
+    """
+    evaluate a gaussian centered at `center` for point(s) `x`
+    """
+    const = (2 * np.pi * sigma) ** -0.5
+    exp = tf.exp( -tf.reduce_sum((x - center) ** 2, axis=-1) / (2 * sigma ** 2))
+    return const * exp
 
+@tf.function
+def tf_gridify_pts(weighted_pts, gaussian_sigma, mode="sum", resolution=50):
+    """
+    rasterize weighted points to a grid, with a gaussian blur
+    works for batched input only, ie weighted_pts has shape (batchsize, npoints, channels)
+    args:
+        weighted_pts: (x,y,weight) locations
+        guassian_sigma: the stddev of the guassian blur
+        mode: how to aggregate values at each grid location. "max"|"sum"|"second-highest"
+    """
+    batchsize = weighted_pts.shape[0]
+
+    x = tf.linspace(0, 1, resolution)
+    y = tf.linspace(0, 1, resolution)
+    x, y = tf.meshgrid(x, y)
+    gridcoords = tf.stack([x,y], axis=-1)
+    # expand out to batch shape
+    mults = [batchsize] + [1 for i in gridcoords.shape]
+    gridcoords = tf.tile(gridcoords[None,...], mults)
+    gridcoords = tf.expand_dims(gridcoords, axis=-2)
+
+    weighted_pts = tf.expand_dims(weighted_pts, axis=-3)
+    weighted_pts = tf.expand_dims(weighted_pts, axis=-3)
+    pts = weighted_pts[...,:2]
+    weights = weighted_pts[...,-1]
+    gridvals = tf_gaussian(gridcoords, pts, sigma=gaussian_sigma)
+    gridvals = gridvals * weights
+    if mode == "sum":
+        gridvals = tf.reduce_sum(gridvals, axis=-1)
+    elif mode == "max":
+        gridvals = tf.reduce_max(gridvals, axis=-1)
+    else:
+        raise ValueError("Unknown gridify_pts mode")
+    return gridvals
+
+
+
+def grid_mse(ARGS):
+    """
+    inspired by https://www.osapublishing.org/optica/fulltext.cfm?uri=optica-5-4-458&id=385495
+    """
+    assert ARGS.mmd_sigma is not None
+
+    resolution = 50
+
+    def loss(gt, pred):
+        pred_grid = tf_gridify_pts(pred, ARGS.mmd_sigma, mode="sum", resolution=resolution)
+        gt_grid = tf_gridify_pts(gt, ARGS.mmd_sigma, mode="sum", resolution=resolution)
+
+        # "squared l2 norm" = mean squared error
+        square_error_grid = (pred_grid - gt_grid) ** 2
+        err = tf.reduce_mean(square_error_grid, axis=[1, 2])
+        return err
+    
+    return loss, None
 
 
 def max_mean_discrepancy(ARGS):
@@ -103,7 +168,7 @@ def max_mean_discrepancy(ARGS):
 
         # eq. 4. I pulled out the kernel constant from each K, and just multiply the final result (not that it really matters, as a constant in a loss term)
         loss = y_loss - (2 * xy_loss) + x_loss
-        return kernel_constant * loss / 10_000 # scaling factor
+        return kernel_constant * loss / 1_000 # scaling factor
 
     return mmd_loss, None
 
@@ -232,39 +297,5 @@ def ragged_pointwise_treetop(ARGS):
         
 
 
-
-
-if __name__ == "__main__":
-
-    # testing pointwise treetop
-
-    x = [
-        [[1, 1, 0.8], [0, 2, 0.2]],
-        [[0, 0, 1.0], [0, 1, 0]],
-        [[0, 0, 0.0], [0, 1, 1.0]]
-    ]
-    x = tf.constant(x, dtype=tf.float32)
-
-
-    # y = [
-    #     [[0, 0, 1], [0, 0, 1]],
-    #     [[0, 1, 0], [0, 1.5, 1]],
-    #     [[1, 0, 1], [100, 10, 0]],
-    # ] # cls
-    y = [
-        [[0, 2.5, 1], [0, 0, 1]],
-        [[0, 0, 1], [10, 10, 0]],
-        [[0, 0, 1], [10, 10, 0]],
-    ]
-    y = tf.constant(y, dtype=tf.float32)
-
-
-    class A:
-        dist_weight = 0.5
-
-    ARGS = A()
-    res = nonrag_pointwise_treetop(ARGS)[0](y, x)
-
-    print(res)
 
 
