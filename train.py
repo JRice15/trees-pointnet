@@ -55,6 +55,7 @@ optionalgrp = parser.add_argument_group("optional")
 optionalgrp.add_argument("--ragged",action="store_true")
 optionalgrp.add_argument("--regions",default="ALL",nargs="+",help="list of region names, defaults to all available")
 optionalgrp.add_argument("--dsname",help="name of generated dataset to use (required if multiple exist)")
+optionalgrp.add_argument("--eval",action="store_true",help="run test set evaluation after training")
 optionalgrp.add_argument("-h", "--help", action="help", help="show this message and exit")
 
 # training hyperparameters
@@ -303,10 +304,11 @@ del train_gen
 del val_gen
 
 
-"""
-Testing phase
-"""
+if ARGS.eval:
+    """
+    Testing phase
+    """
 
-# add qualified name with timestamp as name, so it is unambigous in case of multiple models with same name
-ARGS.name = modelname
-evaluate.main()
+    # add qualified name with timestamp as name, so it is unambigous in case of multiple models with same name
+    ARGS.name = modelname
+    evaluate.main()
