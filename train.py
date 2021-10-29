@@ -72,7 +72,7 @@ modelgrp = parser.add_argument_group("model parameters")
 modelgrp.add_argument("--npoints",type=int,default=300,help="number of points to run per patch. In ragged or non-ragged, "
         "patches with fewer points will be skipped. Also in non-ragged, patches with more points with be truncated to npoints")
 modelgrp.add_argument("--dropout",type=float,default=0.3,help="dropout rate")
-modelgrp.add_argument("--ndvi",action="store_true",help="whether to use pointwise NDVi channel")
+modelgrp.add_argument("--no-ndvi",dest="ndvi",action="store_false",help="whether to use pointwise NDVi channel")
 
 # loss parameters
 lossgrp = parser.add_argument_group("loss parameters")
