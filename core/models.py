@@ -136,7 +136,7 @@ def cls_output_flow(global_feature, outchannels):
 
     return x
 
-def mmd_output_flow(global_feature, output_channels):
+def dense_output_flow(global_feature, output_channels):
     """
     Custom output flow for mean-max-discrepancy loss
     args:
@@ -160,7 +160,7 @@ def mmd_output_flow(global_feature, output_channels):
     return x
 
 
-def mmd_output_flow_2(global_feature, out_channels):
+def dense_output_flow_2(global_feature, out_channels):
     x = global_feature
 
     x = pointnet_dense(512, "outmlp_dense1")(x)
@@ -212,19 +212,17 @@ def pointnet(inpt_shape, output_channels, reg_weight=0.001):
     global_feature = x
 
     # output flow
-    if ARGS.mode in ["pwtt"]:
+    if ARGS.output_mode == "seg":
         output = seg_output_flow(local_features, global_feature, output_channels)
-    elif ARGS.mode in ["count"]:
+    elif ARGS.output_mode == "count":
         output = cls_output_flow(global_feature, output_channels)
-    elif ARGS.mode in ["mmd"]:
-        output = mmd_output_flow_2(global_feature, output_channels)
-    elif ARGS.mode in ["pwmmd"]:
-        output = seg_output_flow(local_features, global_feature, output_channels)
+    elif ARGS.output_mode == "dense":
+        output = dense_output_flow_2(global_feature, output_channels)
     else:
         raise NotImplementedError()
     
     # optional post processing for some methods
-    if ARGS.mode in ["mmd", "pwmmd"]:
+    if ARGS.output_mode in ("seg", "dense"):
         assert output_channels == 3
         pts = output[...,:2]
         confs = output[...,-1:]
@@ -233,7 +231,8 @@ def pointnet(inpt_shape, output_channels, reg_weight=0.001):
         # limit confidence to >= 0
         confs = layers.Activation("softplus")(confs)
         output = layers.Concatenate(axis=-1)([pts, confs])
-    if ARGS.mode in ["pwtt"]:
+    if ARGS.loss == "treetop":
+        assert output_channels == 1
         # limit to 0 to 1
         output = customlayers.Activation("sigmoid", name="pwtt-sigmoid")(output)
         # add input xy locations to each point

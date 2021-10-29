@@ -140,7 +140,8 @@ def main():
     parser = argparse.ArgumentParser()
     # general args
     parser.add_argument("--trials-name","--name",required=True,help="name to save these trials under")
-    parser.add_argument("--mode",required=True)
+    parser.add_argument("--output-mode",required=True)
+    parser.add_argument("--loss",required=True)
     parser.add_argument("--timeout",default=4,type=float,help="max number of hours each model is allowed to run")
     parser.add_argument("--earlystop",type=int,default=50,help="number of trials with no improvement when earlystopping occurs")
     parser.add_argument("--mintrials",type=int,default=200,help="number of trials for which earlystopping is not allowed to occur")

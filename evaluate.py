@@ -153,7 +153,7 @@ def evaluate_model(patchgen, model, model_dir):
     """
     data visualizations
     """
-    if ARGS.mode in ["mmd", "pwtt", "pwmmd"]:
+    if ARGS.output_mode == "seg":
         print("Generating visualizations...")
         VIS_DIR = outdir.joinpath("visualizations")
         os.makedirs(VIS_DIR, exist_ok=True)

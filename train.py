@@ -38,14 +38,17 @@ optimizer_options = {
     "adamax": optimizers.Adamax,
 }
 
-valid_modes = ["pwtt", "mmd", "count", "pwmmd"]
+valid_output_modes = ["seg", "dense", "count"]
+valid_losses = ["mmd", "count", "treetop", "gridmse"]
 
 parser = argparse.ArgumentParser(add_help=False)
 # main required args
 requiredgrp = parser.add_argument_group("required")
 requiredgrp.add_argument("--name",required=True,help="name to save this model under or load")
-requiredgrp.add_argument("--mode",required=True,help="training mode, which determines which output flow and loss target to use",
-    choices=valid_modes)
+requiredgrp.add_argument("--output-mode",required=True,help="which output flow to use",
+    choices=valid_output_modes)
+requiredgrp.add_argument("--loss",required=True,help="loss mode to use (must be compatible with output mode)",
+    choices=valid_losses)
 
 # main optional
 optionalgrp = parser.add_argument_group("optional")
@@ -135,17 +138,17 @@ for i in range(len(X)):
 create model
 """
 
-# map modes to number of output features and points
+# map loss modes to number of output features and points
 output_channels_map = {
-    "pwtt": 1,  # confidence, xys are appended
-    "count": 1, # count
-    "mmd": 3,   # x,y,confidence
-    "pwmmd": 3, # x,y,confidence
+    "count": 1,   # count
+    "treetop": 1, # x,y,confidence
+    "gridmse": 3, # confidence, xys are appended
+    "mmd": 3,     # x,y,confidence
 }
 
 model = pointnet(
     inpt_shape=inpt_shape,
-    output_channels=output_channels_map[ARGS.mode],
+    output_channels=output_channels_map[ARGS.loss],
     reg_weight=ARGS.ortho_weight,
 )
 output_model(model, MODEL_DIR)

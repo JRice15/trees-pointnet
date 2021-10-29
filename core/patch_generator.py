@@ -54,7 +54,7 @@ class LidarPatchGen(keras.utils.Sequence):
             f:h5py.File(dataset_dir.joinpath(f+".h5").as_posix(), "r") for f in self.regions
         }
         self.y_counts_only = False
-        if ARGS.mode == "count":
+        if ARGS.loss == "count":
             self.y_counts_only = True
         self.nattributes = 3 + (1 if self.use_ndvi else 0)
         self.npoints = ARGS.npoints

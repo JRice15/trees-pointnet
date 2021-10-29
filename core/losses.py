@@ -17,19 +17,23 @@ def get_loss(ARGS):
         error_func(predictions, gt_targets): -> scalar
     where scalar is an error metric (can be negative)
     """
-    if ARGS.mode == "pwtt":
+    if ARGS.loss == "treetop":
+        assert ARGS.output_mode in ("seg", "dense")
         if ARGS.ragged:
             return ragged_pointwise_treetop(ARGS)
         else:
             return nonrag_pointwise_treetop(ARGS)
-    if ARGS.mode == "count":
-        return keras.losses.mse, [keras.metrics.mse]
-    if ARGS.mode in ["mmd", "pwmmd"]:
+    if ARGS.loss == "mmd":
+        assert ARGS.output_mode in ("seg", "dense")
         return max_mean_discrepancy(ARGS)
-    if ARGS.mode == "gridmse":
+    if ARGS.loss == "gridmse":
+        assert ARGS.output_mode in ("seg", "dense")
         return grid_mse(ARGS)
+    if ARGS.loss == "count":
+        assert ARGS.output_mode == "count"
+        return keras.losses.mse, [keras.metrics.mse]
 
-    raise ValueError("No loss for mode '{}'".format(ARGS.mode))
+    raise ValueError("No loss for mode '{}'".format(ARGS.loss))
 
 @tf.function
 def tf_gaussian(x, center, sigma=0.02):
@@ -50,12 +54,12 @@ def tf_gridify_pts(weighted_pts, gaussian_sigma, mode="sum", resolution=50):
         guassian_sigma: the stddev of the guassian blur
         mode: how to aggregate values at each grid location. "max"|"sum"|"second-highest"
     """
-    batchsize = weighted_pts.shape[0]
+    batchsize = tf.shape(weighted_pts)[0]
 
     x = tf.linspace(0, 1, resolution)
     y = tf.linspace(0, 1, resolution)
     x, y = tf.meshgrid(x, y)
-    gridcoords = tf.stack([x,y], axis=-1)
+    gridcoords = tf.cast(tf.stack([x,y], axis=-1), dtype=weighted_pts.dtype)
     # expand out to batch shape
     mults = [batchsize] + [1 for i in gridcoords.shape]
     gridcoords = tf.tile(gridcoords[None,...], mults)
@@ -85,6 +89,7 @@ def grid_mse(ARGS):
 
     resolution = 50
 
+    @tf.function
     def loss(gt, pred):
         pred_grid = tf_gridify_pts(pred, ARGS.mmd_sigma, mode="sum", resolution=resolution)
         gt_grid = tf_gridify_pts(gt, ARGS.mmd_sigma, mode="sum", resolution=resolution)
@@ -92,7 +97,7 @@ def grid_mse(ARGS):
         # "squared l2 norm" = mean squared error
         square_error_grid = (pred_grid - gt_grid) ** 2
         err = tf.reduce_mean(square_error_grid, axis=[1, 2])
-        return err
+        return err / 10 # scaling factor
     
     return loss, None
 
@@ -168,7 +173,7 @@ def max_mean_discrepancy(ARGS):
 
         # eq. 4. I pulled out the kernel constant from each K, and just multiply the final result (not that it really matters, as a constant in a loss term)
         loss = y_loss - (2 * xy_loss) + x_loss
-        return kernel_constant * loss / 1_000 # scaling factor
+        return kernel_constant * loss / 10_000 # scaling factor
 
     return mmd_loss, None
 
