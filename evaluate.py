@@ -175,7 +175,10 @@ def evaluate_model(patchgen, model, model_dir):
     print("Evaluating metrics")
 
     metric_vals = model.evaluate(patchgen)
-    results = {model.metrics_names[i]:v for i,v in enumerate(metric_vals)}
+    if not isinstance(metric_vals, dict):
+        results = {"loss": metric_vals}
+    else:
+        results = {model.metrics_names[i]:v for i,v in enumerate(metric_vals)}
 
     with open(outdir.joinpath("results.json"), "w") as f:
         json.dump(results, f, indent=2)
