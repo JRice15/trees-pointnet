@@ -11,11 +11,11 @@ from core import customlayers, ARGS
 def pointnet_conv(outchannels, kernel_size, name, strides=1, bn=True, activation=True,
         padding="valid"):
     """
-    returns callable pipeline of conv, batchnorm, and relu
+    returns callable, which creates pipeline of conv, batchnorm, and relu
     input: (B,N,1,K)
     """
     layer_list = [
-        layers.Conv1D(outchannels, kernel_size=kernel_size, padding=padding,
+        layers.Conv1D(int(outchannels), kernel_size=kernel_size, padding=padding,
                     strides=strides, kernel_initializer="glorot_normal", name=name),
     ]
     if bn:
@@ -34,11 +34,11 @@ def pointnet_conv(outchannels, kernel_size, name, strides=1, bn=True, activation
 
 def pointnet_dense(outchannels, name, bn=True, activation=True):
     """
-    returns callable pipeline of dense, batchnorm, and relu
+    returns callable, which creates pipeline of dense, batchnorm, and relu
     input: (B,N,K)
     """
     def op(x):
-        x = layers.Dense(outchannels, kernel_initializer="glorot_normal", name=name)(x)
+        x = layers.Dense(int(outchannels), kernel_initializer="glorot_normal", name=name)(x)
         if bn:
             x = layers.BatchNormalization(name=name+"_bn")(x)
         if activation:
@@ -136,43 +136,32 @@ def cls_output_flow(global_feature, outchannels):
 
     return x
 
-def dense_output_flow(global_feature, output_channels):
+
+
+def dense_output_flow_2(global_feature, out_npoints, out_channels):
     """
-    Custom output flow for mean-max-discrepancy loss
+    Densely learning output points from the global feature alone
     args:
-        global feature vector: (B,npoints,nchannels)
-    returns:
-        (B,npoints,3) where 3 corresponds to x,y,confidence
+        global_feature
+        out_npoints: number of points to output
+        out_channels: number of channels per point (mode dependant)
     """
     x = global_feature
-    x = layers.Reshape((1024,1), name="expand_global_feature_reshape")(x)
 
-    # output flow
-    x = pointnet_conv(16, 7, name="outmlp_conv1")(x)
-    x = layers.MaxPool1D(strides=2)(x) # (B,508,8)
-    x = pointnet_conv(32, 5, strides=2, name="outmlp_conv2")(x) # (B,250,32)
-    x = pointnet_conv(32, 5, name="outmlp_conv3")(x) # (B,246,32)
-    
-    # filter to output channels
-    x = pointnet_conv(output_channels, 1, name="outmlp_conv_final", 
-                      bn=False, activation=False)(x) # (B,246,nchannels)
+    input_size = x.shape[-1]
+    target_size = out_npoints * out_channels
+    intermediate_size = (input_size + target_size) // 2
 
-    return x
-
-
-def dense_output_flow_2(global_feature, out_channels):
-    x = global_feature
-
-    x = pointnet_dense(1024, "outmlp_dense1")(x)
-    x = pointnet_dense(1024, "outmlp_dense2")(x)
-    x = layers.Reshape((256, 4))(x)
+    x = pointnet_dense(intermediate_size, "outmlp_dense1")(x)
+    x = pointnet_dense(target_size, "outmlp_dense2")(x)
+    x = layers.Reshape((out_npoints, out_channels))(x)
     x = pointnet_conv(out_channels, 1, bn=False, activation=False, name="out_channels_conv")(x)
 
     return x
 
 
 
-def pointnet(inpt_shape, output_channels, reg_weight=0.001):
+def pointnet(inpt_shape, size_multiplier, output_channels, reg_weight=0.001):
     """
     args:
         output_channels: num features per output point
@@ -191,8 +180,8 @@ def pointnet(inpt_shape, output_channels, reg_weight=0.001):
         x = customlayers.ExpandDims(axis=2, name="add_channels_2")(x) # (B,N,1,K)
 
     # mlp 1
-    x = pointnet_conv(64, 1, name="mlp1_conv1")(x)
-    x = pointnet_conv(64, 1, name="mlp1_conv2")(x)
+    x = pointnet_conv(64*size_multiplier, 1, name="mlp1_conv1")(x)
+    x = pointnet_conv(64*size_multiplier, 1, name="mlp1_conv2")(x)
 
     if ARGS.use_tnets:
         # feature transform
@@ -202,9 +191,9 @@ def pointnet(inpt_shape, output_channels, reg_weight=0.001):
     local_features = x
 
     # mlp 2
-    x = pointnet_conv(64, 1, name="mlp2_conv1")(x)
-    x = pointnet_conv(128, 1, name="mlp2_conv2")(x)
-    x = pointnet_conv(1024, 1, name="mlp2_conv3")(x)
+    x = pointnet_conv(64*size_multiplier, 1, name="mlp2_conv1")(x)
+    x = pointnet_conv(128*size_multiplier, 1, name="mlp2_conv2")(x)
+    x = pointnet_conv(1024*size_multiplier, 1, name="mlp2_conv3")(x)
 
     # symmetric function: max pooling
     x = customlayers.ReduceDims(axis=2, name="remove_channels")(x) # (B,N,K)
@@ -218,7 +207,7 @@ def pointnet(inpt_shape, output_channels, reg_weight=0.001):
     elif ARGS.output_mode == "count":
         output = cls_output_flow(global_feature, output_channels)
     elif ARGS.output_mode == "dense":
-        output = dense_output_flow_2(global_feature, output_channels)
+        output = dense_output_flow_2(global_feature, ARGS.out_npoints, output_channels)
     else:
         raise NotImplementedError()
     

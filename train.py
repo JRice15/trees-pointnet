@@ -75,6 +75,8 @@ hypergrp.add_argument("--reducelr-patience",type=int,default=20,help="number of 
 modelgrp = parser.add_argument_group("model parameters")
 modelgrp.add_argument("--npoints",type=int,default=300,help="number of points to run per patch. In ragged or non-ragged, "
         "patches with fewer points will be skipped. Also in non-ragged, patches with more points with be truncated to npoints")
+modelgrp.add_argument("--out-npoints",type=int,default=256,help="(dense output mode): number of output points")
+modelgrp.add_argument("--size-multiplier",type=float,default=1.0,help="number to multiply all default conv output filters by")
 modelgrp.add_argument("--dropout",type=float,default=0.3,help="dropout rate")
 modelgrp.add_argument("--no-ndvi",dest="ndvi",action="store_false",help="whether to use pointwise NDVi channel")
 modelgrp.add_argument("--no-tnets",dest="use_tnets",action="store_false",help="whether to use input and feature transforms")
@@ -154,6 +156,7 @@ output_channels_map = {
 
 model = pointnet(
     inpt_shape=inpt_shape,
+    size_multiplier=ARGS.size_multiplier,
     output_channels=output_channels_map[ARGS.loss],
     reg_weight=ARGS.ortho_weight,
 )
