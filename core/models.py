@@ -185,17 +185,19 @@ def pointnet(inpt_shape, output_channels, reg_weight=0.001):
     x = inpt
     x = customlayers.ExpandDims(axis=2, name="add_channels_1")(x) # (B,N,1,K)
 
-    # input transform
-    x, inpt_trans_matrix = pointnet_transform(x, batchsize=ARGS.batchsize, kind="input") # (B,N,K)
-    x = customlayers.ExpandDims(axis=2, name="add_channels_2")(x) # (B,N,1,K)
+    if ARGS.use_tnets:
+        # input transform
+        x, inpt_trans_matrix = pointnet_transform(x, batchsize=ARGS.batchsize, kind="input") # (B,N,K)
+        x = customlayers.ExpandDims(axis=2, name="add_channels_2")(x) # (B,N,1,K)
 
     # mlp 1
     x = pointnet_conv(64, 1, name="mlp1_conv1")(x)
     x = pointnet_conv(64, 1, name="mlp1_conv2")(x)
 
-    # feature transform
-    x, feat_trans_matrix = pointnet_transform(x, batchsize=ARGS.batchsize, kind="feature") # (B,N,K)
-    x = customlayers.ExpandDims(axis=2, name="add_channels_3")(x) # (B,N,1,K)
+    if ARGS.use_tnets:
+        # feature transform
+        x, feat_trans_matrix = pointnet_transform(x, batchsize=ARGS.batchsize, kind="feature") # (B,N,K)
+        x = customlayers.ExpandDims(axis=2, name="add_channels_3")(x) # (B,N,1,K)
 
     local_features = x
 
@@ -239,14 +241,15 @@ def pointnet(inpt_shape, output_channels, reg_weight=0.001):
 
     model = Model(inpt, output)
 
-    # feature transformation matrix orthogonality loss
-    dims = feat_trans_matrix.shape[1]
-    ortho_diff = tf.matmul(feat_trans_matrix,
-                    tf.transpose(feat_trans_matrix, perm=[0,2,1]))
-    ortho_diff -= tf.constant(tf.eye(dims), dtype=tf.float32)
-    ortho_loss = reg_weight * tf.nn.l2_loss(ortho_diff)
-    model.add_loss(ortho_loss)
-    model.add_metric(ortho_loss, name="ortho_loss", aggregation="mean")
+    if ARGS.use_tnets:
+        # feature transformation matrix orthogonality loss
+        dims = feat_trans_matrix.shape[1]
+        ortho_diff = tf.matmul(feat_trans_matrix,
+                        tf.transpose(feat_trans_matrix, perm=[0,2,1]))
+        ortho_diff -= tf.constant(tf.eye(dims), dtype=tf.float32)
+        ortho_loss = reg_weight * tf.nn.l2_loss(ortho_diff)
+        model.add_loss(ortho_loss)
+        model.add_metric(ortho_loss, name="ortho_loss", aggregation="mean")
 
     return model
 

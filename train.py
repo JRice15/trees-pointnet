@@ -52,11 +52,15 @@ requiredgrp.add_argument("--loss",required=True,help="loss mode to use (must be 
 
 # main optional
 optionalgrp = parser.add_argument_group("optional")
-optionalgrp.add_argument("--ragged",action="store_true")
-optionalgrp.add_argument("--regions",default="ALL",nargs="+",help="list of region names, defaults to all available")
-optionalgrp.add_argument("--dsname",help="name of generated dataset to use (required if multiple exist)")
 optionalgrp.add_argument("--eval",action="store_true",help="run test set evaluation after training")
 optionalgrp.add_argument("-h", "--help", action="help", help="show this message and exit")
+
+# dataset
+datagrp = parser.add_argument_group("dataset and augmentation")
+datagrp.add_argument("--ragged",action="store_true")
+datagrp.add_argument("--regions",default="ALL",nargs="+",help="list of region names, defaults to all available")
+datagrp.add_argument("--dsname",help="name of generated dataset to use (required if multiple exist)")
+datagrp.add_argument("--noise-sigma",default=None,help="add gaussian noise to input points")
 
 # training hyperparameters
 hypergrp = parser.add_argument_group("training hyperparameters")
@@ -73,6 +77,7 @@ modelgrp.add_argument("--npoints",type=int,default=300,help="number of points to
         "patches with fewer points will be skipped. Also in non-ragged, patches with more points with be truncated to npoints")
 modelgrp.add_argument("--dropout",type=float,default=0.3,help="dropout rate")
 modelgrp.add_argument("--no-ndvi",dest="ndvi",action="store_false",help="whether to use pointwise NDVi channel")
+modelgrp.add_argument("--no-tnets",dest="use_tnets",action="store_false",help="whether to use input and feature transforms")
 
 # loss parameters
 lossgrp = parser.add_argument_group("loss parameters")

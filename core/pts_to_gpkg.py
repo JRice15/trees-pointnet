@@ -131,7 +131,7 @@ def evaluate_preds_to_gpkg(patchgen, modeldir, resolution=50, threshold=0.6,
 
     with open(modeldir.joinpath("params.json"), "r") as f:
         params = json.load(f)
-        if "mmd" not in params["mode"]:
+        if params["output_mode"] not in ("seg", "dense"):
             raise NotImplementedError()
         sigma = params["mmd_sigma"]
         pred_regions = params["regions"]
