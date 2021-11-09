@@ -75,7 +75,7 @@ def make_gt_gpkg(patchgen):
 def estimate_pred_thresh(patchgen, modeldir, step=0.05):
     print("Estimating optimal prediction threshold")
     ray.init()
-    thresholds = np.arange(0.2, 1, step)
+    thresholds = np.arange(0.15, 1, step)
     results = []
     for thresh in thresholds:
         r = test_thresh.remote(patchgen.name, patchgen.dsname, patchgen.norm_data, modeldir, threshold=thresh)
