@@ -1,6 +1,3 @@
-"""
-This file is mostly a wrapper around LidarPatchGen.evaluate_model(...)
-"""
 
 import contextlib
 import datetime

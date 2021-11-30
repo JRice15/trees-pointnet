@@ -128,31 +128,18 @@ def filter_by_aoi(aoi_gdf, trees):
     return gpd.sjoin(trees, aoi_gdf, how='inner', predicate='within')[trees.columns]
 
 def main(gt_file, pred_file):
-    # if args.test_crown:
-    #     test_trees = read_pycrown(args.test_top, args.test_crown)
-    # else:
     test_trees = read_test_trees(pred_file)
     ref_trees = read_trees(gt_file)
 
-    # if args.aoi:
-    #     aoi_gdf = gpd.read_file(args.aoi)
-    #     if args.aoi_indices:
-    #         aoi_gdf = aoi_gdf.loc[args.aoi_indices]
-    #     test_trees['geometry'] = test_trees['point']
-    #     test_trees = filter_by_aoi(aoi_gdf, test_trees)
-    #     ref_trees = filter_by_aoi(aoi_gdf, ref_trees)
-
     test_trees = test_trees[~test_trees.index.duplicated(keep='first')]
     ref_trees = ref_trees[~ref_trees.index.duplicated(keep='first')]
-    # print(test_trees)
-    # print(ref_trees)
 
     assert len(test_trees) != 0 and len(ref_trees) != 0
     search_result = candidate_search(test_trees, ref_trees)
     assert len(search_result) != 0
     vote_result = candidate_vote(test_trees, ref_trees, search_result)
     result = candidate_validate(test_trees, ref_trees, vote_result)
-
+    
     return metrics(test_trees, ref_trees, result)
 
 
@@ -169,4 +156,6 @@ if __name__ == '__main__':
     # parser.add_argument('--aoi_indices', type=int, nargs='+', default=None,
     #     help='indices of polygons in aoi, if not provided all polygons are used')
     args = parser.parse_args()
-    main(args.ref, args.test_top)
+
+    from pprint import pprint
+    pprint(main(args.ref, args.test_top))

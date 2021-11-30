@@ -174,16 +174,14 @@ def evaluate_preds_to_gpkg(patchgen, modeldir, resolution=50, threshold=0.6,
         
             df = gpd.GeoDataFrame(geometry=gpd.points_from_xy(x, y), crs=region["meta"]["crs"])
 
+            outfile = outdir.joinpath(patch_region+"_"+patchname+"_pred.gpkg").as_posix()
+            make_gpkg(df, outfile)
+            gtfile = dataset_dir.joinpath("gt_gpkgs/{}_{}_gt.gpkg".format(patch_region, patchname)).as_posix()
+
             try:
-                outfile = outdir.joinpath(patch_region+"_"+patchname+"_pred.gpkg").as_posix()
-                make_gpkg(df, outfile)
-                gtfile = dataset_dir.joinpath("gt_gpkgs/{}_{}_gt.gpkg".format(patch_region, patchname)).as_posix()
                 results = pointmatch.main(gtfile, outfile)
                 successes += 1
-            except Exception as e:
-                # if not isinstance(e, AssertionError):
-                #     print("Error:")
-                #     traceback.print_exc()
+            except AssertionError as e:
                 results = {
                     "recall": 0,
                     "f1": 0,
