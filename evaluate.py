@@ -172,7 +172,7 @@ def evaluate_model(patchgen, model, model_dir):
     print("Evaluating metrics")
 
     metric_vals = model.evaluate(patchgen)
-    if not isinstance(metric_vals, dict):
+    if not isinstance(metric_vals, list):
         results = {"loss": metric_vals}
     else:
         results = {model.metrics_names[i]:v for i,v in enumerate(metric_vals)}

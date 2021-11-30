@@ -105,12 +105,17 @@ def raster_plot(pts, filename, gaussian_sigma, weights=None, title=None, clip=No
 def glob_modeldir(modelname):
     allmodels_dir = REPO_ROOT.joinpath("models/")
 
-    matching_models = glob.glob(os.path.join(allmodels_dir.as_posix(), modelname+"*", "model.tf"))
+    # first try exact match
+    matching_models = glob.glob(os.path.join(allmodels_dir.as_posix(), modelname+"-??????-??????", "model.tf"))
+    if len(matching_models) == 0:
+        # then try autofill match
+        matching_models = glob.glob(os.path.join(allmodels_dir.as_posix(), modelname+"*", "model.tf"))
+    
     if len(matching_models) > 1:
         print("Multiple models match 'name' argument:")
         print(" ", matching_models)
         print("Defaulting to the most recent:")
-        # all the names begin with a date/time string, so sorting gives order by time
+        # all the names have date/time string, so sorting gives order by time
         matching_models.sort()
         model_path = PurePath(matching_models[-1])
     elif len(matching_models) == 0:
