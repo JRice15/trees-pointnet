@@ -230,7 +230,9 @@ def main(dsname):
     #     expected.sort()
     #     assert all([i in keys for i in expected])
 
-    combined_stats_here
+    with open(DS_DIR.joinpath("stats", "combined_stats.json"), "w") as f:
+        json.dump(combined_stats.to_dict(), f, indent=2)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
