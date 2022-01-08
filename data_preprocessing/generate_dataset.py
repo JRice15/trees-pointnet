@@ -19,6 +19,7 @@ import rasterio
 # import tables
 # import numba
 
+import analyze_dataset
 
 def naip2ndvi(im):
     nir = im[...,3]
@@ -148,7 +149,7 @@ def load_naip(naipfile, grid_bounds):
     returns:
         list of image patches corresponding to each grid square
         rasterio raster object
-        raster crs
+        raster crs (str)
     """
     raster = rasterio.open(naipfile)
     im = raster.read()
@@ -188,7 +189,7 @@ def generate_region_h5(outfile, metafile, region_spec, subdivide=1):
     benchmark("start")
 
     # grid definition
-    grid_bounds, grid_crs = load_grid_bounds(region_spec["grid"], subdivide=subdivide)
+    full_grid_bounds, grid_crs = load_grid_bounds(region_spec["grid"], subdivide=subdivide)
     benchmark("grid")
 
     # ground truth trees
@@ -197,9 +198,9 @@ def generate_region_h5(outfile, metafile, region_spec, subdivide=1):
     benchmark("gt")
 
     # remove grid squares that have no gt trees
-    sep_gt_trees = seperate_pts(grid_bounds, gt_trees[:,0], gt_trees[:,1])
+    sep_gt_trees = seperate_pts(full_grid_bounds, gt_trees[:,0], gt_trees[:,1])
     valid_patch = [len(i) >= 3 for i in sep_gt_trees]
-    grid_bounds = np.array([v for i,v in enumerate(grid_bounds) if valid_patch[i]])
+    grid_bounds = np.array([v for i,v in enumerate(full_grid_bounds) if valid_patch[i]])
     sep_gt_trees = [v for i,v in enumerate(sep_gt_trees) if valid_patch[i]]
     benchmark("grid filtering")
 
@@ -250,7 +251,8 @@ def generate_region_h5(outfile, metafile, region_spec, subdivide=1):
 
     with h5py.File(outfile.as_posix(), "w") as hf:
         # write to hdf5
-        hf.create_dataset("/grid", data=grid_bounds)
+        hf.create_dataset("/patch_coords", data=grid_bounds)
+        hf.create_dataset("/full_grid", data=full_grid_bounds)
         for i in range(len(sep_gt_trees)):
             hf.create_dataset("/gt/patch{}".format(i), data=sep_gt_trees[i])
             hf.create_dataset("/lidar/patch{}".format(i), data=lidar_w_naip[i])
@@ -298,6 +300,8 @@ def main():
                 statuses[region_name] = "Fail: " + str(e)
 
     pprint(statuses)
+
+    analyze_dataset.main(ARGS.outname)
 
 if __name__ == "__main__":
     main()

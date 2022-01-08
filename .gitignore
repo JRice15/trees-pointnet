@@ -142,3 +142,6 @@ models/
 
 # other outputs
 output/
+
+# temp file
+temp.py
