@@ -21,7 +21,9 @@ import pandas as pd
 import tables
 import seaborn
 
-sys.path.append("..")
+# add parent directory
+dn = os.path.dirname
+sys.path.append(dn(dn(os.path.abspath(__file__))))
 
 from core import DATA_DIR
 from core.utils import raster_plot
