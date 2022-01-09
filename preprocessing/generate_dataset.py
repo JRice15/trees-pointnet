@@ -97,7 +97,7 @@ def load_grid_bounds(grid_filename):
 
     return grid_bounds, str(grid.crs).lower()
 
-def subdivide_grid(grid_bounds, subidivide):
+def subdivide_grid(grid_bounds, subdivide):
     """
     args:
         subdivide: number of times to divide the side of each grid square. for example,
