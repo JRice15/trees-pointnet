@@ -108,6 +108,7 @@ def glob_modeldir(modelname):
     # first try exact match
     matching_models = glob.glob(os.path.join(allmodels_dir.as_posix(), modelname+"-??????-??????", "model.tf"))
     if len(matching_models) == 0:
+        print("No exact model name matches")
         # then try autofill match
         matching_models = glob.glob(os.path.join(allmodels_dir.as_posix(), modelname+"*", "model.tf"))
     

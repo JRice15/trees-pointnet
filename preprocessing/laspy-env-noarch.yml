@@ -1,0 +1,21 @@
+name: laspy
+channels:
+  - conda-forge
+  - defaults
+dependancies:
+  - laspy=2.0.3 
+  - conda-forge 
+  - gdal 
+  - geopandas 
+  - h5py 
+  - matplotlib 
+  - numpy 
+  - pandas 
+  - tqdm 
+  - pytables 
+  - seaborn 
+  - rasterio 
+  - pip
+  - pip:
+    - laszip==0.1.0
+prefix: /data/jrice15/miniconda/envs/laspy
