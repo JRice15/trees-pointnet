@@ -206,7 +206,7 @@ def generate_region_h5(outfile, metafile, region_spec, subdivide=1):
     grid_bounds = [x for i,x in enumerate(orig_grid_bounds) if len(temp_gt_trees[i]) > 2]
 
     # subdivide the grid
-    grid_bounds = subdivide_grid(grid_bounds, subidivide=subdivide)
+    grid_bounds = subdivide_grid(grid_bounds, subdivide=subdivide)
 
     # remove grid squares that have no gt trees
     sep_gt_trees = seperate_pts(grid_bounds, gt_trees[:,0], gt_trees[:,1])
