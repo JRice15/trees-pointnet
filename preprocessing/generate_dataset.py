@@ -299,7 +299,7 @@ def main():
     with open(ARGS.specs, "r") as f:
         data_specs = json.load(f)
 
-    print("Generating dataset", outname)
+    print("Generating dataset", ARGS.outname)
 
     # make sure no spaces in region name keys
     if any([" " in i for i in data_specs.keys()]):
