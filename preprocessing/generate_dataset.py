@@ -85,12 +85,9 @@ def load_lidar(las_file, grid_bounds, out=None):
     return out
 
 
-def load_grid_bounds(grid_filename, subdivide):
+def load_grid_bounds(grid_filename):
     """ 
     Load a grid definition
-    args:
-        subdivide: number of times to divide the side of each grid square. for example,
-            subdivide=2 results in 4 squares per original, while subdivide=3 results in 9
     """
     grid = gpd.read_file(grid_filename)
 
@@ -98,6 +95,14 @@ def load_grid_bounds(grid_filename, subdivide):
     # edges of each grid square
     grid_bounds = grid["geometry"].bounds.to_numpy()
 
+    return grid_bounds, str(grid.crs).lower()
+
+def subdivide_grid(grid_bounds, subidivide):
+    """
+    args:
+        subdivide: number of times to divide the side of each grid square. for example,
+            subdivide=2 results in 4 squares per original, while subdivide=3 results in 9
+    """
     if subdivide > 1:
         new_grid_bounds = []
         for left,bottom,right,top in grid_bounds:
@@ -107,8 +112,7 @@ def load_grid_bounds(grid_filename, subdivide):
                 for y in np.linspace(bottom, top, subdivide+1)[:-1]:
                     new_grid_bounds.append([x, y, x+x_width, y+y_width])
         grid_bounds = np.array(new_grid_bounds)
-
-    return grid_bounds, str(grid.crs).lower()
+    return grid_bounds
 
 
 def load_gt_trees(filename, target_crs, given_crs=None):
@@ -189,19 +193,23 @@ def generate_region_h5(outfile, metafile, region_spec, subdivide=1):
     benchmark("start")
 
     # grid definition
-    full_grid_bounds, grid_crs = load_grid_bounds(region_spec["grid"], subdivide=subdivide)
+    orig_grid_bounds, grid_crs = load_grid_bounds(region_spec["grid"])
     benchmark("grid")
 
     # ground truth trees
-    gt_crs = region_spec.get("gt_crs", None) # default to None if key doesn't exist
+    gt_crs = region_spec.get("gt_crs", None) # defaults to None if key doesn't exist
     gt_trees = load_gt_trees(region_spec["gt"], target_crs=grid_crs, given_crs=gt_crs)
     benchmark("gt")
 
+    # remove grid squares that have 2 or less gt trees (sometimes a tree falls slightly outside the intended grid square)
+    temp_gt_trees = seperate_pts(orig_grid_bounds, gt_trees[:,0], gt_trees[:,1])
+    grid_bounds = [x for i,x in enumerate(orig_grid_bounds) if len(temp_gt_trees[i]) > 2]
+
+    # subdivide the grid
+    grid_bounds = subdivide_grid(grid_bounds, subidivide=subdivide)
+
     # remove grid squares that have no gt trees
-    sep_gt_trees = seperate_pts(full_grid_bounds, gt_trees[:,0], gt_trees[:,1])
-    valid_patch = [len(i) >= 3 for i in sep_gt_trees]
-    grid_bounds = np.array([v for i,v in enumerate(full_grid_bounds) if valid_patch[i]])
-    sep_gt_trees = [v for i,v in enumerate(sep_gt_trees) if valid_patch[i]]
+    sep_gt_trees = seperate_pts(grid_bounds, gt_trees[:,0], gt_trees[:,1])
     benchmark("grid filtering")
 
     # naip
@@ -252,7 +260,7 @@ def generate_region_h5(outfile, metafile, region_spec, subdivide=1):
     with h5py.File(outfile.as_posix(), "w") as hf:
         # write to hdf5
         hf.create_dataset("/patch_coords", data=grid_bounds)
-        hf.create_dataset("/full_grid", data=full_grid_bounds)
+        hf.create_dataset("/nonsubdivided_orig_grid", data=orig_grid_bounds)
         for i in range(len(sep_gt_trees)):
             hf.create_dataset("/gt/patch{}".format(i), data=sep_gt_trees[i])
             hf.create_dataset("/lidar/patch{}".format(i), data=lidar_w_naip[i])
