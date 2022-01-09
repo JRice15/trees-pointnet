@@ -48,7 +48,7 @@ def main(dsname):
     print("Running analyze_dataset.py")
     combined_stats = None
 
-    DS_DIR = DATA_DIR.joinpath("generated", ARGS.dsname)
+    DS_DIR = DATA_DIR.joinpath("generated", dsname)
     region_files = glob.glob(DS_DIR.joinpath("*.h5").as_posix())
 
     for region_file in region_files:

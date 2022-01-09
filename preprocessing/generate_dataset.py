@@ -174,13 +174,21 @@ def load_naip(naipfile, grid_bounds):
     return out, raster, str(raster.crs).lower()
 
 
+def filterby(lst, cond):
+    """
+    return elems from list where the corresponding elems from cond are True
+    """
+    assert len(lst) == len(cond)
+    return [x for i,x in enumerate(lst) if cond[i]]
+    
 
 
 def benchmark(name, _cache={}):
     """timing function"""
     t = time.perf_counter()
     if "last" in _cache:
-        print("  ", name, t - _cache["last"])
+        elapsed = t - _cache["last"]
+        print("  ", name, round(elapsed, 3), "secs")
     _cache["last"] = t
 
 
@@ -227,24 +235,33 @@ def generate_region_h5(outfile, metafile, region_spec, subdivide=1):
     sep_lidar = None
     for fname in lidar_files:
         sep_lidar = load_lidar(fname, grid_bounds, out=sep_lidar)
-    for i,lidar_patch in enumerate(sep_lidar):
-        if len(lidar_patch) < 100: # fewer than 100 points in a patch
-            print("! Lidar patch {} with only {} points. Grid square bounds {}".format(i, len(lidar_patch), grid_bounds[i]))
-            # return "Fail: too few lidar points in a grid square"
+    # remove patches with <100 points
+    validpatch = [len(pts) >= 100 for pts in sep_lidar]
+    grid_bounds = filterby(grid_bounds, validpatch)
+    sep_lidar = filterby(sep_lidar, validpatch)
+    naip_patches = filterby(naip_patches, validpatch)
     benchmark("lidar")
 
     # add NDVI channel to lidar
+    validpatch = []
     lidar_w_naip = []
-    n_groups = len(sep_lidar)
     print("Adding NDVI")
-    for n,pt_group in tqdm(enumerate(sep_lidar), total=len(sep_lidar)):
+    for i,pt_group in tqdm(enumerate(sep_lidar), total=len(sep_lidar)):
         xys = pt_group[:,:2]
         naip = naip_raster.sample(xys) # returns generator
         # convert to float
-        naip = np.array([i for i in naip]) / 256
-        ndvi = naip2ndvi(naip).reshape(-1, 1)
-        pt_group = np.concatenate([pt_group, ndvi], axis=-1)
-        lidar_w_naip.append(pt_group)
+        naip = np.array([val for val in naip]) / 256
+        # if there are no naip values here, invalidate the patch
+        if not len(naip):
+            validpatch.append(False)
+        else:
+            validpatch.append(True)
+            ndvi = naip2ndvi(naip).reshape(-1, 1)
+            pt_group = np.concatenate([pt_group, ndvi], axis=-1)
+            lidar_w_naip.append(pt_group)
+    
+    grid_bounds = filterby(grid_bounds, validpatch)
+    naip_patches = filterby(naip_patches, validpatch)
 
     naip_raster.close()
     benchmark("add NDVI to lidar")
@@ -259,8 +276,8 @@ def generate_region_h5(outfile, metafile, region_spec, subdivide=1):
 
     with h5py.File(outfile.as_posix(), "w") as hf:
         # write to hdf5
-        hf.create_dataset("/patch_coords", data=grid_bounds)
-        hf.create_dataset("/nonsubdivided_orig_grid", data=orig_grid_bounds)
+        hf.create_dataset("/patch_coords", data=np.array(grid_bounds))
+        hf.create_dataset("/nonsubdivided_orig_grid", data=np.array(orig_grid_bounds))
         for i in range(len(sep_gt_trees)):
             hf.create_dataset("/gt/patch{}".format(i), data=sep_gt_trees[i])
             hf.create_dataset("/lidar/patch{}".format(i), data=lidar_w_naip[i])
@@ -281,6 +298,8 @@ def main():
 
     with open(ARGS.specs, "r") as f:
         data_specs = json.load(f)
+
+    print("Generating dataset", outname)
 
     # make sure no spaces in region name keys
     if any([" " in i for i in data_specs.keys()]):
