@@ -207,7 +207,6 @@ def generate_region_h5(outfile, metafile, region_spec, subdivide=1):
     # ground truth trees
     gt_crs = region_spec.get("gt_crs", None) # defaults to None if key doesn't exist
     gt_trees = load_gt_trees(region_spec["gt"], target_crs=grid_crs, given_crs=gt_crs)
-    benchmark("gt")
 
     # remove grid squares that have 2 or less gt trees (sometimes a tree falls slightly outside the intended grid square)
     temp_gt_trees = seperate_pts(orig_grid_bounds, gt_trees[:,0], gt_trees[:,1])
@@ -215,10 +214,11 @@ def generate_region_h5(outfile, metafile, region_spec, subdivide=1):
 
     # subdivide the grid
     grid_bounds = subdivide_grid(grid_bounds, subdivide=subdivide)
-
-    # remove grid squares that have no gt trees
-    sep_gt_trees = seperate_pts(grid_bounds, gt_trees[:,0], gt_trees[:,1])
     benchmark("grid filtering")
+
+    # reseperate gt trees into filtered and subdivided patches
+    sep_gt_trees = seperate_pts(grid_bounds, gt_trees[:,0], gt_trees[:,1])
+    benchmark("gt")
 
     # naip
     naip_patches, naip_raster, naip_crs = load_naip(region_spec["naip"], grid_bounds)
@@ -235,11 +235,13 @@ def generate_region_h5(outfile, metafile, region_spec, subdivide=1):
     sep_lidar = None
     for fname in lidar_files:
         sep_lidar = load_lidar(fname, grid_bounds, out=sep_lidar)
+        
     # remove patches with <100 points
     validpatch = [len(pts) >= 100 for pts in sep_lidar]
     grid_bounds = filterby(grid_bounds, validpatch)
     sep_lidar = filterby(sep_lidar, validpatch)
     naip_patches = filterby(naip_patches, validpatch)
+    sep_gt_trees = filterby(sep_gt_trees, validpatch)
     benchmark("lidar")
 
     # add NDVI channel to lidar
@@ -262,6 +264,7 @@ def generate_region_h5(outfile, metafile, region_spec, subdivide=1):
     
     grid_bounds = filterby(grid_bounds, validpatch)
     naip_patches = filterby(naip_patches, validpatch)
+    sep_gt_trees = filterby(sep_gt_trees, validpatch)
 
     naip_raster.close()
     benchmark("add NDVI to lidar")
