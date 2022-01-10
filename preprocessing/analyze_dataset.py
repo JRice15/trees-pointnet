@@ -64,7 +64,7 @@ def main(dsname):
             stats["n_patches"] = len(hf["lidar"].keys())
             stats["total_lidar_points"] = sum([pts.shape[0] for pts in hf["lidar"].values()])
             stats["total_gt_trees"] = sum([pts.shape[0] for pts in hf["gt"].values()])
-            patch_coords = hf["/grid"][:]
+            patch_coords = hf["/patch_coords"][:]
 
         grid_x = patch_coords[...,0]
         grid_y = patch_coords[...,1]
