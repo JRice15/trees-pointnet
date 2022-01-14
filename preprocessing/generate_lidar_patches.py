@@ -30,7 +30,7 @@ with open("local_lazspark_path.txt", "r") as f:
 print("lazspark path:", lazspark_path)
 sys.path.append(lazspark_path)
 
-from lazspark import stages
+import stages
 
 
 
