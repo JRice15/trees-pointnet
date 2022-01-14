@@ -11,7 +11,6 @@ import json
 from pprint import pprint
 from pathlib import PurePath
 
-import h5py
 import numpy as np
 
 

@@ -1,6 +1,6 @@
 """
 Create a HeightAboveGround (HAG) dimension from the Z component, filter 
-to HAG>=0.1, and optionally subsample (take every nth point)
+to HAG>=0.0, and optionally subsample (take every nth point)
 """
 import argparse
 import json
