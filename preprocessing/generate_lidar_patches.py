@@ -8,9 +8,10 @@ import traceback
 from pprint import pprint
 from pathlib import PurePath
 
+from tqdm import tqdm
 # import geopandas as gpd
 # import pandas as pd
-# import laspy
+import laspy
 import numpy as np
 # import pyproj
 # import shapely
@@ -37,7 +38,7 @@ def load_lidar(las_file, patch_bounds, out_dict):
             z = pts["HeightAboveGround"]
             pts = np.stack((x,y,z), axis=-1)
 
-            for patch_id, (left,bott,right,top) in enumerate(patch_bounds):
+            for patch_id, (left,bott,right,top) in patch_bounds.items():
                 cond = np.logical_and.reduce(
                     (x >= left, y >= bott, x <= right, y <= top)
                 )
@@ -57,7 +58,7 @@ def process_region(regionname, spec, outname):
     globpath = DATA_DIR.joinpath("NAIP_patches/" + regionname.lower() + "_*.tif")
     bounds = {}
     for filename in glob.glob(globpath.as_posix()):
-        patch_id = int(PurePath(filename).stem.split("_")[0])
+        patch_id = int(PurePath(filename).stem.split("_")[-1])
         with rasterio.open(filename) as raster:
             bounds[patch_id] = [i for i in raster.bounds]
     
@@ -92,13 +93,13 @@ def main():
 
     for region_name, region_spec in data_specs.items():
         outdir = OUTDIR.joinpath(region_name)
-        if os.path.exists(outfile) and not ARGS.overwrite:
+        if os.path.exists(outdir) and not ARGS.overwrite:
             print("\n" + region_name, "already generated")
             statuses[region_name] = "Already present"
         else:
             print("\nGenerating region:", region_name)
             try:
-                status = process_region(region_name, region_spec)
+                status = process_region(region_name, region_spec, ARGS.outname)
                 print(status)
                 statuses[region_name] = status
             except Exception as e:
