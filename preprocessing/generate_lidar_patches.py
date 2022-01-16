@@ -16,7 +16,6 @@ import numpy as np
 # import shapely
 import rasterio
 
-
 # add parent directory
 dn = os.path.dirname
 sys.path.append(dn(dn(os.path.abspath(__file__))))
@@ -24,52 +23,51 @@ sys.path.append(dn(dn(os.path.abspath(__file__))))
 from core import DATA_DIR
 
 
-# lazspark
-with open("local_lazspark_path.txt", "r") as f:
-    lazspark_path = f.read().strip()
-print("lazspark path:", lazspark_path)
-sys.path.append(lazspark_path)
 
-import stages
-import utils
+def load_lidar(las_file, patch_bounds, out_dict):
+    chunk_size = 5_000_000
+
+    print("  reading", las_file)
+    with laspy.open(las_file, "r") as reader:
+        for pts in tqdm(reader.chunk_iterator(chunk_size), total=(reader.header.point_count//chunk_size)):
+            # Note to future: never use pts["X"], only pts["x"]. the capitalized version scales the numbers to 
+            # remove the decimal bc that's how laspy stores the underlying data
+            x = pts["x"]
+            y = pts["y"]
+            z = pts["HeightAboveGround"]
+            pts = np.stack((x,y,z), axis=-1)
+
+            for patch_id, (left,bott,right,top) in enumerate(patch_bounds):
+                cond = np.logical_and.reduce(
+                    (x >= left, y >= bott, x <= right, y <= top)
+                )
+                selected = pts[cond]
+                if patch_id in out_dict:
+                    out_dict[patch_id] = np.concatenate((out_dict[patch_id], selected))
+                else:
+                    out_dict[patch_id] = selected
+
+    return out
+
 
 
 def process_region(regionname, spec, outname):
     outdir = DATA_DIR.joinpath("generated", outname, regionname, "lidar")
 
     globpath = DATA_DIR.joinpath("NAIP_patches/" + regionname.lower() + "_*.tif")
-    all_bounds = []
-    patch_ids = []
+    bounds = {}
     for filename in glob.glob(globpath.as_posix()):
-        patch_ids.append(int(PurePath(filename).stem.split("_")[-1]))
+        patch_id = int(PurePath(filename).stem.split("_")[0])
         with rasterio.open(filename) as raster:
-            all_bounds.append([i for i in raster.bounds])
-
-    def key_func(arr, all_bounds, patch_ids):
-        # initialize keys to -1
-        out = -1 * np.ones(len(arr))
-        for i, (left,bott,right,top) in enumerate(all_bounds):
-            cond = np.logical_and.reduce(
-                (arr >= left, arr >= bott, arr <= right, arr <= top)
-            )
-            out[cond] = patch_ids[i]
-        return out
+            bounds[patch_id] = [i for i in raster.bounds]
     
-    rdd_maps = []
     if not isinstance(spec["lidar"], list):
         spec["lidar"] = [spec["lidar"]]
+    seperated_pts = {}
     for lidarfile in spec["lidar"]:
-        rdd, header = stages.Reader(lidarfile, 1_000_000)()
-        rdd_map = stages.Split(key_func, patch_ids, f_args=(all_bounds, patch_ids))(rdd)
-        rdd_maps.append(rdd_map)
-        
-    for patch_id in patch_ids:
-        # gather the multiple rdds if there are multiple lidar sources
-        rdds = [m[patch_id] for m in rdd_maps]
-        rdd = rdds[0]
-        for i in range(1, len(rdds)):
-            rdd = rdd.union(rdds[i])
-        points = stages.Collect()(rdd)
+        seperated_pts = load_lidar(lidarfile, bounds, seperated_pts)
+
+    for patch_id, pts in seperated_pts:
         outfile = outdir.joinpath("lidar_patch_"+str(patch_id)+".npy").as_posix()
         np.save(outfile, points)
     
@@ -94,13 +92,13 @@ def main():
 
     for region_name, region_spec in data_specs.items():
         outdir = OUTDIR.joinpath(region_name)
-        if os.path.exists(outdir) and not ARGS.overwrite:
+        if os.path.exists(outfile) and not ARGS.overwrite:
             print("\n" + region_name, "already generated")
             statuses[region_name] = "Already present"
         else:
             print("\nGenerating region:", region_name)
             try:
-                status = process_region(region_name, region_spec, ARGS.outname)
+                status = process_region(region_name, region_spec)
                 print(status)
                 statuses[region_name] = status
             except Exception as e:
