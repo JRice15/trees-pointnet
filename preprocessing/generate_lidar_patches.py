@@ -31,7 +31,7 @@ print("lazspark path:", lazspark_path)
 sys.path.append(lazspark_path)
 
 import stages
-
+import utils
 
 
 def process_region(regionname, spec, outname):
@@ -41,7 +41,7 @@ def process_region(regionname, spec, outname):
     all_bounds = []
     patch_ids = []
     for filename in glob.glob(globpath.as_posix()):
-        patch_ids.append(int(PurePath(filename).stem.split("_")[0]))
+        patch_ids.append(int(PurePath(filename).stem.split("_")[-1]))
         with rasterio.open(filename) as raster:
             all_bounds.append([i for i in raster.bounds])
 
@@ -55,10 +55,20 @@ def process_region(regionname, spec, outname):
             out[cond] = patch_ids[i]
         return out
     
-    rdd, header = stages.Reader(spec["lidar"], 1_000_000)()
-    rdd_map = stages.Split(key_func, f_args=(all_bounds, patch_ids))(rdd)
-    
-    for patch_id, rdd in rdd_map:
+    rdd_maps = []
+    if not isinstance(spec["lidar"], list):
+        spec["lidar"] = [spec["lidar"]]
+    for lidarfile in spec["lidar"]:
+        rdd, header = stages.Reader(lidarfile, 1_000_000)()
+        rdd_map = stages.Split(key_func, patch_ids, f_args=(all_bounds, patch_ids))(rdd)
+        rdd_maps.append(rdd_map)
+        
+    for patch_id in patch_ids:
+        # gather the multiple rdds if there are multiple lidar sources
+        rdds = [m[patch_id] for m in rdd_maps]
+        rdd = rdds[0]
+        for i in range(1, len(rdds)):
+            rdd = rdd.union(rdds[i])
         points = stages.Collect()(rdd)
         outfile = outdir.joinpath("lidar_patch_"+str(patch_id)+".npy").as_posix()
         np.save(outfile, points)
@@ -84,13 +94,13 @@ def main():
 
     for region_name, region_spec in data_specs.items():
         outdir = OUTDIR.joinpath(region_name)
-        if os.path.exists(outfile) and not ARGS.overwrite:
+        if os.path.exists(outdir) and not ARGS.overwrite:
             print("\n" + region_name, "already generated")
             statuses[region_name] = "Already present"
         else:
             print("\nGenerating region:", region_name)
             try:
-                status = process_region(region_name, region_spec)
+                status = process_region(region_name, region_spec, ARGS.outname)
                 print(status)
                 statuses[region_name] = status
             except Exception as e:
