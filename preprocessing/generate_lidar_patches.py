@@ -23,6 +23,12 @@ sys.path.append(dn(dn(os.path.abspath(__file__))))
 
 from core import DATA_DIR
 
+def naip2ndvi(im):
+    nir = im[...,3]
+    red = im[...,0]
+    ndvi = (nir - red) / (nir + red)
+    ndvi = np.nan_to_num(ndvi, nan=0.0)
+    return ndvi
 
 
 def load_lidar(las_file, patch_bounds, out_dict):
@@ -51,6 +57,20 @@ def load_lidar(las_file, patch_bounds, out_dict):
     return out_dict
 
 
+def add_ndvi_to_pts(seperated_lidar, raster_map):
+    out = {}
+    for patch_id, pts in seperated_lidar.items():
+        raster = rasters[patch_id]
+        xys = pts[:,:2]
+        naip = raster.sample(xys) # returns generator
+        # convert to float
+        naip = np.array([val for val in naip]) / 256
+        assert len(naip) == len(pts)
+        ndvi = naip2ndvi(naip).reshape(-1, 1)
+        pts = np.concatenate([pts, ndvi], axis=-1)
+        out[patch_id] = pts
+    return out
+
 
 def process_region(regionname, spec, outname):
     outdir = DATA_DIR.joinpath("generated", "lidar", outname, regionname)
@@ -58,10 +78,12 @@ def process_region(regionname, spec, outname):
 
     globpath = DATA_DIR.joinpath("NAIP_patches/" + regionname.lower() + "_*.tif")
     bounds = {}
+    rasters = {}
     for filename in glob.glob(globpath.as_posix()):
         patch_id = int(PurePath(filename).stem.split("_")[-1])
-        with rasterio.open(filename) as raster:
-            bounds[patch_id] = [i for i in raster.bounds]
+        raster = rasterio.open(filename)
+        rasters[patch_id] = raster
+        bounds[patch_id] = [i for i in raster.bounds]
     
     if not isinstance(spec["lidar"], list):
         spec["lidar"] = [spec["lidar"]]
@@ -69,10 +91,15 @@ def process_region(regionname, spec, outname):
     for lidarfile in spec["lidar"]:
         seperated_pts = load_lidar(lidarfile, bounds, seperated_pts)
 
+    seperated_pts = add_ndvi_to_pts(seperated_pts, rasters)
+
     for patch_id, pts in seperated_pts.items():
         outfile = outdir.joinpath("lidar_patch_"+str(patch_id)+".npy").as_posix()
         np.save(outfile, pts)
     
+    for raster in rasters.items():
+        raster.close()
+
     return "Success"
 
 
