@@ -49,18 +49,19 @@ def load_lidar(las_file, patch_bounds, out_dict):
                     (x >= left, y >= bott, x <= right, y <= top)
                 )
                 selected = pts[cond]
-                if patch_id in out_dict:
-                    out_dict[patch_id] = np.concatenate((out_dict[patch_id], selected))
-                else:
-                    out_dict[patch_id] = selected
+                if len(selected):
+                    if patch_id in out_dict:
+                        out_dict[patch_id] = np.concatenate((out_dict[patch_id], selected))
+                    else:
+                        out_dict[patch_id] = selected
 
     return out_dict
 
 
 def add_ndvi_to_pts(seperated_lidar, raster_map):
     out = {}
-    for patch_id, pts in seperated_lidar.items():
-        raster = rasters[patch_id]
+    for patch_id, pts in tqdm(seperated_lidar.items()):
+        raster = raster_map[patch_id]
         xys = pts[:,:2]
         naip = raster.sample(xys) # returns generator
         # convert to float
@@ -72,8 +73,11 @@ def add_ndvi_to_pts(seperated_lidar, raster_map):
     return out
 
 
-def process_region(regionname, spec, outname):
+def process_region(regionname, spec, outname, overwrite):
     outdir = DATA_DIR.joinpath("generated", "lidar", outname, regionname)
+    if os.path.exists(outdir) and not overwrite:
+        return "Already exists"
+
     os.makedirs(outdir, exist_ok=True)
 
     globpath = DATA_DIR.joinpath("NAIP_patches/" + regionname.lower() + "_*.tif")
@@ -97,8 +101,15 @@ def process_region(regionname, spec, outname):
         outfile = outdir.joinpath("lidar_patch_"+str(patch_id)+".npy").as_posix()
         np.save(outfile, pts)
     
-    for raster in rasters.items():
+    for raster in rasters.values():
         raster.close()
+
+    expected_keys = set(rasters.keys())
+    outputted_keys = set(seperated_pts.keys())
+    diff = expected_keys.difference(outputted_keys)
+    if len(diff):
+        missing = ", ".join([str(x) for x in diff])
+        return "Missing outputs: " + missing
 
     return "Success"
 
@@ -108,7 +119,6 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--specs",required=True,help="json file with dataset specs")
     parser.add_argument("--outname",required=True,help="name of output h5 file (to be placed within the `../data` directory)")
-    parser.add_argument("--subdivide",type=int,default=2,help="number of times to divide each grid square (resulting grid squares is subidivde**2 times the original")
     parser.add_argument("--overwrite",action="store_true")
     ARGS = parser.parse_args()
 
@@ -116,11 +126,8 @@ def main():
         data_specs = json.load(f)
 
     OUTDIR = PurePath("../data/generated/lidar/{}".format(ARGS.outname))
-
-    if os.path.exists(OUTDIR) and not ARGS.overwrite:
-        raise FileExistsError("lidar patch dataset {} already exists".format(ARGS.outname))
-
     os.makedirs(OUTDIR, exist_ok=True)
+
     # save specs for future reference
     with open(OUTDIR.joinpath("specs.json"), "w") as f:
         json.dump(data_specs, f)
@@ -130,7 +137,7 @@ def main():
     for region_name, region_spec in data_specs.items():
         print("\nGenerating region:", region_name)
         try:
-            status = process_region(region_name, region_spec, ARGS.outname)
+            status = process_region(region_name, region_spec, ARGS.outname, ARGS.overwrite)
             print(status)
             statuses[region_name] = status
         except Exception as e:
@@ -141,3 +148,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
