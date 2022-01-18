@@ -48,12 +48,13 @@ def load_lidar(las_file, patch_bounds, out_dict):
                 else:
                     out_dict[patch_id] = selected
 
-    return out
+    return out_dict
 
 
 
 def process_region(regionname, spec, outname):
-    outdir = DATA_DIR.joinpath("generated", outname, regionname, "lidar")
+    outdir = DATA_DIR.joinpath("generated", "lidar", outname, regionname)
+    os.makedirs(outdir, exist_ok=True)
 
     globpath = DATA_DIR.joinpath("NAIP_patches/" + regionname.lower() + "_*.tif")
     bounds = {}
@@ -68,10 +69,11 @@ def process_region(regionname, spec, outname):
     for lidarfile in spec["lidar"]:
         seperated_pts = load_lidar(lidarfile, bounds, seperated_pts)
 
-    for patch_id, pts in seperated_pts:
+    for patch_id, pts in seperated_pts.items():
         outfile = outdir.joinpath("lidar_patch_"+str(patch_id)+".npy").as_posix()
-        np.save(outfile, points)
+        np.save(outfile, pts)
     
+    return "Success"
 
 
 
@@ -86,25 +88,27 @@ def main():
     with open(ARGS.specs, "r") as f:
         data_specs = json.load(f)
 
-    OUTDIR = PurePath("../data/generated/{}".format(ARGS.outname))
+    OUTDIR = PurePath("../data/generated/lidar/{}".format(ARGS.outname))
+
+    if os.path.exists(OUTDIR) and not ARGS.overwrite:
+        raise FileExistsError("lidar patch dataset {} already exists".format(ARGS.outname))
+
     os.makedirs(OUTDIR, exist_ok=True)
+    # save specs for future reference
+    with open(OUTDIR.joinpath("specs.json"), "w") as f:
+        json.dump(data_specs, f)
 
     statuses = {}
 
     for region_name, region_spec in data_specs.items():
-        outdir = OUTDIR.joinpath(region_name)
-        if os.path.exists(outdir) and not ARGS.overwrite:
-            print("\n" + region_name, "already generated")
-            statuses[region_name] = "Already present"
-        else:
-            print("\nGenerating region:", region_name)
-            try:
-                status = process_region(region_name, region_spec, ARGS.outname)
-                print(status)
-                statuses[region_name] = status
-            except Exception as e:
-                traceback.print_exc()
-                statuses[region_name] = "Fail: " + str(e)
+        print("\nGenerating region:", region_name)
+        try:
+            status = process_region(region_name, region_spec, ARGS.outname)
+            print(status)
+            statuses[region_name] = status
+        except Exception as e:
+            traceback.print_exc()
+            statuses[region_name] = "Fail: " + str(e)
 
     pprint(statuses)
 
