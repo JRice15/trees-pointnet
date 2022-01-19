@@ -125,10 +125,10 @@ def main():
 
     for region_name, region_spec in data_specs.items():
         print("\nGenerating region:", region_name)
-        OUTDIR = DATA_DIR.joinpath("lidar", outname, regionname)
+        OUTDIR = DATA_DIR.joinpath("lidar", ARGS.outname, region_name)
         # check for existing outputs
         existing_outputs = glob.glob(OUTDIR.joinpath("*.npy").as_posix())
-        if len(existing_outputs) and not overwrite:
+        if len(existing_outputs) and not ARGS.overwrite:
             statuses[region_name] = "Already exists"
             continue
         # generate data
