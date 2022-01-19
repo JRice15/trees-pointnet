@@ -73,12 +73,7 @@ def add_ndvi_to_pts(seperated_lidar, raster_map):
     return out
 
 
-def process_region(regionname, spec, outname, overwrite):
-    outdir = DATA_DIR.joinpath("generated", "lidar", outname, regionname)
-    existing_outputs = glob.glob(outdir.joinpath("*.npy").as_posix())
-    if not len(existing_outputs) and not overwrite:
-        return "Already exists"
-
+def process_region(regionname, spec, outdir):
     os.makedirs(outdir, exist_ok=True)
 
     globpath = DATA_DIR.joinpath("NAIP_patches/" + regionname.lower() + "_*.tif")
@@ -126,21 +121,24 @@ def main():
     with open(ARGS.specs, "r") as f:
         data_specs = json.load(f)
 
-    OUTDIR = PurePath("../data/generated/lidar/{}".format(ARGS.outname))
-    os.makedirs(OUTDIR, exist_ok=True)
-
-    # save specs for future reference
-    with open(OUTDIR.joinpath("specs.json"), "w") as f:
-        json.dump(data_specs, f)
-
     statuses = {}
 
     for region_name, region_spec in data_specs.items():
         print("\nGenerating region:", region_name)
+        OUTDIR = DATA_DIR.joinpath("lidar", outname, regionname)
+        # check for existing outputs
+        existing_outputs = glob.glob(OUTDIR.joinpath("*.npy").as_posix())
+        if len(existing_outputs) and not overwrite:
+            statuses[region_name] = "Already exists"
+            continue
+        # generate data
         try:
-            status = process_region(region_name, region_spec, ARGS.outname, ARGS.overwrite)
+            status = process_region(region_name, region_spec, OUTDIR)
             print(status)
             statuses[region_name] = status
+            # save specs on success for future reference
+            with open(OUTDIR.joinpath("specs.json"), "w") as f:
+                json.dump(data_specs[region_name], f, indent=2)
         except Exception as e:
             traceback.print_exc()
             statuses[region_name] = "Fail: " + str(e)
