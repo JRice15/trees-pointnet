@@ -15,31 +15,7 @@ from tensorflow.keras import backend as K
 from tensorflow.keras import layers
 
 from core import ARGS, REPO_ROOT
-from core.utils import raster_plot
-
-
-def rotate(p, degrees=0):
-    """
-    in-place rotate points `p` counterclockwise by a multiple of 90 degrees, 
-    around the point (0.5, 0.5)
-    """
-    if degrees == 0:
-        return p
-    origin = np.zeros_like(p)
-    origin[...,:2] = 0.5
-    p -= origin
-    assert degrees % 90 == 0
-    if degrees == 180:
-        p[...,:2] = -p[...,:2]
-    else:
-        p[...,:2] = p[..., 1::-1]
-        if degrees == 90:
-            p[...,1] = -p[...,1]
-        else:
-            p[...,0] = -p[...,0]
-    p += origin
-    return p
-
+from core.utils import raster_plot, rotate_pts
 
 
 
@@ -213,9 +189,9 @@ class LidarPatchGen(keras.utils.Sequence):
         if self.training:
             # augment by a random rotation
             rot_degrees = self.random.choice([0, 90, 180, 270])
-            self._x_batch = rotate(self._x_batch, degrees=rot_degrees)
+            self._x_batch = rotate_pts(self._x_batch, degrees=rot_degrees)
             if not self.y_counts_only:
-                self._y_batch = rotate(self._y_batch, degrees=rot_degrees)
+                self._y_batch = rotate_pts(self._y_batch, degrees=rot_degrees)
             # random gaussian noise
             if ARGS.noise_sigma is not None:
                 self._x_batch += self.random.normal(

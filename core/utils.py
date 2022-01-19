@@ -147,3 +147,28 @@ def get_dataset_dir(dsname=None):
     dataset_dir = DATA_DIR.joinpath("generated/"+dsname)
     return dataset_dir, dsname
 
+
+
+def rotate_pts(p, degrees=0):
+    """
+    in-place rotate points `p` counterclockwise by a multiple of 90 degrees, 
+    around the point (0.5, 0.5)
+    """
+    if degrees == 0:
+        return p
+    origin = np.zeros_like(p)
+    origin[...,:2] = 0.5
+    p -= origin
+    assert degrees % 90 == 0
+    if degrees == 180:
+        p[...,:2] = -p[...,:2]
+    else:
+        p[...,:2] = p[..., 1::-1]
+        if degrees == 90:
+            p[...,1] = -p[...,1]
+        else:
+            p[...,0] = -p[...,0]
+    p += origin
+    return p
+
+

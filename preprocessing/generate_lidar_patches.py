@@ -75,7 +75,8 @@ def add_ndvi_to_pts(seperated_lidar, raster_map):
 
 def process_region(regionname, spec, outname, overwrite):
     outdir = DATA_DIR.joinpath("generated", "lidar", outname, regionname)
-    if os.path.exists(outdir) and not overwrite:
+    existing_outputs = glob.glob(outdir.joinpath("*.npy").as_posix())
+    if not len(existing_outputs) and not overwrite:
         return "Already exists"
 
     os.makedirs(outdir, exist_ok=True)
