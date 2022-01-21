@@ -133,9 +133,10 @@ dmypy.json
 # OS files
 .DS_Store
 
-
 # data
 data/generated
+data/NAIP_patches
+data/lidar
 
 # model outputs
 model.png
@@ -144,8 +145,6 @@ models/
 # other outputs
 output/
 
-# temp file
+# temp files
 temp.py
-
-# local-specific files
-preprocessing/local_lazspark_path.txt
+old
