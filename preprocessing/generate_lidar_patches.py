@@ -21,7 +21,7 @@ import rasterio
 dn = os.path.dirname
 sys.path.append(dn(dn(os.path.abspath(__file__))))
 
-from core import DATA_DIR
+from src import DATA_DIR
 
 def naip2ndvi(im):
     nir = im[...,3]

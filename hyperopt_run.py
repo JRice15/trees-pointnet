@@ -17,7 +17,7 @@ import pandas as pd
 import hyperopt
 from hyperopt import hp, STATUS_OK, STATUS_FAIL
 
-from core import ARGS
+from src import ARGS
 
 # TODO select a GPU
 # template sbatch script

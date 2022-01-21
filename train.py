@@ -20,11 +20,11 @@ from tensorflow.keras import callbacks, layers
 from tensorflow.keras import optimizers
 import matplotlib.pyplot as plt
 
-from core import DATA_DIR, REPO_ROOT, ARGS, patch_generator
-from core.losses import get_loss
-from core.models import pointnet
-from core.tf_utils import MyModelCheckpoint, output_model, load_saved_model
-from core.utils import get_default_dsname, get_all_regions
+from src import DATA_DIR, REPO_ROOT, ARGS, patch_generator
+from src.losses import get_loss
+from src.models import pointnet
+from src.tf_utils import MyModelCheckpoint, output_model, load_saved_model
+from src.utils import get_default_dsname, get_all_regions
 import evaluate
 
 """
@@ -138,6 +138,7 @@ inpt_shape = train_gen.get_batch_shape()[0][1:]
 
 train_viz_dir = MODEL_DIR.joinpath("training/example_batch_viz/")
 os.makedirs(train_viz_dir, exist_ok=True)
+train_gen.__getitem__(0) # generate and throw away one batch, to make sure we don't have errors that dont appear the first time around
 X,Y,ids = train_gen.__getitem__(1, return_ids=True)
 for i in range(len(X)):
     naip = train_gen.get_naip(ids[i])

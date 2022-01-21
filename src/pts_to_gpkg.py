@@ -16,9 +16,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from core import REPO_ROOT, DATA_DIR
-from core.utils import glob_modeldir, gaussian, gridify_pts, get_dataset_dir
-from core import pointmatch
+from src import REPO_ROOT, DATA_DIR
+from src.utils import glob_modeldir, gaussian, gridify_pts, get_dataset_dir
+from src import pointmatch
 
 def get_regions_data(dsname):
     dataset_dir, dsname = get_dataset_dir(dsname)

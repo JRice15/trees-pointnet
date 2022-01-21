@@ -5,7 +5,7 @@ from tensorflow.keras import backend as K
 from tensorflow.keras import layers
 from tensorflow import keras
 
-from core import customlayers, ARGS
+from src import customlayers, ARGS
 
 
 def pointnet_conv(outchannels, kernel_size, name, strides=1, bn=True, activation=True,
@@ -246,7 +246,7 @@ def pointnet(inpt_shape, size_multiplier, output_channels, reg_weight=0.001):
 
 
 if __name__ == "__main__":
-    from core import patch_generator
+    from src import patch_generator
 
     model = pointnet(None, 3, 1)
 

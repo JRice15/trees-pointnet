@@ -13,9 +13,9 @@ from tensorflow.keras import backend as K
 from tensorflow.keras import layers
 from tensorflow.keras.optimizers import Adam
 
-from core import ARGS, DATA_DIR, REPO_ROOT
-from core.utils import raster_plot
-from core.losses import get_loss
+from src import ARGS, DATA_DIR, REPO_ROOT
+from src.utils import raster_plot
+from src.losses import get_loss
 
 
 class MyModelCheckpoint(tf.keras.callbacks.ModelCheckpoint):

@@ -25,8 +25,8 @@ import seaborn
 dn = os.path.dirname
 sys.path.append(dn(dn(os.path.abspath(__file__))))
 
-from core import DATA_DIR
-from core.utils import raster_plot
+from src import DATA_DIR
+from src.utils import raster_plot
 
 
 

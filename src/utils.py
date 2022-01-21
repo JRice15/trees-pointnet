@@ -9,7 +9,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 
-from core import ARGS, DATA_DIR, REPO_ROOT
+from src import ARGS, DATA_DIR, REPO_ROOT
 
 matplotlib.rc_file_defaults()
 

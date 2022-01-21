@@ -10,8 +10,8 @@ import numpy as np
 import pandas as pd
 import rasterio
 
-from core import ARGS, REPO_ROOT, DATA_DIR
-from core.utils import raster_plot, rotate_pts, get_all_regions
+from src import ARGS, REPO_ROOT, DATA_DIR
+from src.utils import raster_plot, rotate_pts, get_all_regions
 
 
 def subdivide_bounds(bounds_dict, n_subdivide):

@@ -5,7 +5,7 @@ from tensorflow.keras import Model
 from tensorflow.keras import backend as K
 from tensorflow.keras import layers
 
-from core import ARGS
+from src import ARGS
 
 class TNet(keras.layers.Layer):
     """
