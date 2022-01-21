@@ -172,3 +172,12 @@ def rotate_pts(p, degrees=0):
     return p
 
 
+def get_all_regions(dsname):
+    globpath = DATA_DIR.joinpath("lidar", dsname, "*").as_posix()
+    if globpath[-1] != "/":
+        globpath += "/"
+    regiondirs = glob.glob(globpath)
+    regions = [PurePath(x).stem for x in regiondirs]
+    return regions
+
+

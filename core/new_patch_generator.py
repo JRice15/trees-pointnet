@@ -11,7 +11,7 @@ import pandas as pd
 import rasterio
 
 from core import ARGS, REPO_ROOT, DATA_DIR
-from core.utils import raster_plot, rotate_pts
+from core.utils import raster_plot, rotate_pts, get_all_regions
 
 
 def subdivide_bounds(bounds_dict, n_subdivide):
@@ -55,6 +55,7 @@ def filter_pts(bounds_dict, points_dict, keyfunc):
 
 class LidarPatchGen(keras.utils.Sequence):
     """
+    keras Sequence that loads the dataset in batches
     """
 
     def __init__(self, patch_ids, name=None, batchsize=None, training=False):
@@ -79,7 +80,6 @@ class LidarPatchGen(keras.utils.Sequence):
         self.n_subdivide = ARGS.subdivide
         self.orig_patch_ids = patch_ids
         self.regions = list(set([i[0] for i in self.patch_ids]))
-        self.files = ...
         self.y_counts_only = False
         if ARGS.loss == "count":
             self.y_counts_only = True
@@ -291,7 +291,7 @@ class LidarPatchGen(keras.utils.Sequence):
 
     def load_all(self):
         """
-        load all examples into one big array. should be used for the validation
+        load all examples into one big batch. should be used for the validation
         patch generator, because keras doesn't accept a Sequence for val data
         """
         self.sorted()
@@ -305,12 +305,12 @@ class LidarPatchGen(keras.utils.Sequence):
         y = tf.concat(y_batches, axis=0)
         return x, y
 
-    def get_patch(self, i=None, region=None):
+    def get_patch(self, region, patch_num, subdiv_num):
         """
         get the full i'th patch of the entire sorted dataset, or from a specific region
         args:
-            i: int
             region: str, region name
+            patch_num: int
         returns:
             x, y, patch_id
         """
@@ -321,28 +321,16 @@ class LidarPatchGen(keras.utils.Sequence):
         self.training = False
         self.sorted()
         self.batch_size = 1
-        # get results
-        if region is None:
-            id = self.patch_ids[i]
-            x, y = self[i]
-        else:
-            id = (region, "patch"+str(i))
-            index = self.patch_ids.index(id)
-            x, y = self[index]
+        # find batch index
+        key = (region, patch_num, subdiv_num)
+        index = self.patch_ids.index(key)
+        # load batch
+        x, y = self[index]
         # restore correct values
         self.patch_ids = old_ids
         self.batch_size = old_batchsize
         self.training = old_training
         return x[0], y[0], id
-
-    def get_naip(self, patch_id):
-        """
-        get naip image. Channels: R-G-B-NIR
-        args:
-            patch_id: tuple: (region name str, patch id str of the form "patch322")
-        """
-        file, patchname = patch_id
-        return self.files[file]["/naip/"+patchname][:]
 
     def get_batch_shape(self):
         """
@@ -373,17 +361,64 @@ class LidarPatchGen(keras.utils.Sequence):
 
     def sorted(self):
         """put ids in a reproducable order (sorted order)"""
-        ids = self.patch_ids
-        sorting = np.lexsort((ids[:,1],ids[:,0]))
-        self.patch_ids = ids[sorting]
-
-    def __del__(self):
-        for file in self.files.values():
-            try:
-                file.close()
-            except:
-                pass # already closed, that's fine
+        self.patch_ids.sort()
 
 
+
+
+def get_tvt_split(dsname, regions, val_split, test_split):
+    """
+    returns patch ids for the train, val, and test datasets
+    it selects the same patches every time given the same split, by selecting 
+    every Nth patch
+    """
+    val_step = int(1/val_split)
+    test_step = int(1/val_split)
+
+    train = []
+    val = []
+    test = []
+    for region in regions:
+        naipfiles = DATA_DIR.joinpath("NAIP_patches", region, "*.tif").as_posix()
+        patch_nums = []
+        for filename in glob.glob(naipfiles):
+            patch_num = int(PurePath(filename).stem.split("_")[-1])
+            patch_nums.append(patch_nums)
+        patches = [(region, x) for x in patch_nums]
+        test += patches[::test_step]
+        rest_patches = [x for x in patches if x not in test]
+        val += rest_patches[::val_step]
+        train += [x for x in rest_patches if x not in val]
+    return train, val, test
+
+
+def get_train_val_gens(dsname, regions, val_split=0.1, test_split=0.1,
+        val_batchsize=None):
+    """
+    returns:
+        train Keras Sequence, val Sequence or raw data, test Sequence
+    """
+    train, val, test = get_tvt_split(dsname, regions, val_split, test_split)
+
+    train_gen = LidarPatchGen(train, name="train", training=True)
+    val_gen = LidarPatchGen(val, name="validation", batchsize=val_batchsize)
+    return train_gen, val_gen
+
+def get_test_gen(dsname, regions, val_split=0.1, test_split=0.1):
+    train, val, test = get_tvt_split(dsname, regions, val_split, test_split)
+
+    test_gen = LidarPatchGen(test, name="test", batchsize=1)
+    return test_gen
+
+
+
+if __name__ == "__main__":
+    dsname = "normal1"
+    regions = get_all_regions(dsname)
+    train_gen, val_gen = get_train_val_gens(dsname, regions)
+    test_gen = get_test_gen(dsname, regions)
+    train_gen.summary()
+    val_gen.summary()
+    test_gen.summary()
 
 
