@@ -24,7 +24,7 @@ from core import DATA_DIR, REPO_ROOT, ARGS, patch_generator
 from core.losses import get_loss
 from core.models import pointnet
 from core.tf_utils import MyModelCheckpoint, output_model, load_saved_model
-from core.utils import get_dataset_dir
+from core.utils import get_default_dsname, get_all_regions
 import evaluate
 
 """
@@ -116,11 +116,11 @@ MODEL_DIR = REPO_ROOT.joinpath("models/"+modelname)
 os.makedirs(MODEL_DIR, exist_ok=False)
 MODEL_PATH = MODEL_DIR.joinpath("model.tf")
 
-DATASET_DIR, ARGS.dsname = get_dataset_dir(ARGS.dsname)
+if ARGS.dsname is None:
+    ARGS.dsname = get_default_dsname()
 
 if ARGS.regions == "ALL":
-    regions = glob.glob(os.path.join(DATASET_DIR.as_posix(), "*.h5"))
-    ARGS.regions = [PurePath(r).stem for r in regions]
+    ARGS.regions = get_all_regions(ARGS.dsname)
 
 # save arguments to params file
 with open(MODEL_DIR.joinpath("params.json"), "w") as f:
@@ -131,7 +131,7 @@ with open(MODEL_DIR.joinpath("params.json"), "w") as f:
 load data
 """
 
-train_gen, val_gen = patch_generator.get_train_val_gens(DATASET_DIR, ARGS.regions, val_split=0.1, test_split=0.1)
+train_gen, val_gen = patch_generator.get_train_val_gens(ARGS.dsname, ARGS.regions, val_split=0.1, test_split=0.15)
 train_gen.summary()
 val_gen.summary()
 inpt_shape = train_gen.get_batch_shape()[0][1:]

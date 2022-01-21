@@ -130,22 +130,19 @@ def glob_modeldir(modelname):
 
     return model_dir
 
-def get_dataset_dir(dsname=None):
+def get_default_dsname():
     """
     get the dataset directory from name, or automatically select the one existing dataset if only one exists
     returns:
         dataset_dir, dsname
     """
-    if dsname is None:
-        existing_datasets = [i for i in os.listdir(DATA_DIR.joinpath("generated")) 
-                            if os.path.isdir(DATA_DIR.joinpath("generated").joinpath(i))]
-        if len(existing_datasets) > 1:
-            raise ValueError("Multiple datasets exist in `data/generated`. Specify which with the --dsname argument")
-        elif len(existing_datasets) == 0:
-            raise ValueError("No dataset exists in `data/generated`")
-        dsname = existing_datasets[0]
-    dataset_dir = DATA_DIR.joinpath("generated/"+dsname)
-    return dataset_dir, dsname
+    existing_datasets = [i for i in os.listdir(DATA_DIR.joinpath("lidar")) 
+                        if os.path.isdir(DATA_DIR.joinpath("lidar").joinpath(i))]
+    if len(existing_datasets) > 1:
+        raise ValueError("Multiple datasets exist in `data/lidar`. Specify which with the --dsname argument")
+    elif len(existing_datasets) == 0:
+        raise ValueError("No dataset exists in `data/lidar`")
+    dsname = existing_datasets[0]
 
 
 
