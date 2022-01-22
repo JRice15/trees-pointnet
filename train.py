@@ -218,7 +218,6 @@ if not ARGS.ragged:
     # initialize val gen with batchsize of 1
     val_gen.batch_size = 1
     val_gen.init_data()
-    val_gen.init_rng()
     val_gen.summary()
     # evaluate on validation set
     evaluate.evaluate_model(val_gen, model, MODEL_DIR)

@@ -9,9 +9,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import rasterio
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import Model
+from tensorflow.keras import backend as K
+from tensorflow.keras import layers
 
 from src import ARGS, REPO_ROOT, DATA_DIR
-from src.utils import raster_plot, rotate_pts, get_all_regions
+from src.utils import raster_plot, rotate_pts, get_all_regions, get_naipfile_path
 
 
 def subdivide_bounds(bounds_dict, n_subdivide):
@@ -20,12 +25,12 @@ def subdivide_bounds(bounds_dict, n_subdivide):
         for (region, patch_num), bounds in bounds_dict.items():
             subdiv_bounds[(region, patch_num, 0)] = bounds
     else:
-        for (region, patch_num), (left,bott,right,top) in bounds_dict.items():
-            x_width = (right - left) / subdivide
-            y_width = (top - bottom) / subdivide
+        for (region, patch_num), (left,bottom,right,top) in bounds_dict.items():
+            x_width = (right - left) / n_subdivide
+            y_width = (top - bottom) / n_subdivide
             i = 0
-            for x in np.linspace(left, right, subdivide+1)[:-1]:
-                for y in np.linspace(bottom, top, subdivide+1)[:-1]:
+            for x in np.linspace(left, right, n_subdivide+1)[:-1]:
+                for y in np.linspace(bottom, top, n_subdivide+1)[:-1]:
                     bound = [x, y, x+x_width, y+y_width]
                     subdiv_bounds[(region, patch_num, i)] = bound
                     i += 1
@@ -79,24 +84,24 @@ class LidarPatchGen(keras.utils.Sequence):
         self.use_ndvi = ARGS.ndvi
         self.n_subdivide = ARGS.subdivide
         self.orig_patch_ids = patch_ids
-        self.regions = list(set([i[0] for i in self.patch_ids]))
+        self.regions = list(set([i[0] for i in self.orig_patch_ids]))
         self.y_counts_only = False
         if ARGS.loss == "count":
             self.y_counts_only = True
         self.nattributes = 3 + (1 if self.use_ndvi else 0)
         self.npoints = ARGS.npoints
         self.z_max = 50 # for normalization
-        self.init_rng()
-        self.init_data()
         self.batch_time = 0
         self.training = training
-
         if ARGS.ragged:
             self._f_getitem = self._ragged_getitem
         else:
             self._f_getitem = self._nonrag_getitem
 
-    def init_rng(self):
+        # initialize the data
+        self.init_data()
+
+    def init_random(self):
         """initialize or reinitialize the random number generatore"""
         self.random = np.random.default_rng(seed=44)
 
@@ -107,7 +112,7 @@ class LidarPatchGen(keras.utils.Sequence):
 
         # always in (x,y) format
         x_column_options = ("long_nad83", "long_utm11", "point_x")
-        y_column_options = ("lat_nad83", "lat_utm11", "point_y") 
+        y_column_options = ("lat_nad83", "lat_utm11", "point_y")
 
         # load ground-truth trees
         orig_gt_trees = {}
@@ -123,7 +128,7 @@ class LidarPatchGen(keras.utils.Sequence):
                 if col in table:
                     x_col = table[col].to_numpy()
                     break
-            for col in y_col_options:
+            for col in y_column_options:
                 if col in table:
                     y_col = table[col].to_numpy()
                     break
@@ -161,7 +166,7 @@ class LidarPatchGen(keras.utils.Sequence):
         self.num_filtered_ids = len(orig_ids) - self.num_ids
         if ARGS.test:
             self.num_ids = 2
-        
+
         # filter gt trees into patches
         self.patched_gt = filter_pts(self.patch_bounds, orig_gt_trees, keyfunc=lambda x: x[0]) # keyfunc selects region
 
@@ -186,7 +191,9 @@ class LidarPatchGen(keras.utils.Sequence):
 
         # sort for reproducibility
         self.sorted()
-        self.init_rng()
+        # set random seed
+        self.init_random()
+        # deterministic random shuffle
         self.random.shuffle(self.patch_ids)
         if not ARGS.ragged:
             self._x_batch = np.empty((self.batch_size, self.npoints, self.nattributes))
@@ -210,11 +217,12 @@ class LidarPatchGen(keras.utils.Sequence):
         end_idx = idx + self.batch_size
         self._y_batch.fill(0)
         for i, patch_key in enumerate(self.patch_ids[idx:end_idx]):
+            # get pts
+            lidar_patch = self.patched_lidar[patch_key]
             # select <npoints> evenly spaced points randomly from batch.
             #   this is done because indexing with an arbitrary array is 
             #   orders of magnitude slower than a simple slice
-            x_node = file['lidar/'+patchname]
-            num_x_pts = x_node.shape[0]
+            num_x_pts = lidar_patch.shape[0]
             step = num_x_pts // self.npoints
             leftover = num_x_pts % self.npoints
             if leftover == 0:
@@ -222,8 +230,6 @@ class LidarPatchGen(keras.utils.Sequence):
             else:
                 rand_offset = self.random.integers(leftover) # randomly generated int
             top_offset = leftover - rand_offset
-            # get pts
-            lidar_patch = self.patched_lidar[patch_key]
             self._x_batch[i] = lidar_patch[rand_offset:num_x_pts-top_offset:step, :self.nattributes]
 
             # normalize data
@@ -332,6 +338,25 @@ class LidarPatchGen(keras.utils.Sequence):
         self.training = old_training
         return x[0], y[0], id
 
+    def get_naip(self, patch_id):
+        """
+        get naip image. Channels: R-G-B-NIR
+        args:
+            patch_id: tuple: (region, patch_num, subdiv_num)
+        """
+        bounds = self.patch_bounds[patch_id]
+        # load naip file
+        region, patch_num, subdiv_num = patch_id
+        naipfile = get_naipfile_path(region, patch_num)
+        with rasterio.open(naipfile) as raster:
+            # https://gis.stackexchange.com/questions/336874/get-a-window-from-a-raster-in-rasterio-using-coordinates-instead-of-row-column-o
+            im = raster.read(window=rasterio.windows.from_bounds(*bounds, raster.transform))
+        # channels last format
+        im = np.moveaxis(im, 0, -1) / 255.0
+        # sometimes it selects a row of pixels outside of the image, which results in spurious very large negative numbers
+        im = np.clip(im, 0, 1)
+        return im
+
     def get_batch_shape(self):
         """
         get x,y shape of one batch
@@ -383,7 +408,7 @@ def get_tvt_split(dsname, regions, val_split, test_split):
         patch_nums = []
         for filename in glob.glob(naipfiles):
             patch_num = int(PurePath(filename).stem.split("_")[-1])
-            patch_nums.append(patch_nums)
+            patch_nums.append(patch_num)
         patches = [(region, x) for x in patch_nums]
         test += patches[::test_step]
         rest_patches = [x for x in patches if x not in test]

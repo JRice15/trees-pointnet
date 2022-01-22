@@ -25,7 +25,7 @@ from src.losses import get_loss
 from src.models import pointnet
 from src.tf_utils import MyModelCheckpoint, output_model, load_saved_model
 from src.utils import raster_plot, glob_modeldir
-from src.pts_to_gpkg import estimate_pred_thresh, evaluate_preds_to_gpkg, make_gt_gpkg
+# from src.pts_to_gpkg import estimate_pred_thresh, evaluate_preds_to_gpkg, make_gt_gpkg
 
 matplotlib.rc_file_defaults()
 
@@ -76,7 +76,7 @@ def plot_one_example(x, y, patch_id, outdir, pred=None, naip=None, has_ndvi=Fals
         naip: naip image
         has_ndvi: bool, whether x has ndvi as last channel
     """
-    patchname = "_".join(patch_id)
+    patchname = "_".join([str(x) for x in patch_id])
     ylocs = y[y[...,2] == 1][...,:2]
 
     gt_ntrees = len(ylocs)

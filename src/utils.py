@@ -143,6 +143,7 @@ def get_default_dsname():
     elif len(existing_datasets) == 0:
         raise ValueError("No dataset exists in `data/lidar`")
     dsname = existing_datasets[0]
+    return dsname
 
 
 
@@ -177,4 +178,10 @@ def get_all_regions(dsname):
     regions = [PurePath(x).stem for x in regiondirs]
     return regions
 
+def get_naipfile_path(region, patch_num):
+    """
+    returns: str
+    """
+    filename = "{}_training_NAIP_NAD83_UTM11_{}.tif".format(region, patch_num)
+    return DATA_DIR.joinpath("NAIP_patches", region, filename).as_posix()
 
