@@ -1,12 +1,14 @@
 channels:
+  - conda-forge
   - defaults
 dependencies:
-  - h5py
   - tensorflow-gpu=2.4
   - numpy=1.19
+  - pandas
   - pydot
   - matplotlib
   - pip
+  - rasterio
   - hyperopt
   - pip:
     - gast==0.3.3
