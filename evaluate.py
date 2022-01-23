@@ -84,14 +84,14 @@ def plot_one_example(x, y, patch_id, outdir, pred=None, naip=None, has_ndvi=Fals
     x_heights = x[...,2]
 
     # lidar height (second-highest mode, to avoid noise)
-    raster_plot(x_locs, gaussian_sigma=ARGS.mmd_sigma, weights=x_heights, mode="second-highest",
+    raster_plot(x_locs, abs_sigma=ARGS.mmd_sigma, weights=x_heights, mode="second-highest",
         filename=outdir.joinpath("{}_lidar_height".format(patchname)), 
         mark=ylocs, zero_one_bounds=False)
     
     # lidar ndvi
     if has_ndvi:
         x_ndvi = x[...,3]
-        raster_plot(x_locs, gaussian_sigma=ARGS.mmd_sigma, weights=x_ndvi, mode="max",
+        raster_plot(x_locs, abs_sigma=ARGS.mmd_sigma, weights=x_ndvi, mode="max",
             filename=outdir.joinpath("{}_lidar_ndvi".format(patchname)), 
             mark=ylocs, zero_one_bounds=False)
 
@@ -99,7 +99,7 @@ def plot_one_example(x, y, patch_id, outdir, pred=None, naip=None, has_ndvi=Fals
         # prediction raster
         pred_locs = pred[...,:2]
         pred_weights = pred[...,2]
-        raster_plot(pred_locs, gaussian_sigma=ARGS.mmd_sigma, weights=pred_weights, 
+        raster_plot(pred_locs, abs_sigma=ARGS.mmd_sigma, weights=pred_weights, 
             filename=outdir.joinpath("{}_pred".format(patchname)), 
             mode="sum", mark=ylocs, zero_one_bounds=False)
 

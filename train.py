@@ -74,8 +74,8 @@ hypergrp.add_argument("--reducelr-patience",type=int,default=20,help="number of 
 
 # model parameters
 modelgrp = parser.add_argument_group("model parameters")
-modelgrp.add_argument("--npoints",type=int,default=300,help="number of points to run per patch. In ragged or non-ragged, "
-        "patches with fewer points will be skipped. Also in non-ragged, patches with more points with be truncated to npoints")
+modelgrp.add_argument("--npoints",type=int,default=500,help="number of points to run per patch. In ragged or non-ragged, "
+        "patches with fewer points will be skipped. Also in non-ragged, patches with more points with be subsampled to npoints")
 modelgrp.add_argument("--out-npoints",type=int,default=256,help="(dense output mode): number of output points")
 modelgrp.add_argument("--size-multiplier",type=float,default=1.0,help="number to multiply all default conv output filters by")
 modelgrp.add_argument("--dropout",type=float,default=0.3,help="dropout rate")
@@ -143,7 +143,7 @@ train_gen.__getitem__(0) # generate and throw away one batch, to make sure we do
 X,Y,ids = train_gen.__getitem__(1, return_ids=True)
 for i in range(len(X)):
     naip = train_gen.get_naip(ids[i])
-    evaluate.plot_one_example(X[i], Y[i], ids[i], naip=naip, has_ndvi=ARGS.ndvi,
+    evaluate.plot_one_example(X[i].numpy(), Y[i].numpy(), ids[i], naip=naip, has_ndvi=ARGS.ndvi,
         outdir=train_viz_dir)
 
 
