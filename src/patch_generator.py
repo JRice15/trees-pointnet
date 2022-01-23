@@ -368,6 +368,18 @@ class LidarPatchGen(keras.utils.Sequence):
         print(y)
         return x.shape, y.shape
 
+    def denormalize_pts(self, pts, patch_id):
+        """
+        reverse the normalization of a set of points; ie, it goes from 0-1 scaled 
+        back to georeferenced coordinates.
+        """
+        min_xyz = self.norm_mins[patch_id]
+        max_xyz = self.norm_maxs[patch_id]
+        n_channels = pts.shape[-1]
+        min_xyz = min_xyz[:n_channels]
+        max_xyz = max_xyz[:n_channels]
+        return (pts * (max_xyz - min_xyz)) + min_xyz
+
     def summary(self):
         print("LidarPatchGen '{}' from dataset '{}' regions:".format(self.name, self.dsname),  ", ".join(self.regions))
         print(" ", self.num_ids, "patches, in", len(self), "batches, batchsize", self.batch_size)
@@ -415,6 +427,7 @@ def get_tvt_split(dsname, regions, val_split, test_split):
         val += rest_patches[::val_step]
         train += [x for x in rest_patches if x not in val]
     return train, val, test
+
 
 
 def get_train_val_gens(dsname, regions, val_split=0.1, test_split=0.1,

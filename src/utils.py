@@ -19,22 +19,30 @@ def gaussian(x, center, sigma=0.02):
     exp = np.exp( -np.sum((x - center) ** 2, axis=-1) / (2 * sigma ** 2))
     return const * exp
 
-def gridify_pts(bounds, pts, weights, gaussian_sigma, mode="sum", resolution=50):
+def gridify_pts(bounds, pts, weights, abs_sigma=None, rel_sigma=None, mode="sum", 
+        resolution=50):
     """
     rasterize weighted points to a grid
     args:
         bounds: (xmin, xmax, ymin, ymax) bounds
         pts: (x,y) locations within the bounds
         weights: corresponding weights, (negative weights will be set to zero)
+        {rel|abs}_sigma: specify relative (fraction of side length) or absolute distance sigma of gaussian smoothing kernel
         mode: how to aggregate values at each grid location. "max"|"sum"|"second-highest"
     returns:
         gridvals: N x M grid of weighted values
         gridpts: N x M x 2 grid, representing the x,y coordinates of each pixel
     """
     xmin, xmax, ymin, ymax = bounds
+    # get gaussian kernel std.dev.
+    assert (rel_sigma is None) != (abs_sigma is None) # only one can and must be true
+    if rel_sigma is not None:
+        size_factor = (xmax-xmin + ymax-ymin) / 2 # mean side length of raster
+        gaussian_sigma = rel_sigma * size_factor
+    else:
+        gaussian_sigma = abs_sigma
     x = np.linspace(xmin, xmax, resolution)
     y = np.linspace(ymin, ymax, resolution)
-    size_factor = (xmax-xmin + ymax-ymin) / 2 # mean side length of raster
     x, y = np.meshgrid(x, y)
     gridpts = np.stack([x,y], axis=-1)
     if mode == "second-highest":
@@ -42,7 +50,7 @@ def gridify_pts(bounds, pts, weights, gaussian_sigma, mode="sum", resolution=50)
     else:
         gridvals = np.zeros_like(x)
     for i,p in enumerate(pts):
-        new_vals = gaussian(gridpts, p, sigma=gaussian_sigma*size_factor)
+        new_vals = gaussian(gridpts, p, sigma=gaussian_sigma)
         if weights is not None:
             new_vals *= max(weights[i], 0)
         if mode == "sum":
@@ -61,7 +69,7 @@ def gridify_pts(bounds, pts, weights, gaussian_sigma, mode="sum", resolution=50)
     return gridvals, gridpts
 
 
-def raster_plot(pts, filename, gaussian_sigma, weights=None, title=None, clip=None, 
+def raster_plot(pts, filename, rel_sigma=None, abs_sigma=None, weights=None, title=None, clip=None, 
         sqrt_scale=False, mode="sum", mark=None, zero_one_bounds=False):
     """
     create raster plot of points, with optional weights
@@ -69,6 +77,7 @@ def raster_plot(pts, filename, gaussian_sigma, weights=None, title=None, clip=No
         guassian_sigma: stddev of kernel to use when raster smoothing, where 1 is the width of the plot
         clip: None, or max value for output
         mode: max, or sum. method of generating y values in raster
+        {rel|abs}_sigma: specify relative (fraction of side length) or absolute distance sigma of gaussian smoothing kernel
         mark: points to mark with a green x, of shape (n,2) where n is number of points
     """
     if zero_one_bounds:
@@ -79,7 +88,7 @@ def raster_plot(pts, filename, gaussian_sigma, weights=None, title=None, clip=No
         ymin, ymax = pts[:,1].min(), pts[:,1].max()
 
     gridvals, gridpts = gridify_pts([xmin, xmax, ymin, ymax], pts, weights, 
-                            gaussian_sigma=gaussian_sigma, mode=mode)
+                            rel_sigma=rel_sigma, abs_sigma=abs_sigma, mode=mode)
 
     if sqrt_scale:
         gridvals = np.sqrt(gridvals)
@@ -170,12 +179,17 @@ def rotate_pts(p, degrees=0):
     return p
 
 
-def get_all_regions(dsname):
-    globpath = DATA_DIR.joinpath("lidar", dsname, "*").as_posix()
-    if globpath[-1] != "/":
-        globpath += "/"
-    regiondirs = glob.glob(globpath)
-    regions = [PurePath(x).stem for x in regiondirs]
+def get_all_regions(dsname=None):
+    if dsname is None:
+        globpath = DATA_DIR.joinpath("gt_csvs", "*.csv").as_posix()
+        files = glob.glob(globpath)
+        regions = [PurePath(x).stem.split("_")[0] for x in files]
+    else:
+        globpath = DATA_DIR.joinpath("lidar", dsname, "*").as_posix()
+        if globpath[-1] != "/":
+            globpath += "/"
+        regiondirs = glob.glob(globpath)
+        regions = [PurePath(x).stem for x in regiondirs]
     return regions
 
 def get_naipfile_path(region, patch_num):

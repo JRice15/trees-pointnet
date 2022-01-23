@@ -80,7 +80,8 @@ modelgrp.add_argument("--out-npoints",type=int,default=256,help="(dense output m
 modelgrp.add_argument("--size-multiplier",type=float,default=1.0,help="number to multiply all default conv output filters by")
 modelgrp.add_argument("--dropout",type=float,default=0.3,help="dropout rate")
 modelgrp.add_argument("--no-ndvi",dest="ndvi",action="store_false",help="whether to use pointwise NDVi channel")
-modelgrp.add_argument("--no-tnets",dest="use_tnets",action="store_false",help="whether to use input and feature transforms")
+modelgrp.add_argument("--no-tnet1",dest="use_tnet_1",action="store_false",help="whether to use input transform TNet")
+modelgrp.add_argument("--no-tnet2",dest="use_tnet_2",action="store_false",help="whether to use feature transform TNet")
 
 # loss parameters
 lossgrp = parser.add_argument_group("loss parameters")

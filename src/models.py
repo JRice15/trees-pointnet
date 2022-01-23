@@ -174,7 +174,7 @@ def pointnet(inpt_shape, size_multiplier, output_channels, reg_weight=0.001):
     x = inpt
     x = customlayers.ExpandDims(axis=2, name="add_channels_1")(x) # (B,N,1,K)
 
-    if ARGS.use_tnets:
+    if ARGS.use_tnet_1:
         # input transform
         x, inpt_trans_matrix = pointnet_transform(x, batchsize=ARGS.batchsize, kind="input") # (B,N,K)
         x = customlayers.ExpandDims(axis=2, name="add_channels_2")(x) # (B,N,1,K)
@@ -183,7 +183,7 @@ def pointnet(inpt_shape, size_multiplier, output_channels, reg_weight=0.001):
     x = pointnet_conv(64*size_multiplier, 1, name="mlp1_conv1")(x)
     x = pointnet_conv(64*size_multiplier, 1, name="mlp1_conv2")(x)
 
-    if ARGS.use_tnets:
+    if ARGS.use_tnet_2:
         # feature transform
         x, feat_trans_matrix = pointnet_transform(x, batchsize=ARGS.batchsize, kind="feature") # (B,N,K)
         x = customlayers.ExpandDims(axis=2, name="add_channels_3")(x) # (B,N,1,K)
@@ -230,7 +230,7 @@ def pointnet(inpt_shape, size_multiplier, output_channels, reg_weight=0.001):
 
     model = Model(inpt, output)
 
-    if ARGS.use_tnets:
+    if ARGS.use_tnet_2:
         # feature transformation matrix orthogonality loss
         dims = feat_trans_matrix.shape[1]
         ortho_diff = tf.matmul(feat_trans_matrix,

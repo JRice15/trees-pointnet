@@ -86,14 +86,14 @@ def plot_one_example(x, y, patch_id, outdir, pred=None, naip=None, has_ndvi=Fals
     # lidar height (second-highest mode, to avoid noise)
     raster_plot(x_locs, gaussian_sigma=ARGS.mmd_sigma, weights=x_heights, mode="second-highest",
         filename=outdir.joinpath("{}_lidar_height".format(patchname)), 
-        mark=ylocs, zero_one_bounds=True)
+        mark=ylocs, zero_one_bounds=False)
     
     # lidar ndvi
     if has_ndvi:
         x_ndvi = x[...,3]
         raster_plot(x_locs, gaussian_sigma=ARGS.mmd_sigma, weights=x_ndvi, mode="max",
             filename=outdir.joinpath("{}_lidar_ndvi".format(patchname)), 
-            mark=ylocs, zero_one_bounds=True)
+            mark=ylocs, zero_one_bounds=False)
 
     if pred is not None:
         # prediction raster
@@ -101,7 +101,7 @@ def plot_one_example(x, y, patch_id, outdir, pred=None, naip=None, has_ndvi=Fals
         pred_weights = pred[...,2]
         raster_plot(pred_locs, gaussian_sigma=ARGS.mmd_sigma, weights=pred_weights, 
             filename=outdir.joinpath("{}_pred".format(patchname)), 
-            mode="sum", mark=ylocs, zero_one_bounds=True)
+            mode="sum", mark=ylocs, zero_one_bounds=False)
 
     if naip is not None:
         plt.imshow(naip[...,:3]) # only use RGB
@@ -110,6 +110,99 @@ def plot_one_example(x, y, patch_id, outdir, pred=None, naip=None, has_ndvi=Fals
         plt.savefig(outdir.joinpath(patchname+"_NAIP_RGB.png"))
         plt.clf()
         plt.close()
+
+
+
+def pointmatching():
+    precisions = []
+    recalls = []
+    fscores = []
+    rmses = []
+
+    ncols = 5
+    nrows = len(val_pred)//ncols+1
+    fig,ax = plt.subplots(nrows,ncols,figsize=(ncols*10,nrows*10))
+    ax = ax.flatten()
+    for i in range(len(ax)): ax[i].axis('off')
+
+    row = 0
+    col = 0
+    for i in range(len(val_pred)):
+        gt = val_gt[i]
+        pred = cv2.resize(val_pred[i],(gt.shape[1],gt.shape[0]),interpolation=cv2.INTER_LINEAR)
+
+        gt_indices = peak_local_max(gt,min_distance=args.min_distance,threshold_rel=args.threshold_rel)
+        pred_indices = peak_local_max(pred,min_distance=args.min_distance,threshold_rel=args.threshold_rel)
+
+        # calculate pairwise distances
+        dists = pairwise_distances(gt_indices,pred_indices)
+        print(len(gt_indices),len(pred_indices),dists.shape)
+
+        # associate each gt tree with all pred trees within radius
+        dists[dists>args.max_distance] = np.inf
+
+        # if pred tree associated to multiple gt trees, only take association with smallest distance
+        min_inds = np.argmin(dists,axis=0)
+        min_dists = np.min(dists,axis=0)
+        for j in range(dists.shape[1]):
+            dists[:,j] = np.inf
+            dists[min_inds[j],j] = min_dists[j]
+
+        # if gt tree associated to multiple pred trees, only take association with smallest distance
+        min_inds = np.argmin(dists,axis=1)
+        min_dists = np.min(dists,axis=1)
+        for j in range(dists.shape[0]):
+            dists[j,:] = np.inf
+            dists[j,min_inds[j]] = min_dists[j]
+
+        # associated pred trees = true positives
+        tp_inds = np.where(np.any(np.logical_not(np.isinf(dists)),axis=0))[0]
+        tp = len(tp_inds)
+
+        # un-associated pred trees = false positives
+        fp_inds = np.where(np.all(np.isinf(dists),axis=0))[0]
+        fp = len(fp_inds)
+
+        # un-associated gt trees = false negatives
+        fn_inds = np.where(np.all(np.isinf(dists),axis=1))[0]
+        fn = len(fn_inds)
+
+        tp_dists = np.min(dists[:,tp_inds],axis=0)
+        rmse = np.sqrt(np.mean(tp_dists**2))
+
+        precision = tp/(tp+fp)
+        recall = tp/(tp+fn)
+        fscore = 2*(precision*recall)/(precision+recall)
+
+        rmses.append(rmse)
+        precisions.append(precision)
+        recalls.append(recall)
+        fscores.append(fscore)
+
+        print(f'val {i}:')
+        #print('\tdists: ',dists)
+        print('\ttp:',tp)
+        print('\tfp:',fp)
+        print('\tfn:',fn)
+        print('\tprecision:',precision)
+        print('\trecall:',recall)
+        print('\tfscore:',fscore)
+
+        plotargs = {'markersize':10,'markeredgewidth':2}
+        ax[i].imshow(val_image[i,:,:,:3])
+        ax[i].plot(gt_indices[:,1],gt_indices[:,0],'bo',**plotargs)
+        ax[i].plot(pred_indices[tp_inds,1],pred_indices[tp_inds,0],'yx',**plotargs)
+        ax[i].plot(pred_indices[fp_inds,1],pred_indices[fp_inds,0],'rx',**plotargs)
+        ax[i].legend(['gt','tp','fp'])
+        ax[i].axis('off')
+    fig.savefig(os.path.join(args.log,'results.png'))
+
+    print('precision:',np.mean(precision))
+    print('recall:',np.mean(recall))
+    print('fscore:',np.mean(fscore))
+    print('rmse:',np.mean(rmse))
+
+
 
 
 def evaluate_model(patchgen, model, model_dir):
@@ -126,12 +219,25 @@ def evaluate_model(patchgen, model, model_dir):
     generate predictions
     """
     print("Generating predictions")
+    assert patchgen.batch_size == 1
     patchgen.sorted()
     x, y = patchgen.load_all()
     x = np.squeeze(x.numpy())
     y = np.squeeze(y.numpy())
-    patch_ids = np.copy(patchgen.patch_ids)
     pred = np.squeeze(model.predict(x))
+    patch_ids = patchgen.patch_ids
+
+    """
+    Pointmatching
+    """
+    # denormalize data
+    for i in range(len(x)):
+        x[i] = patchgen.denormalize_pts(x[i], patch_id=patch_ids[i])
+        pred[i] = patchgen.denormalize_pts(pred[i], patch_id=patch_ids[i])
+        y[i,:,:2] = patchgen.denormalize_pts(y[i,:,:2], patch_id=patch_ids[i])
+
+    np.savez("test.npz", x=x, pred=pred, gt=y)
+
 
     # save raw sample prediction
     with open(outdir.joinpath("sample_predictions.txt"), "w") as f:
@@ -142,11 +248,6 @@ def evaluate_model(patchgen, model, model_dir):
             f.write("gt {}:\n".format(i))
             f.write(str(y[i])+"\n")
 
-    # save predictions
-    assert len(pred) == len(patch_ids), "{} {}".format(pred.shape, patch_ids.shape)
-    rawpred_file = outdir.joinpath("predictions.npz")
-    np.savez(rawpred_file.as_posix(), pred=pred, patch_ids=patch_ids)
-
     """
     data visualizations
     """
@@ -156,8 +257,7 @@ def evaluate_model(patchgen, model, model_dir):
         os.makedirs(VIS_DIR, exist_ok=True)
 
         # grab random 10 examples
-        patch_indexes = list(range(0, patchgen.num_ids, patchgen.num_ids//10))
-        for i in patch_indexes:
+        for i in range(0, len(patch_ids), len(patch_ids)//10):
             x_i = x[i]
             y_i = y[i]
             pred_i = pred[i]
@@ -183,6 +283,7 @@ def evaluate_model(patchgen, model, model_dir):
     print("\nResults on", patchgen.name, "dataset:")
     for k,v in results.items():
         print(k+":", v)
+
 
 
 
@@ -215,21 +316,21 @@ def main():
                                     val_batchsize=1)
     val_gen.summary()
     evaluate_model(val_gen, model, MODEL_DIR)
-    print("Evaluating with pointmatch")
-    make_gt_gpkg(val_gen)
-    thresh = estimate_pred_thresh(val_gen, MODEL_DIR)
-    results = evaluate_preds_to_gpkg(val_gen, MODEL_DIR, threshold=thresh, save=True)
-    print("Validation pointmatch results:")
-    pprint(results)
+    # print("Evaluating with pointmatch")
+    # make_gt_gpkg(val_gen)
+    # thresh = estimate_pred_thresh(val_gen, MODEL_DIR)
+    # results = evaluate_preds_to_gpkg(val_gen, MODEL_DIR, threshold=thresh, save=True)
+    # print("Validation pointmatch results:")
+    # pprint(results)
 
     test_gen = patch_generator.get_test_gen(DATASET_DIR, ARGS.regions, val_split=0.1, test_split=0.1)
     test_gen.summary()
     evaluate_model(test_gen, model, MODEL_DIR)
-    print("Evaluating with pointmatch")
-    make_gt_gpkg(test_gen)
-    results = evaluate_preds_to_gpkg(test_gen, MODEL_DIR, threshold=thresh, save=True)
-    print("Test pointmatch results:")
-    pprint(results)
+    # print("Evaluating with pointmatch")
+    # make_gt_gpkg(test_gen)
+    # results = evaluate_preds_to_gpkg(test_gen, MODEL_DIR, threshold=thresh, save=True)
+    # print("Test pointmatch results:")
+    # pprint(results)
 
 
 
