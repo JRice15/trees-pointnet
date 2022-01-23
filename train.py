@@ -115,7 +115,7 @@ now = datetime.datetime.now()
 modelname = ARGS.name + now.strftime("-%y%m%d-%H%M%S")
 MODEL_DIR = REPO_ROOT.joinpath("models/"+modelname)
 os.makedirs(MODEL_DIR, exist_ok=False)
-MODEL_PATH = MODEL_DIR.joinpath("model.h5")
+MODEL_PATH = MODEL_DIR.joinpath("model.tf")
 
 if ARGS.dsname is None:
     ARGS.dsname = get_default_dsname()
