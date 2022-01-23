@@ -290,7 +290,7 @@ def evaluate_model(patchgen, model, model_dir):
 
 def main():
     MODEL_DIR = glob_modeldir(ARGS.name)
-    MODEL_PATH = MODEL_DIR.joinpath("model.tf")
+    MODEL_PATH = MODEL_DIR.joinpath("model.h5")
 
     # load original params into ARGS object
     params_file = MODEL_DIR.joinpath("params.json")

@@ -115,11 +115,11 @@ def glob_modeldir(modelname):
     allmodels_dir = REPO_ROOT.joinpath("models/")
 
     # first try exact match
-    matching_models = glob.glob(os.path.join(allmodels_dir.as_posix(), modelname+"-??????-??????", "model.tf"))
+    matching_models = glob.glob(os.path.join(allmodels_dir.as_posix(), modelname+"-??????-??????", "model.h5"))
     if len(matching_models) == 0:
         print("No exact model name matches")
         # then try autofill match
-        matching_models = glob.glob(os.path.join(allmodels_dir.as_posix(), modelname+"*", "model.tf"))
+        matching_models = glob.glob(os.path.join(allmodels_dir.as_posix(), modelname+"*", "model.h5"))
     
     if len(matching_models) > 1:
         print("Multiple models match 'name' argument:")
