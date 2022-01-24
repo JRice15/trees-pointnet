@@ -8,8 +8,11 @@ from tensorflow.keras.optimizers import Adam
 from tensorflow import keras
 import math
 
+from src import ARGS
+from src.utils import get_0_1_scaled_sigma
 
-def get_loss(ARGS):
+
+def get_loss():
     """
     return tuple of (loss, list(metrics), error_func).
     loss is a keras loss, and metrics are keras metrics.
@@ -20,15 +23,15 @@ def get_loss(ARGS):
     if ARGS.loss == "treetop":
         assert ARGS.output_mode in ("seg", "dense")
         if ARGS.ragged:
-            return ragged_pointwise_treetop(ARGS)
+            return ragged_pointwise_treetop()
         else:
-            return nonrag_pointwise_treetop(ARGS)
+            return nonrag_pointwise_treetop()
     if ARGS.loss == "mmd":
         assert ARGS.output_mode in ("seg", "dense")
-        return max_mean_discrepancy(ARGS)
+        return max_mean_discrepancy()
     if ARGS.loss == "gridmse":
         assert ARGS.output_mode in ("seg", "dense")
-        return grid_mse(ARGS)
+        return grid_mse()
     if ARGS.loss == "count":
         assert ARGS.output_mode == "count"
         return keras.losses.mse, [keras.metrics.mse]
@@ -45,7 +48,7 @@ def tf_gaussian(x, center, sigma=0.02):
     return const * exp
 
 @tf.function
-def tf_gridify_pts(weighted_pts, gaussian_sigma, mode="sum", resolution=50):
+def tf_gridify_pts(weighted_pts, gaussian_sigma, resolution=50):
     """
     rasterize weighted points to a grid, with a gaussian blur
     works for batched input only, ie weighted_pts has shape (batchsize, npoints, channels)
@@ -71,28 +74,30 @@ def tf_gridify_pts(weighted_pts, gaussian_sigma, mode="sum", resolution=50):
     weights = weighted_pts[...,-1]
     gridvals = tf_gaussian(gridcoords, pts, sigma=gaussian_sigma)
     gridvals = gridvals * weights
-    if mode == "sum":
-        gridvals = tf.reduce_sum(gridvals, axis=-1)
-    elif mode == "max":
-        gridvals = tf.reduce_max(gridvals, axis=-1)
-    else:
-        raise ValueError("Unknown gridify_pts mode")
+    # if mode == "sum":
+    gridvals = tf.reduce_sum(gridvals, axis=-1)
+    # elif mode == "max":
+        # gridvals = tf.reduce_max(gridvals, axis=-1)
+    # else:
+        # raise ValueError("Unknown gridify_pts mode")
     return gridvals
 
 
 
-def grid_mse(ARGS):
+def grid_mse():
     """
     inspired by https://www.osapublishing.org/optica/fulltext.cfm?uri=optica-5-4-458&id=385495
     """
-    assert ARGS.mmd_sigma is not None
+    assert ARGS.gaussian_sigma is not None
 
     resolution = 50
 
+    scaled_sigma = get_0_1_scaled_sigma()
+
     @tf.function
     def loss(gt, pred):
-        pred_grid = tf_gridify_pts(pred, ARGS.mmd_sigma, mode="sum", resolution=resolution)
-        gt_grid = tf_gridify_pts(gt, ARGS.mmd_sigma, mode="sum", resolution=resolution)
+        pred_grid = tf_gridify_pts(pred, scaled_sigma, resolution=resolution)
+        gt_grid = tf_gridify_pts(gt, scaled_sigma, resolution=resolution)
 
         # "squared l2 norm" = mean squared error
         square_error_grid = (pred_grid - gt_grid) ** 2
@@ -102,14 +107,15 @@ def grid_mse(ARGS):
     return loss, None
 
 
-def max_mean_discrepancy(ARGS):
+def max_mean_discrepancy():
     """
     DeepLoco loss
     from https://www.biorxiv.org/content/10.1101/267096v1.full
     """
-    assert ARGS.mmd_sigma is not None
+    assert ARGS.gaussian_sigma is not None and ARGS.mmd_kernel is not None
 
-    exp_constant = 4 * ARGS.mmd_sigma**2
+    scaled_sigma = get_0_1_scaled_sigma()
+    exp_constant = 4 * scaled_sigma**2
     @tf.function
     def gaussian_kernel_func(diffs):
         """
@@ -121,7 +127,7 @@ def max_mean_discrepancy(ARGS):
         exponent = K.clip(exponent, None, 64)
         return K.exp(exponent)
 
-    exp_constant = ARGS.mmd_sigma
+    exp_constant = scaled_sigma
     @tf.function
     def laplacian_kernel_func(diffs):
         """
@@ -134,10 +140,10 @@ def max_mean_discrepancy(ARGS):
     # get correct kernel function
     if ARGS.mmd_kernel == "gaussian":
         kernel = gaussian_kernel_func
-        kernel_constant = (8 * math.pi**2 * ARGS.mmd_sigma**2) ** -0.5
+        kernel_constant = (8 * math.pi**2 * scaled_sigma**2) ** -0.5
     elif ARGS.mmd_kernel == "laplacian":
         kernel = laplacian_kernel_func
-        kernel_constant = (2 * ARGS.mmd_sigma) ** -0.5
+        kernel_constant = (2 * scaled_sigma) ** -0.5
     else:
         raise ValueError("Unknown mmd kernel '{}' to mmd loss".format(ARGS.mmd_kernel))
 
@@ -179,7 +185,7 @@ def max_mean_discrepancy(ARGS):
 
 
 
-def nonrag_pointwise_treetop(ARGS):
+def nonrag_pointwise_treetop():
     """
     squared xy distance of each point to closest ground truth target, weighted by tree/not-tree classification
     """
@@ -247,7 +253,7 @@ def nonrag_pointwise_treetop(ARGS):
     return loss_func, [dist_loss, count_loss]
 
 
-def ragged_pointwise_treetop(ARGS):
+def ragged_pointwise_treetop():
     """
     NOTE: this code may not work
     """

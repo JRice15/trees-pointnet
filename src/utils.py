@@ -1,6 +1,7 @@
 import contextlib
 import glob
 import os
+import json
 import time
 from pathlib import PurePath
 
@@ -8,6 +9,7 @@ import h5py
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+import rasterio
 
 from src import ARGS, DATA_DIR, REPO_ROOT
 
@@ -198,4 +200,38 @@ def get_naipfile_path(region, patch_num):
     """
     filename = "{}_training_NAIP_NAD83_UTM11_{}.tif".format(region, patch_num)
     return DATA_DIR.joinpath("NAIP_patches", region, filename).as_posix()
+
+
+def get_avg_patch_size():
+    """
+    get the average side length of the NAIP patches, in meters
+    """
+    stats_filename = DATA_DIR.joinpath("NAIP_patches", "computed_stats.json").as_posix()
+    if not os.path.exists(stats_filename):
+        # compute and save stats
+        tifs = DATA_DIR.joinpath("NAIP_patches/*/*.tif").as_posix()
+        sizes = []
+        for tiffile in glob.glob(tifs):
+            with rasterio.open(tiffile) as im:
+                left,bott,right,top = [i for i in im.bounds]
+                sizes += [right - left, top - bott]
+        stats = {
+            "avg_side_len_meters": np.mean(sizes)
+        }
+        with open(stats_filename, "w") as f:
+            json.dump(stats, f, indent=2)
+    # load and return stats
+    with open(stats_filename, "r") as f:
+        stats = json.load(f)
+    return stats["avg_side_len_meters"]
+
+
+def get_0_1_scaled_sigma():
+    """
+    return the gaussian sigma attribute of ARGS, scaled from meters to 
+    the 0-1 normalized scale used during training
+    """
+    sigma_meters = ARGS.gaussian_sigma
+    patch_len_meters = get_avg_patch_size() / ARGS.subdivide
+    return sigma_meters / patch_len_meters
 

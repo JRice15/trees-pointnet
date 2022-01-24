@@ -47,7 +47,7 @@ def build_search_space():
         #     hp.quniform("dropout", 0.05, 0.8, 0.05)
         # ]),
         "ndvi": hp.choice("ndvi", [False, True]),
-        "mmd-sigma": ARGS.mmd_sigma,
+        "gaussian-sigma": ARGS.abs_sigma,
         "mmd-kernel": ARGS.mmd_kernel,
         "ortho-weight": 10 ** hp.quniform("ortho", -6, 0, 0.5) # 1e-6 to 1
     }
@@ -149,7 +149,7 @@ def main():
     parser.add_argument("--envname",help="name of conda environment")
     parser.add_argument("--gpu",type=int)
     # mode specific arguments
-    parser.add_argument("--mmd-sigma",default=None,type=float)
+    parser.add_argument("--gaussian-sigma",default=None,type=float)
     parser.add_argument("--mmd-kernel",default=None)
     # alternate functionality flags
     parser.add_argument("--show-best",action="store_true",help="instead of running hyperopt, show the best model found so far")
@@ -160,14 +160,14 @@ def main():
     assert ARGS.mode == "pwmmd"
 
     if "mmd" in ARGS.mode:
-        assert ARGS.mmd_sigma is not None
+        assert ARGS.abs_sigma is not None
         assert ARGS.mmd_kernel is not None
 
     RUN_NAME = ARGS.trials_name + "_" + ARGS.mode
     TRIALS_FILE = "hp/{}/trials.pickle".format(RUN_NAME)
     META_FILE = "hp/{}/meta.json".format(RUN_NAME)
     metadata = {
-        "mmd-sigma": ARGS.mmd_sigma,
+        "gaussian-sigma": ARGS.abs_sigma,
         "mmd-kernel": ARGS.mmd_kernel,
         "timeout": ARGS.timeout,
     }

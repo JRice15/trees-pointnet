@@ -212,18 +212,18 @@ def pointnet(inpt_shape, size_multiplier, output_channels, reg_weight=0.001):
         raise NotImplementedError()
     
     # optional post processing for some methods
-    if ARGS.output_mode in ("seg", "dense"):
+    if ARGS.loss in ("mmd", "gridmse"):
         assert output_channels == 3
         pts = output[...,:2]
         confs = output[...,-1:]
         # limit location coords to 0-1
-        pts = layers.Activation("sigmoid")(pts)
+        pts = layers.ReLU(max_value=1.0)(pts)
         # limit confidence to >= 0
         confs = layers.Activation("softplus")(confs)
         output = layers.Concatenate(axis=-1)([pts, confs])
     if ARGS.loss == "treetop":
         assert output_channels == 1
-        # limit to 0 to 1
+        # limit confidences to 0 to 1
         output = customlayers.Activation("sigmoid", name="pwtt-sigmoid")(output)
         # add input xy locations to each point
         output = layers.Concatenate(axis=-1, name="pwtt-concat_inpt")([xy_locs, output])

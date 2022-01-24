@@ -13,6 +13,8 @@ import h5py
 import matplotlib.pyplot as plt
 import matplotlib
 import numpy as np
+import ray
+
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import Model
@@ -28,6 +30,8 @@ from src.utils import raster_plot, glob_modeldir
 # from src.pts_to_gpkg import estimate_pred_thresh, evaluate_preds_to_gpkg, make_gt_gpkg
 
 matplotlib.rc_file_defaults()
+
+MAX_MATCH_DIST = 5
 
 def parse_eval_args():
     """
@@ -84,23 +88,23 @@ def plot_one_example(x, y, patch_id, outdir, pred=None, naip=None, has_ndvi=Fals
     x_heights = x[...,2]
 
     # lidar height (second-highest mode, to avoid noise)
-    raster_plot(x_locs, abs_sigma=ARGS.mmd_sigma, weights=x_heights, mode="second-highest",
+    raster_plot(x_locs, abs_sigma=ARGS.gaussian_sigma, weights=x_heights, mode="second-highest",
         filename=outdir.joinpath("{}_lidar_height".format(patchname)), 
         mark=ylocs, zero_one_bounds=False)
     
     # lidar ndvi
     if has_ndvi:
         x_ndvi = x[...,3]
-        raster_plot(x_locs, abs_sigma=ARGS.mmd_sigma, weights=x_ndvi, mode="max",
-            filename=outdir.joinpath("{}_lidar_ndvi".format(patchname)), 
+        raster_plot(x_locs, abs_sigma=ARGS.gaussian_sigma, weights=x_ndvi, mode="max",
+            filename=outdir.joinpath("{}_lidar_ndvi".format(patchname)),
             mark=ylocs, zero_one_bounds=False)
 
     if pred is not None:
-        # prediction raster
+        # prediction confidence raster
         pred_locs = pred[...,:2]
         pred_weights = pred[...,2]
-        raster_plot(pred_locs, abs_sigma=ARGS.mmd_sigma, weights=pred_weights, 
-            filename=outdir.joinpath("{}_pred".format(patchname)), 
+        raster_plot(pred_locs, abs_sigma=ARGS.gaussian_sigma, weights=pred_weights,
+            filename=outdir.joinpath("{}_pred".format(patchname)),
             mode="sum", mark=ylocs, zero_one_bounds=False)
 
     if naip is not None:
@@ -112,46 +116,49 @@ def plot_one_example(x, y, patch_id, outdir, pred=None, naip=None, has_ndvi=Fals
         plt.close()
 
 
-
-def pointmatching():
+@ray.remote
+def pointmatch_one_patch(gt, pred, conf_thresholds, max_match_dist):
+    """
+    args:
+        gt: array of shape (m,2) of gt tree locations
+        pred: array of (n,3) of predicted tree locations and confidences
+        conf_thresholds: list of confidence thresholds to test
+    returns:
+        precisions, recalls, fscores, rmses: each the same length as conf_threshold
+    """
+    print("    one patch")
     precisions = []
     recalls = []
     fscores = []
     rmses = []
 
-    ncols = 5
-    nrows = len(val_pred)//ncols+1
-    fig,ax = plt.subplots(nrows,ncols,figsize=(ncols*10,nrows*10))
-    ax = ax.flatten()
-    for i in range(len(ax)): ax[i].axis('off')
+    # calculate distance matrix once for the whole patch
+    orig_dists = pairwise_distances(gt,pred[...:2])
 
-    row = 0
-    col = 0
-    for i in range(len(val_pred)):
-        gt = val_gt[i]
-        pred = cv2.resize(val_pred[i],(gt.shape[1],gt.shape[0]),interpolation=cv2.INTER_LINEAR)
+    # associate each gt tree with all pred trees within radius
+    orig_dists[orig_dists > max_match_dist] = np.inf
 
-        gt_indices = peak_local_max(gt,min_distance=args.min_distance,threshold_rel=args.threshold_rel)
-        pred_indices = peak_local_max(pred,min_distance=args.min_distance,threshold_rel=args.threshold_rel)
+    # calculate metrics for each threshold
+    for thresh in conf_thresholds:
+        # get a modifiable copy of dists
+        dists = np.copy(orig_dists)
 
-        # calculate pairwise distances
-        dists = pairwise_distances(gt_indices,pred_indices)
-        print(len(gt_indices),len(pred_indices),dists.shape)
-
-        # associate each gt tree with all pred trees within radius
-        dists[dists>args.max_distance] = np.inf
+        # nullify trees under the confidence threshold
+        for j in range(len(pred)):
+            if pred[j,2] < thresh:
+                dists[:,j] = np.inf
 
         # if pred tree associated to multiple gt trees, only take association with smallest distance
         min_inds = np.argmin(dists,axis=0)
         min_dists = np.min(dists,axis=0)
-        for j in range(dists.shape[1]):
+        for j in range(len(pred)):
             dists[:,j] = np.inf
             dists[min_inds[j],j] = min_dists[j]
 
         # if gt tree associated to multiple pred trees, only take association with smallest distance
         min_inds = np.argmin(dists,axis=1)
         min_dists = np.min(dists,axis=1)
-        for j in range(dists.shape[0]):
+        for j in range(len(gt)):
             dists[j,:] = np.inf
             dists[j,min_inds[j]] = min_dists[j]
 
@@ -174,43 +181,72 @@ def pointmatching():
         recall = tp/(tp+fn)
         fscore = 2*(precision*recall)/(precision+recall)
 
-        rmses.append(rmse)
         precisions.append(precision)
         recalls.append(recall)
         fscores.append(fscore)
+        rmses.append(rmse)
+    
+    return precisions, recalls, fscores, rmses
 
-        print(f'val {i}:')
-        #print('\tdists: ',dists)
-        print('\ttp:',tp)
-        print('\tfp:',fp)
-        print('\tfn:',fn)
-        print('\tprecision:',precision)
-        print('\trecall:',recall)
-        print('\tfscore:',fscore)
-
-        plotargs = {'markersize':10,'markeredgewidth':2}
-        ax[i].imshow(val_image[i,:,:,:3])
-        ax[i].plot(gt_indices[:,1],gt_indices[:,0],'bo',**plotargs)
-        ax[i].plot(pred_indices[tp_inds,1],pred_indices[tp_inds,0],'yx',**plotargs)
-        ax[i].plot(pred_indices[fp_inds,1],pred_indices[fp_inds,0],'rx',**plotargs)
-        ax[i].legend(['gt','tp','fp'])
-        ax[i].axis('off')
-    fig.savefig(os.path.join(args.log,'results.png'))
-
-    print('precision:',np.mean(precision))
-    print('recall:',np.mean(recall))
-    print('fscore:',np.mean(fscore))
-    print('rmse:',np.mean(rmse))
-
-
-
-
-def evaluate_model(patchgen, model, model_dir):
+def distribute_pointmatching(gts, preds, thresholds):
     """
-    generate predictions from a model on a LidarPatchGen dataset
+    args:
+        gts: array of shape (npatches,npoints,3) where channels are (x,y,isvalid)
+        preds: array of shape (npatches,npoints,3) where channels are (x,y,confidence)
+        max_match_dist: max distance (meters) between gt and pred trees that are considered a match
+    returns:
+        dict of pointmatching stats
+    """
+    assert len(gts) == len(preds)
+
+    results = []
+    for i in range(len(gts)):
+        result = pointmatch_one_patch.remote(gts[i], preds[i], thresholds, MAX_MATCH_DIST)
+        results.append(result)
+
+    results = ray.get(results)
+    results = np.array(results)
+
+    # grab each stat, and average over all examples
+    # this results in vectors of same length as thresholds
+    precisions = results[:,0].mean(axis=0)
+    recalls = results[:,1].mean(axis=0)
+    fscores = results[:,2].mean(axis=0)
+    rmses = results[:,3].mean(axis=0)
+
+    # find best, by fscore
+    best_idx = np.argmax(fscores)
+
+    stats = {
+        "all": {
+            "threshold": thresholds,
+            "precision": precisions,
+            "recall": recalls,
+            "fscore": fscores,
+            "rmse": rmses,
+        },
+        "best": {
+            "threshold": thresholds[best_idx],
+            "precision": precisions[best_idx],
+            "recall": recalls[best_idx],
+            "fscore": fscores[best_idx],
+            "rmse": rmses[best_idx]
+        }
+    }
+
+    return stats
+
+
+
+
+def evaluate_model(patchgen, model, model_dir, pointmatch_thresholds):
+    """
+    generate predictions, vizualizations, and evaluation metrics from a model 
+    on a LidarPatchGen dataset
     args:
         model: Keras Model to predict with
         model_dir: pathlib.PurePath of model's output
+        pointmatch_thresholds: list of floats
     """
     outdir = model_dir.joinpath("results_"+patchgen.name)
     os.makedirs(outdir, exist_ok=True)
@@ -227,17 +263,11 @@ def evaluate_model(patchgen, model, model_dir):
     pred = np.squeeze(model.predict(x))
     patch_ids = patchgen.patch_ids
 
-    """
-    Pointmatching
-    """
     # denormalize data
     for i in range(len(x)):
         x[i] = patchgen.denormalize_pts(x[i], patch_id=patch_ids[i])
-        pred[i] = patchgen.denormalize_pts(pred[i], patch_id=patch_ids[i])
+        pred[i,:,:2] = patchgen.denormalize_pts(pred[i,:,:2], patch_id=patch_ids[i])
         y[i,:,:2] = patchgen.denormalize_pts(y[i,:,:2], patch_id=patch_ids[i])
-
-    np.savez("test.npz", x=x, pred=pred, gt=y)
-
 
     # save raw sample prediction
     with open(outdir.joinpath("sample_predictions.txt"), "w") as f:
@@ -267,7 +297,7 @@ def evaluate_model(patchgen, model, model_dir):
                 has_ndvi=patchgen.use_ndvi, outdir=VIS_DIR)
 
     """
-    Evaluate Metrics
+    Evaluate Model Metrics
     """
     print("Evaluating metrics")
 
@@ -284,8 +314,17 @@ def evaluate_model(patchgen, model, model_dir):
     for k,v in results.items():
         print(k+":", v)
 
+    """
+    Pointmatching
+    """
+    print("Pointmatching")
 
+    pointmatch_stats = distribute_pointmatching(y, pred, pointmatch_thresholds)
 
+    with open(outdir.joinpath("pointmatch_results.json"), "w") as f:
+        json.dump(pointmatch_stats, f, indent=2)
+    
+    return pointmatch_stats
 
 
 def main():
@@ -304,33 +343,23 @@ def main():
 
     pprint(vars(ARGS))
 
-    DATASET_DIR = DATA_DIR.joinpath("generated/"+ARGS.dsname)
-
     """
     Evaluation
     """
 
-    model = load_saved_model(MODEL_PATH.as_posix(), ARGS)
+    model = load_saved_model(MODEL_PATH.as_posix())
 
-    _, val_gen = patch_generator.get_train_val_gens(DATASET_DIR, ARGS.regions, val_split=0.1, test_split=0.1,
-                                    val_batchsize=1)
+    # validation set evaluation
+    _, val_gen = patch_generator.get_train_val_gens(ARGS.dsname, ARGS.regions, val_batchsize=1)
     val_gen.summary()
-    evaluate_model(val_gen, model, MODEL_DIR)
-    # print("Evaluating with pointmatch")
-    # make_gt_gpkg(val_gen)
-    # thresh = estimate_pred_thresh(val_gen, MODEL_DIR)
-    # results = evaluate_preds_to_gpkg(val_gen, MODEL_DIR, threshold=thresh, save=True)
-    # print("Validation pointmatch results:")
-    # pprint(results)
+    thresholds = [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.65, 0.8]
+    pointmatch_stats = evaluate_model(val_gen, model, MODEL_DIR, thresholds)
+    best_thresh = pointmatch_stats["best"]["threshold"]
 
-    test_gen = patch_generator.get_test_gen(DATASET_DIR, ARGS.regions, val_split=0.1, test_split=0.1)
+    # test set evaluation
+    test_gen = patch_generator.get_test_gen(ARGS.dsname, ARGS.regions)
     test_gen.summary()
-    evaluate_model(test_gen, model, MODEL_DIR)
-    # print("Evaluating with pointmatch")
-    # make_gt_gpkg(test_gen)
-    # results = evaluate_preds_to_gpkg(test_gen, MODEL_DIR, threshold=thresh, save=True)
-    # print("Test pointmatch results:")
-    # pprint(results)
+    evaluate_model(test_gen, model, MODEL_DIR, [best_thresh])
 
 
 

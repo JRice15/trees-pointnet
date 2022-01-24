@@ -85,14 +85,14 @@ modelgrp.add_argument("--no-tnet2",dest="use_tnet_2",action="store_false",help="
 
 # loss parameters
 lossgrp = parser.add_argument_group("loss parameters")
-lossgrp.add_argument("--mmd-sigma",type=float,default=0.04,
-        help="max-mean-discrepancy mode: sigma on kernel")
+lossgrp.add_argument("--gaussian-sigma", "--sigma",type=float,default=4,
+        help="in meters, std dev of gaussian smoothing applied in the loss (mmd and gridmse modes)")
 lossgrp.add_argument("--mmd-kernel",default="gaussian",
-        help="max-mean-discrepancy mode: type of kernel")
+        help="max-mean-discrepancy loss: type of kernel")
 lossgrp.add_argument("--dist-weight",type=float,default=0.9,
-        help="pointnet-treetop mode: weight on distance vs count loss")
+        help="treetop loss: weight on distance vs count loss")
 lossgrp.add_argument("--ortho-weight",type=float,default=0.001,
-        help="orthogonality regularization loss weight")
+        help="orthogonality regularization loss weight, when using TNet2")
 
 # misc
 miscgrp = parser.add_argument_group("misc")
@@ -132,7 +132,7 @@ with open(MODEL_DIR.joinpath("params.json"), "w") as f:
 load data
 """
 
-train_gen, val_gen = patch_generator.get_train_val_gens(ARGS.dsname, ARGS.regions, val_split=0.1, test_split=0.15)
+train_gen, val_gen = patch_generator.get_train_val_gens(ARGS.dsname, ARGS.regions)
 train_gen.summary()
 val_gen.summary()
 inpt_shape = train_gen.get_batch_shape()[0][1:]
@@ -167,7 +167,7 @@ model = pointnet(
 )
 output_model(model, MODEL_DIR)
 
-loss, metrics = get_loss(ARGS)
+loss, metrics = get_loss()
 
 optim = optimizer_options[ARGS.optimizer]
 model.compile(
@@ -214,7 +214,7 @@ if not ARGS.ragged:
         exit()
     
     # load saved best model
-    model = load_saved_model(MODEL_PATH, ARGS)
+    model = load_saved_model(MODEL_PATH)
 
     # initialize val gen with batchsize of 1
     val_gen.batch_size = 1

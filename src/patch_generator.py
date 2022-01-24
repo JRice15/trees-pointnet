@@ -18,6 +18,8 @@ from tensorflow.keras import layers
 from src import ARGS, REPO_ROOT, DATA_DIR
 from src.utils import raster_plot, rotate_pts, get_all_regions, get_naipfile_path
 
+VAL_SPLIT = 0.1
+TEST_SPLIT = 0.15
 
 def subdivide_bounds(bounds_dict, n_subdivide):
     subdiv_bounds = {}
@@ -403,14 +405,14 @@ class LidarPatchGen(keras.utils.Sequence):
 
 
 
-def get_tvt_split(dsname, regions, val_split, test_split):
+def get_tvt_split(dsname, regions):
     """
     returns patch ids for the train, val, and test datasets
     it selects the same patches every time given the same split, by selecting 
     every Nth patch
     """
-    val_step = int(1/val_split)
-    test_step = int(1/val_split)
+    val_step = int(1/VAL_SPLIT)
+    test_step = int(1/TEST_SPLIT)
 
     train = []
     val = []
@@ -430,20 +432,19 @@ def get_tvt_split(dsname, regions, val_split, test_split):
 
 
 
-def get_train_val_gens(dsname, regions, val_split=0.1, test_split=0.1,
-        val_batchsize=None):
+def get_train_val_gens(dsname, regions, val_batchsize=None):
     """
     returns:
         train Keras Sequence, val Sequence or raw data, test Sequence
     """
-    train, val, test = get_tvt_split(dsname, regions, val_split, test_split)
+    train, val, test = get_tvt_split(dsname, regions)
 
     train_gen = LidarPatchGen(train, name="train", training=True)
     val_gen = LidarPatchGen(val, name="validation", batchsize=val_batchsize)
     return train_gen, val_gen
 
-def get_test_gen(dsname, regions, val_split=0.1, test_split=0.1):
-    train, val, test = get_tvt_split(dsname, regions, val_split, test_split)
+def get_test_gen(dsname, regions):
+    train, val, test = get_tvt_split(dsname, regions)
 
     test_gen = LidarPatchGen(test, name="test", batchsize=1)
     return test_gen

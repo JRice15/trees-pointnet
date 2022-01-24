@@ -6,12 +6,6 @@ Create a conda environment with tensorflow 2.4 (or 2.4-gpu), using the provided
 yml file
 
 
-## Training Modes
-
-* count: predict the count of trees in each input patch
-* mmd: mean max discrepancy loss. Outputs an arbitrary set of points with weights representing how likely each point is to be a tree
-* pwtt: pointwise treetop (deprecated)
-* pwmmd: mmd, but predicted for every input point. Outputs an isATree weight for each input point
 
 
 ## How to run

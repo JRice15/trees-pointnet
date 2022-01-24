@@ -35,12 +35,12 @@ class MyModelCheckpoint(tf.keras.callbacks.ModelCheckpoint):
         return self.best
 
 
-def load_saved_model(model_path, ARGS):
+def load_saved_model(model_path):
     """
     Load the best model iteration saved by ModelCheckpoint for a particular model configuration
     """
     print("Loading model", model_path)
-    loss_fun, metrics = get_loss(ARGS)
+    loss_fun, metrics = get_loss()
 
     custom_objs = {loss_fun.__name__: loss_fun}
     if metrics is not None:
