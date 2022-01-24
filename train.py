@@ -216,13 +216,6 @@ if not ARGS.ragged:
     # load saved best model
     model = load_saved_model(MODEL_PATH)
 
-    # initialize val gen with batchsize of 1
-    val_gen.batch_size = 1
-    val_gen.init_data()
-    val_gen.summary()
-    # evaluate on validation set
-    evaluate.evaluate_model(val_gen, model, MODEL_DIR)
-
     # save training data
     with open(MODEL_DIR.joinpath("training/stats.json"), "w") as f:
         val_results = {
