@@ -37,6 +37,7 @@ try:
     np.random.seed(9999)
     tf.random.set_seed(9999)
     tf.compat.v1.set_random_seed(9999)
+    print("GPUs:", tf.config.list_physical_devices('GPU'))
 except ModuleNotFoundError:
     pass
     # we don't always need tensorflow, so it's ok if we don't have it here

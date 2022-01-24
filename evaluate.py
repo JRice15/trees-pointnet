@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 import numpy as np
 import ray
+from sklearn.metrics import pairwise_distances
 
 import tensorflow as tf
 from tensorflow import keras
@@ -116,13 +117,13 @@ def plot_one_example(x, y, patch_id, outdir, pred=None, naip=None, has_ndvi=Fals
         plt.close()
 
 
-@ray.remote
+#@ray.remote
 def pointmatch_one_patch(gt, pred, conf_thresholds, max_match_dist):
     """
     args:
-        gt: array of shape (m,2) of gt tree locations
+        gt: array of shape (m,3) of gt tree locations and isvalidbit
         pred: array of (n,3) of predicted tree locations and confidences
-        conf_thresholds: list of confidence thresholds to test
+        conf_thresholds: list (must be in sorted order, low to high) of confidence thresholds to test
     returns:
         precisions, recalls, fscores, rmses: each the same length as conf_threshold
     """
@@ -132,28 +133,34 @@ def pointmatch_one_patch(gt, pred, conf_thresholds, max_match_dist):
     fscores = []
     rmses = []
 
+    # get only valid trees
+    gt = gt[gt[:,2] > 0.5]
+    # get predicted points >= the lowest confidence threshold
+    pred = pred[pred[:,2] >= conf_thresholds[0]]
+
+    if len(gt) == 0:
+        ...
+
     # calculate distance matrix once for the whole patch
-    orig_dists = pairwise_distances(gt,pred[...:2])
+    orig_dists = pairwise_distances(gt[...,:2],pred[...,:2])
 
     # associate each gt tree with all pred trees within radius
     orig_dists[orig_dists > max_match_dist] = np.inf
+    print(orig_dists)
 
     # calculate metrics for each threshold
     for thresh in conf_thresholds:
         # get a modifiable copy of dists
         dists = np.copy(orig_dists)
 
-        # nullify trees under the confidence threshold
-        for j in range(len(pred)):
-            if pred[j,2] < thresh:
-                dists[:,j] = np.inf
-
         # if pred tree associated to multiple gt trees, only take association with smallest distance
         min_inds = np.argmin(dists,axis=0)
         min_dists = np.min(dists,axis=0)
         for j in range(len(pred)):
             dists[:,j] = np.inf
-            dists[min_inds[j],j] = min_dists[j]
+            # only allow trees above the confidence threshold
+            if pred[j,2] >= thresh:
+                dists[min_inds[j],j] = min_dists[j]
 
         # if gt tree associated to multiple pred trees, only take association with smallest distance
         min_inds = np.argmin(dists,axis=1)
@@ -174,12 +181,17 @@ def pointmatch_one_patch(gt, pred, conf_thresholds, max_match_dist):
         fn_inds = np.where(np.all(np.isinf(dists),axis=1))[0]
         fn = len(fn_inds)
 
+        print(tp, tp, fn)
+
         tp_dists = np.min(dists[:,tp_inds],axis=0)
         rmse = np.sqrt(np.mean(tp_dists**2))
 
         precision = tp/(tp+fp)
         recall = tp/(tp+fn)
-        fscore = 2*(precision*recall)/(precision+recall)
+        if precision+recall == 0:
+            fscore = 0
+        else:
+            fscore = 2*(precision*recall)/(precision+recall)
 
         precisions.append(precision)
         recalls.append(recall)
@@ -201,10 +213,11 @@ def distribute_pointmatching(gts, preds, thresholds):
 
     results = []
     for i in range(len(gts)):
-        result = pointmatch_one_patch.remote(gts[i], preds[i], thresholds, MAX_MATCH_DIST)
+        #result = pointmatch_one_patch.remote(gts[i], preds[i], thresholds, MAX_MATCH_DIST)
+        result = pointmatch_one_patch(gts[i], preds[i], thresholds, MAX_MATCH_DIST)
         results.append(result)
 
-    results = ray.get(results)
+    #results = ray.get(results)
     results = np.array(results)
 
     # grab each stat, and average over all examples
