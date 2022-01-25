@@ -140,11 +140,11 @@ inpt_shape = train_gen.get_batch_shape()[0][1:]
 train_viz_dir = MODEL_DIR.joinpath("training/example_batch_viz/")
 os.makedirs(train_viz_dir, exist_ok=True)
 train_gen.__getitem__(0) # generate and throw away one batch, to make sure we don't have errors that dont appear the first time around
-X,Y,ids = train_gen.__getitem__(1, return_ids=True)
+X,Y,ids = train_gen.__getitem__(1, return_ids=True, no_rotate=True)
 for i in range(len(X)):
     naip = train_gen.get_naip(ids[i])
     evaluate.plot_one_example(X[i].numpy(), Y[i].numpy(), ids[i], naip=naip, has_ndvi=ARGS.ndvi,
-        outdir=train_viz_dir)
+        outdir=train_viz_dir, zero_one_bounds=True)
 
 
 """
@@ -208,13 +208,6 @@ if not ARGS.ragged:
         with open(MODEL_DIR.joinpath("training_failed.txt"), "w") as f:
             traceback.print_exc(file=f)
         raise e
-    
-    if ARGS.test:
-        print("Exiting, --test flag supplied")
-        exit()
-    
-    # load saved best model
-    model = load_saved_model(MODEL_PATH)
 
     # save training data
     with open(MODEL_DIR.joinpath("training/stats.json"), "w") as f:

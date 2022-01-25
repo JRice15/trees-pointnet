@@ -226,12 +226,11 @@ def get_avg_patch_size():
     return stats["avg_side_len_meters"]
 
 
-def get_0_1_scaled_sigma():
+def scaled_0_1(distance):
     """
-    return the gaussian sigma attribute of ARGS, scaled from meters to 
+    return the distance in meters scaled to approximate the
     the 0-1 normalized scale used during training
     """
-    sigma_meters = ARGS.gaussian_sigma
     patch_len_meters = get_avg_patch_size() / ARGS.subdivide
-    return sigma_meters / patch_len_meters
+    return distance / patch_len_meters
 

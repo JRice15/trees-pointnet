@@ -207,10 +207,10 @@ class LidarPatchGen(keras.utils.Sequence):
     def __len__(self):
         return self.num_ids // self.batch_size
 
-    def __getitem__(self, idx, return_ids=False):
-        return self._f_getitem(idx, return_ids=return_ids)
+    def __getitem__(self, idx, **kwargs):
+        return self._f_getitem(idx, **kwargs)
 
-    def _nonrag_getitem(self, idx, return_ids=False):
+    def _nonrag_getitem(self, idx, return_ids=False, no_rotate=False):
         """
         __getitem__ for nonragged outputs
         """
@@ -255,11 +255,12 @@ class LidarPatchGen(keras.utils.Sequence):
         self.random.shuffle(self._x_batch, axis=1)
 
         if self.training:
-            # augment by a random rotation
-            rot_degrees = self.random.choice([0, 90, 180, 270])
-            self._x_batch = rotate_pts(self._x_batch, degrees=rot_degrees)
-            if not self.y_counts_only:
-                self._y_batch = rotate_pts(self._y_batch, degrees=rot_degrees)
+            if not no_rotate:
+                # augment by a random rotation
+                rot_degrees = self.random.choice([0, 90, 180, 270])
+                self._x_batch = rotate_pts(self._x_batch, degrees=rot_degrees)
+                if not self.y_counts_only:
+                    self._y_batch = rotate_pts(self._y_batch, degrees=rot_degrees)
             # random gaussian noise
             if ARGS.noise_sigma is not None:
                 self._x_batch += self.random.normal(

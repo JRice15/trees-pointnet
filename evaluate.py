@@ -15,6 +15,7 @@ import matplotlib
 import numpy as np
 import ray
 from sklearn.metrics import pairwise_distances
+from scipy.optimize import linear_sum_assignment
 
 import tensorflow as tf
 from tensorflow import keras
@@ -27,12 +28,11 @@ from src import DATA_DIR, REPO_ROOT, ARGS, patch_generator
 from src.losses import get_loss
 from src.models import pointnet
 from src.tf_utils import MyModelCheckpoint, output_model, load_saved_model
-from src.utils import raster_plot, glob_modeldir
-# from src.pts_to_gpkg import estimate_pred_thresh, evaluate_preds_to_gpkg, make_gt_gpkg
+from src.utils import raster_plot, glob_modeldir, scaled_0_1
 
 matplotlib.rc_file_defaults()
 
-MAX_MATCH_DIST = 5
+MAX_MATCH_DIST = 10
 
 def parse_eval_args():
     """
@@ -69,7 +69,8 @@ def count_errors(pred, y):
     return pred - y
 
 
-def plot_one_example(x, y, patch_id, outdir, pred=None, naip=None, has_ndvi=False):
+def plot_one_example(x, y, patch_id, outdir, pred=None, naip=None, has_ndvi=False,
+        zero_one_bounds=False):
     """
     generate raster plots for one example input and output from a dataset
     args:
@@ -88,25 +89,30 @@ def plot_one_example(x, y, patch_id, outdir, pred=None, naip=None, has_ndvi=Fals
     x_locs = x[...,:2]
     x_heights = x[...,2]
 
+    if zero_one_bounds:
+        sigma = scaled_0_1(ARGS.gaussian_sigma)
+    else:
+        sigma = ARGS.gaussian_sigma
+
     # lidar height (second-highest mode, to avoid noise)
-    raster_plot(x_locs, abs_sigma=ARGS.gaussian_sigma, weights=x_heights, mode="second-highest",
+    raster_plot(x_locs, abs_sigma=sigma, weights=x_heights, mode="second-highest",
         filename=outdir.joinpath("{}_lidar_height".format(patchname)), 
-        mark=ylocs, zero_one_bounds=False)
+        mark=ylocs, zero_one_bounds=zero_one_bounds)
     
     # lidar ndvi
     if has_ndvi:
         x_ndvi = x[...,3]
-        raster_plot(x_locs, abs_sigma=ARGS.gaussian_sigma, weights=x_ndvi, mode="max",
+        raster_plot(x_locs, abs_sigma=sigma, weights=x_ndvi, mode="max",
             filename=outdir.joinpath("{}_lidar_ndvi".format(patchname)),
-            mark=ylocs, zero_one_bounds=False)
+            mark=ylocs, zero_one_bounds=zero_one_bounds)
 
     if pred is not None:
         # prediction confidence raster
         pred_locs = pred[...,:2]
         pred_weights = pred[...,2]
-        raster_plot(pred_locs, abs_sigma=ARGS.gaussian_sigma, weights=pred_weights,
+        raster_plot(pred_locs, abs_sigma=sigma, weights=pred_weights,
             filename=outdir.joinpath("{}_pred".format(patchname)),
-            mode="sum", mark=ylocs, zero_one_bounds=False)
+            mode="sum", mark=ylocs, zero_one_bounds=zero_one_bounds)
 
     if naip is not None:
         plt.imshow(naip[...,:3]) # only use RGB
@@ -117,58 +123,55 @@ def plot_one_example(x, y, patch_id, outdir, pred=None, naip=None, has_ndvi=Fals
         plt.close()
 
 
-#@ray.remote
-def pointmatch_one_patch(gt, pred, conf_thresholds, max_match_dist):
+def pointmatch(all_gts, all_preds, conf_threshold, max_match_dist):
     """
     args:
-        gt: array of shape (m,3) of gt tree locations and isvalidbit
-        pred: array of (n,3) of predicted tree locations and confidences
-        conf_thresholds: list (must be in sorted order, low to high) of confidence thresholds to test
+        gts: array of shape (npatches,npoints,3) where channels are (x,y,isvalid)
+        preds: array of shape (npatches,npoints,3) where channels are (x,y,confidence)
+        conf_threshold: list (must be in sorted order, low to high) of confidence thresholds to test
     returns:
         precisions, recalls, fscores, rmses: each the same length as conf_threshold
     """
-    print("    one patch")
-    precisions = []
-    recalls = []
-    fscores = []
-    rmses = []
+    COST_MATRIX_MAXVAL = 1e10
 
-    # get only valid trees
-    gt = gt[gt[:,2] > 0.5]
-    # get predicted points >= the lowest confidence threshold
-    pred = pred[pred[:,2] >= conf_thresholds[0]]
+    all_tp = 0
+    all_fp = 0
+    all_fn = 0
+    all_tp_dists = []
 
-    if len(gt) == 0:
-        ...
+    for i in range(len(all_gts)):
+        gt = all_gts[i]
+        pred = all_preds[i]
 
-    # calculate distance matrix once for the whole patch
-    orig_dists = pairwise_distances(gt[...,:2],pred[...,:2])
+        # filter valid and preds
+        gt = gt[gt[:,2] > 0.5]
+        pred = pred[pred[:,2] >= conf_threshold]
+        
+        if len(gt) == 0:
+            all_tp += 0
+            all_fp += len(pred)
+            all_fn += 0
+            continue
+        elif len(pred) == 0:
+            all_tp += 0
+            all_fp += 0
+            all_fn += len(gt)
+            continue
 
-    # associate each gt tree with all pred trees within radius
-    orig_dists[orig_dists > max_match_dist] = np.inf
-    print(orig_dists)
+        # calculate pairwise distances
+        dists = pairwise_distances(gt[:,:2],pred[:,:2])
+        
+        # associate each gt tree with all pred trees within radius
+        dists[dists>max_match_dist] = np.inf
 
-    # calculate metrics for each threshold
-    for thresh in conf_thresholds:
-        # get a modifiable copy of dists
-        dists = np.copy(orig_dists)
-
-        # if pred tree associated to multiple gt trees, only take association with smallest distance
-        min_inds = np.argmin(dists,axis=0)
-        min_dists = np.min(dists,axis=0)
-        for j in range(len(pred)):
-            dists[:,j] = np.inf
-            # only allow trees above the confidence threshold
-            if pred[j,2] >= thresh:
-                dists[min_inds[j],j] = min_dists[j]
-
-        # if gt tree associated to multiple pred trees, only take association with smallest distance
-        min_inds = np.argmin(dists,axis=1)
-        min_dists = np.min(dists,axis=1)
-        for j in range(len(gt)):
-            dists[j,:] = np.inf
-            dists[j,min_inds[j]] = min_dists[j]
-
+        # find optimal assignment
+        cost_matrix = np.copy(dists)
+        cost_matrix[np.isinf(cost_matrix)] = COST_MATRIX_MAXVAL
+        row_ind, col_ind = linear_sum_assignment(cost_matrix)
+        dists[:] = np.inf
+        dists[row_ind,col_ind] = cost_matrix[row_ind,col_ind]
+        dists[dists>=COST_MATRIX_MAXVAL] = np.inf
+        
         # associated pred trees = true positives
         tp_inds = np.where(np.any(np.logical_not(np.isinf(dists)),axis=0))[0]
         tp = len(tp_inds)
@@ -180,25 +183,44 @@ def pointmatch_one_patch(gt, pred, conf_thresholds, max_match_dist):
         # un-associated gt trees = false negatives
         fn_inds = np.where(np.all(np.isinf(dists),axis=1))[0]
         fn = len(fn_inds)
+        
+        all_tp += tp
+        all_fp += fp
+        all_fn += fn
+        if len(tp_inds):
+            tp_dists = np.min(dists[:,tp_inds],axis=0)
+            all_tp_dists.append(tp_dists)
 
-        print(tp, tp, fn)
 
-        tp_dists = np.min(dists[:,tp_inds],axis=0)
-        rmse = np.sqrt(np.mean(tp_dists**2))
-
-        precision = tp/(tp+fp)
-        recall = tp/(tp+fn)
-        if precision+recall == 0:
-            fscore = 0
-        else:
-            fscore = 2*(precision*recall)/(precision+recall)
-
-        precisions.append(precision)
-        recalls.append(recall)
-        fscores.append(fscore)
-        rmses.append(rmse)
+    if all_tp + all_fp > 0:
+        precision = all_tp/(all_tp+all_fp)
+    else:
+        precision = 0
+    if all_tp + all_fn > 0:
+        recall = all_tp/(all_tp+all_fn)
+    else:
+        recall = 0
+    if precision + recall > 0:
+        fscore = 2*(precision*recall)/(precision+recall)
+    else:
+        fscore = 0
+    if len(all_tp_dists):
+        all_tp_dists = np.concatenate(all_tp_dists)
+        rmse = np.sqrt(np.mean(all_tp_dists**2))
+    else:
+        rmse = -1
     
-    return precisions, recalls, fscores, rmses
+    results = {
+        'tp': int(all_tp),
+        'fp': int(all_fp),
+        'fn': int(all_fn),
+        'precision': float(precision),
+        'recall': float(recall),
+        'fscore': float(fscore),
+        'rmse': float(rmse),
+    }
+    return results
+
 
 def distribute_pointmatching(gts, preds, thresholds):
     """
@@ -209,44 +231,23 @@ def distribute_pointmatching(gts, preds, thresholds):
     returns:
         dict of pointmatching stats
     """
-    assert len(gts) == len(preds)
-
     results = []
-    for i in range(len(gts)):
-        #result = pointmatch_one_patch.remote(gts[i], preds[i], thresholds, MAX_MATCH_DIST)
-        result = pointmatch_one_patch(gts[i], preds[i], thresholds, MAX_MATCH_DIST)
+    for thresh in thresholds:
+        result = pointmatch(gts, preds, thresh, MAX_MATCH_DIST)
         results.append(result)
 
-    #results = ray.get(results)
-    results = np.array(results)
-
-    # grab each stat, and average over all examples
-    # this results in vectors of same length as thresholds
-    precisions = results[:,0].mean(axis=0)
-    recalls = results[:,1].mean(axis=0)
-    fscores = results[:,2].mean(axis=0)
-    rmses = results[:,3].mean(axis=0)
-
     # find best, by fscore
-    best_idx = np.argmax(fscores)
+    best_idx = np.argmax([x["fscore"] for x in results])
+
+    all_stats = {k:[x[k] for x in results] for k in results[0].keys()}
+    all_stats["threshold"] = thresholds
+    best_stats = {k:results[best_idx][k] for k in results[0].keys()}
+    best_stats["threshold"] = thresholds[best_idx]
 
     stats = {
-        "all": {
-            "threshold": thresholds,
-            "precision": precisions,
-            "recall": recalls,
-            "fscore": fscores,
-            "rmse": rmses,
-        },
-        "best": {
-            "threshold": thresholds[best_idx],
-            "precision": precisions[best_idx],
-            "recall": recalls[best_idx],
-            "fscore": fscores[best_idx],
-            "rmse": rmses[best_idx]
-        }
+        "all": all_stats,
+        "best": best_stats,
     }
-
     return stats
 
 
@@ -334,6 +335,8 @@ def evaluate_model(patchgen, model, model_dir, pointmatch_thresholds):
 
     pointmatch_stats = distribute_pointmatching(y, pred, pointmatch_thresholds)
 
+    pprint(pointmatch_stats["best"])
+
     with open(outdir.joinpath("pointmatch_results.json"), "w") as f:
         json.dump(pointmatch_stats, f, indent=2)
     
@@ -365,7 +368,7 @@ def main():
     # validation set evaluation
     _, val_gen = patch_generator.get_train_val_gens(ARGS.dsname, ARGS.regions, val_batchsize=1)
     val_gen.summary()
-    thresholds = [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.65, 0.8]
+    thresholds = list(np.arange(0.025, 1, 0.025))
     pointmatch_stats = evaluate_model(val_gen, model, MODEL_DIR, thresholds)
     best_thresh = pointmatch_stats["best"]["threshold"]
 

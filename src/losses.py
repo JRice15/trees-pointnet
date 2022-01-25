@@ -9,7 +9,7 @@ from tensorflow import keras
 import math
 
 from src import ARGS
-from src.utils import get_0_1_scaled_sigma
+from src.utils import scaled_0_1
 
 
 def get_loss():
@@ -92,7 +92,7 @@ def grid_mse():
 
     resolution = 50
 
-    scaled_sigma = get_0_1_scaled_sigma()
+    scaled_sigma = scaled_0_1(ARGS.gaussian_sigma)
 
     @tf.function
     def loss(gt, pred):
@@ -114,7 +114,7 @@ def max_mean_discrepancy():
     """
     assert ARGS.gaussian_sigma is not None and ARGS.mmd_kernel is not None
 
-    scaled_sigma = get_0_1_scaled_sigma()
+    scaled_sigma = scaled_0_1(ARGS.gaussian_sigma)
     exp_constant = 4 * scaled_sigma**2
     @tf.function
     def gaussian_kernel_func(diffs):
