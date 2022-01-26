@@ -169,12 +169,11 @@ def find_local_maxima(preds, bounds, min_conf_threshold=None, grid_resolution=64
     return maxima
 
 
-def pointmatch(all_gts, all_preds, all_bounds, conf_threshold, max_match_dist):
+def pointmatch(all_gts, all_preds, conf_threshold, max_match_dist):
     """
     args:
         all_gts: array of shape (npatches,npoints,3) where channels are (x,y,isvalid)
         all_preds: array of shape (npatches,npoints,3) where channels are (x,y,confidence)
-        all_bounds: array of bounds for patches, format (left,right,bottom,top)
         conf_threshold: list (must be in sorted order, low to high) of confidence thresholds to test
     returns:
         precisions, recalls, fscores, rmses: each the same length as conf_threshold
@@ -269,19 +268,18 @@ def pointmatch(all_gts, all_preds, all_bounds, conf_threshold, max_match_dist):
     return results
 
 
-def distribute_pointmatching(gts, preds, bounds, thresholds):
+def run_pointmatching(gts, preds, thresholds):
     """
     args:
         gts: array of shape (npatches,npoints,3) where channels are (x,y,isvalid)
         preds: array of shape (npatches,npoints,3) where channels are (x,y,confidence)
-        bounds: list, len=npatches, of Bounds objects
         max_match_dist: max distance (meters) between gt and pred trees that are considered a match
     returns:
         dict of pointmatching stats
     """
     results = []
     for thresh in thresholds:      
-        result = pointmatch.remote(gts, preds, bounds, thresh, max_match_dist=MAX_MATCH_DIST)
+        result = pointmatch(gts, preds, thresh, max_match_dist=MAX_MATCH_DIST)
         results.append(result)
 
     # find best, by fscore
@@ -289,11 +287,9 @@ def distribute_pointmatching(gts, preds, bounds, thresholds):
 
     best_stats = {k:results[best_idx][k] for k in results[0].keys()}
     best_stats["threshold"] = thresholds[best_idx]
-    best_stats["mode"] = modes[best_idx]
 
     all_stats = {k:[x[k] for x in results] for k in results[0].keys()}
     all_stats["threshold"] = thresholds
-    all_stats["mode"] = modes
 
     stats = {
         "best": best_stats,
@@ -336,12 +332,14 @@ def evaluate_model(patchgen, model, model_dir, pointmatch_thresholds):
         y[i,:,:2] = patchgen.denormalize_pts(y[i,:,:2], patch_id=patch_ids[i])
 
     # find localmax peak predictions
-    pred_peaks = find_local_maxima(preds_raw, bounds, min_conf_threshold=min(thresholds))
+    print("Finding prediction maxima")
+    pred_peaks = find_local_maxima(preds_raw, patch_bounds, min_conf_threshold=min(pointmatch_thresholds))
 
     # save raw sample prediction
+    print("Saving raw predictions")
     with open(outdir.joinpath("sample_predictions.txt"), "w") as f:
         f.write("First 5 predictions, ground truths:\n")
-        for i in range(min(5, len(pred))):
+        for i in range(min(5, len(preds_raw))):
             f.write("pred raw {}:\n".format(i))
             f.write(str(preds_raw[i])+"\n")
             f.write("pred localmax peaks {}:\n".format(i))
@@ -354,7 +352,7 @@ def evaluate_model(patchgen, model, model_dir, pointmatch_thresholds):
     """
     print("Pointmatching")
 
-    pointmatch_stats = distribute_pointmatching(y, pred_peaks, patch_bounds, pointmatch_thresholds)
+    pointmatch_stats = run_pointmatching(y, pred_peaks, pointmatch_thresholds)
 
     print("results:")
     pprint(pointmatch_stats["best"])
@@ -373,19 +371,14 @@ def evaluate_model(patchgen, model, model_dir, pointmatch_thresholds):
 
         # grab random 10 examples
         for i in range(0, len(patch_ids), len(patch_ids)//10):
-            x_i = x[i]
-            y_i = y[i]
-            pred_i = preds_raw[i]
-            peaks_i = pred_peaks[i]
-            patch_id = patch_ids[i]
-            naip = patchgen.get_naip(patch_id)
-            plot_one_example(x_i, y_i, patch_id, pred=pred_i, naip=naip, 
-                has_ndvi=patchgen.use_ndvi, outdir=VIS_DIR, pred_peaks=peaks_i)
+            naip = patchgen.get_naip(patch_ids[i])
+            plot_one_example(x[i], y[i], patch_ids[i], pred=preds_raw[i], naip=naip, 
+                has_ndvi=patchgen.use_ndvi, outdir=VIS_DIR, pred_peaks=pred_peaks[i])
 
     """
     Evaluate Model Metrics
     """
-    print("Evaluating metrics")
+    print("Evaluating model's metrics")
 
     metric_vals = model.evaluate(patchgen)
     if not isinstance(metric_vals, list):

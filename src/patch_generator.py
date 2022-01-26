@@ -24,18 +24,18 @@ TEST_SPLIT = 0.15
 def subdivide_bounds(bounds_dict, n_subdivide):
     subdiv_bounds = {}
     if n_subdivide == 1:
-        for (region, patch_num), bound in bounds_dict.items():
-            subdiv_bounds[(region, patch_num, 0)] = bound
+        for (region, patch_num), bounds in bounds_dict.items():
+            subdiv_bounds[(region, patch_num, 0)] = bounds
     else:
-        for (region, patch_num), bounboundds in bounds_dict.items():
-            left, right, bott, top = bound.xy_fmt()
+        for (region, patch_num), bounds in bounds_dict.items():
+            left, right, bottom, top = bounds.xy_fmt()
             x_width = (right - left) / n_subdivide
             y_width = (top - bottom) / n_subdivide
             i = 0
             for x in np.linspace(left, right, n_subdivide+1)[:-1]:
                 for y in np.linspace(bottom, top, n_subdivide+1)[:-1]:
-                    bound = Bounds.from_minmax([x, y, x+x_width, y+y_width])
-                    subdiv_bounds[(region, patch_num, i)] = bound
+                    new_bounds = Bounds.from_minmax([x, y, x+x_width, y+y_width])
+                    subdiv_bounds[(region, patch_num, i)] = new_bounds
                     i += 1
     return subdiv_bounds
 
