@@ -13,7 +13,43 @@ import rasterio
 
 from src import ARGS, DATA_DIR, REPO_ROOT
 
-matplotlib.rc_file_defaults()
+
+class Bounds:
+    """
+    unambigous bounds. Two formats available:
+    xy: (min_x, max_x, min_y, max_y)
+    minmax: (min_x, min_y, max_x, max_y)
+    """
+
+    def __init__(self, *, min_x, max_x, min_y, max_y):
+        self.min_x = min_x
+        self.max_x = max_x
+        self.min_y = min_y
+        self.max_y = max_y
+    
+    def minmax_fmt(self):
+        return [self.min_x, self.min_y, self.max_x, self.max_y]
+
+    def xy_fmt(self):
+        return [self.min_x, self.max_x, self.min_y, self.max_y]
+    
+    @classmethod
+    def from_xy(cls, bounds):
+        """
+        create Bounds object from an iterable `bounds` that is in xy format
+        """
+        keys = ("min_x", "max_x", "min_y", "max_y")
+        kwargs = dict(zip(keys, bounds))
+        return cls(**kwargs)
+
+    @classmethod
+    def from_minmax(cls, bounds):
+        """
+        create Bounds object from an iterable `bounds` that is in minmax format
+        """
+        keys = ("min_x", "min_y", "max_x", "max_y")
+        kwargs = dict(zip(keys, bounds))
+        return cls(**kwargs)
 
 
 def gaussian(x, center, sigma=0.02):
@@ -22,11 +58,11 @@ def gaussian(x, center, sigma=0.02):
     return const * exp
 
 def gridify_pts(bounds, pts, weights, abs_sigma=None, rel_sigma=None, mode="sum", 
-        resolution=50):
+        resolution=64):
     """
     rasterize weighted points to a grid
     args:
-        bounds: (xmin, xmax, ymin, ymax) bounds
+        bounds: Bounds object
         pts: (x,y) locations within the bounds
         weights: corresponding weights, (negative weights will be set to zero)
         {rel|abs}_sigma: specify relative (fraction of side length) or absolute distance sigma of gaussian smoothing kernel
@@ -35,7 +71,7 @@ def gridify_pts(bounds, pts, weights, abs_sigma=None, rel_sigma=None, mode="sum"
         gridvals: N x M grid of weighted values
         gridpts: N x M x 2 grid, representing the x,y coordinates of each pixel
     """
-    xmin, xmax, ymin, ymax = bounds
+    xmin, xmax, ymin, ymax = bounds.xy_fmt()
     # get gaussian kernel std.dev.
     assert (rel_sigma is None) != (abs_sigma is None) # only one can and must be true
     if rel_sigma is not None:
@@ -71,8 +107,8 @@ def gridify_pts(bounds, pts, weights, abs_sigma=None, rel_sigma=None, mode="sum"
     return gridvals, gridpts
 
 
-def raster_plot(pts, filename, rel_sigma=None, abs_sigma=None, weights=None, title=None, clip=None, 
-        sqrt_scale=False, mode="sum", mark=None, zero_one_bounds=False):
+def raster_plot(pts, filename, *, rel_sigma=None, abs_sigma=None, weights=None, title=None, clip=None, 
+        sqrt_scale=False, mode="sum", mark=None, zero_one_bounds=False, weight_label=None):
     """
     create raster plot of points, with optional weights
     args:
@@ -83,14 +119,15 @@ def raster_plot(pts, filename, rel_sigma=None, abs_sigma=None, weights=None, tit
         mark: points to mark with a green x, of shape (n,2) where n is number of points
     """
     if zero_one_bounds:
-        xmin, xmax = 0, 1
-        ymin, ymax = 0, 1
+        bounds = Bounds.from_xy([0, 1, 0, 1])
     else:
-        xmin, xmax = pts[:,0].min(), pts[:,0].max()
-        ymin, ymax = pts[:,1].min(), pts[:,1].max()
+        bounds = Bounds.from_xy([
+            pts[:,0].min(), pts[:,0].max(), 
+            pts[:,1].min(), pts[:,1].max()
+        ])
 
-    gridvals, gridpts = gridify_pts([xmin, xmax, ymin, ymax], pts, weights, 
-                            rel_sigma=rel_sigma, abs_sigma=abs_sigma, mode=mode)
+    gridvals, gridpts = gridify_pts(bounds, pts, weights, rel_sigma=rel_sigma, 
+                            abs_sigma=abs_sigma, mode=mode)
 
     if sqrt_scale:
         gridvals = np.sqrt(gridvals)
@@ -100,10 +137,18 @@ def raster_plot(pts, filename, rel_sigma=None, abs_sigma=None, weights=None, tit
     x = gridpts[...,0]
     y = gridpts[...,1]
     plt.pcolormesh(x,y,gridvals, shading="auto")
-    plt.colorbar()
+    plt.colorbar(label=weight_label)
 
     if mark is not None:
-        plt.scatter(mark[:,0], mark[:,1], c="white", marker="x")
+        if isinstance(mark, dict):
+            # colors which are well visible overlayed over blues/greens
+            colors = ["red", "orange"]
+            markers = ["x", "o", "^", "s"]
+            for i,m in enumerate(mark.values()):
+                plt.scatter(m[:,0], m[:,1], c=colors[i], marker=markers[i])
+            plt.legend(mark.keys())
+        else:
+            plt.scatter(mark[:,0], mark[:,1], c="white", marker="x")
 
     if title is not None:
         plt.title(title)

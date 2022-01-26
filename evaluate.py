@@ -16,6 +16,7 @@ import numpy as np
 import ray
 from sklearn.metrics import pairwise_distances
 from scipy.optimize import linear_sum_assignment
+from skimage.feature import peak_local_max
 
 import tensorflow as tf
 from tensorflow import keras
@@ -28,9 +29,8 @@ from src import DATA_DIR, REPO_ROOT, ARGS, patch_generator
 from src.losses import get_loss
 from src.models import pointnet
 from src.tf_utils import MyModelCheckpoint, output_model, load_saved_model
-from src.utils import raster_plot, glob_modeldir, scaled_0_1
+from src.utils import raster_plot, glob_modeldir, scaled_0_1, gridify_pts
 
-matplotlib.rc_file_defaults()
 
 MAX_MATCH_DIST = 10
 
@@ -69,8 +69,8 @@ def count_errors(pred, y):
     return pred - y
 
 
-def plot_one_example(x, y, patch_id, outdir, pred=None, naip=None, has_ndvi=False,
-        zero_one_bounds=False):
+def plot_one_example(x, y, patch_id, outdir, pred=None, pred_peaks=None, 
+        naip=None, has_ndvi=False, zero_one_bounds=False):
     """
     generate raster plots for one example input and output from a dataset
     args:
@@ -78,7 +78,8 @@ def plot_one_example(x, y, patch_id, outdir, pred=None, naip=None, has_ndvi=Fals
         y: targets from patch generator
         patch_id
         outdir: pathlib.PurePath
-        pred: prediction from network
+        pred: raw predictions from network
+        pred_peaks: thresholded peaks from the predictions blurred to grid; ie the true final predictions
         naip: naip image
         has_ndvi: bool, whether x has ndvi as last channel
     """
@@ -94,25 +95,41 @@ def plot_one_example(x, y, patch_id, outdir, pred=None, naip=None, has_ndvi=Fals
     else:
         sigma = ARGS.gaussian_sigma
 
+    markings = {"gt trees": ylocs}
+    if pred_peaks is not None:
+        markings["predicted trees"] = pred_peaks[...,:2]
+
     # lidar height (second-highest mode, to avoid noise)
-    raster_plot(x_locs, abs_sigma=sigma, weights=x_heights, mode="second-highest",
+    raster_plot(x_locs, weights=x_heights, 
+        weight_label="height (meters)",
+        abs_sigma=sigma, 
+        mode="second-highest", 
         filename=outdir.joinpath("{}_lidar_height".format(patchname)), 
-        mark=ylocs, zero_one_bounds=zero_one_bounds)
+        mark=markings, 
+        zero_one_bounds=zero_one_bounds)
     
     # lidar ndvi
     if has_ndvi:
         x_ndvi = x[...,3]
-        raster_plot(x_locs, abs_sigma=sigma, weights=x_ndvi, mode="max",
+        raster_plot(x_locs, weights=x_ndvi, 
+            weight_label="ndvi", 
+            mode="max",
+            abs_sigma=sigma, 
             filename=outdir.joinpath("{}_lidar_ndvi".format(patchname)),
-            mark=ylocs, zero_one_bounds=zero_one_bounds)
+            mark=markings, 
+            zero_one_bounds=zero_one_bounds)
 
     if pred is not None:
         # prediction confidence raster
         pred_locs = pred[...,:2]
         pred_weights = pred[...,2]
-        raster_plot(pred_locs, abs_sigma=sigma, weights=pred_weights,
+        raster_plot(pred_locs, weights=pred_weights, 
+            weight_label="prediction confidence",
+            abs_sigma=sigma, 
             filename=outdir.joinpath("{}_pred".format(patchname)),
-            mode="sum", mark=ylocs, zero_one_bounds=zero_one_bounds)
+            mode="sum", 
+            mark=markings, 
+            zero_one_bounds=zero_one_bounds)
 
     if naip is not None:
         plt.imshow(naip[...,:3]) # only use RGB
@@ -123,11 +140,41 @@ def plot_one_example(x, y, patch_id, outdir, pred=None, naip=None, has_ndvi=Fals
         plt.close()
 
 
-def pointmatch(all_gts, all_preds, conf_threshold, max_match_dist):
+def find_local_maxima(preds, bounds, min_conf_threshold=None, grid_resolution=64):
     """
     args:
-        gts: array of shape (npatches,npoints,3) where channels are (x,y,isvalid)
-        preds: array of shape (npatches,npoints,3) where channels are (x,y,confidence)
+        preds: array of shape (npatches,npoints,3) where channels are (x,y,conf)
+        bounds: list of Bounds
+        conf_threshold
+    """
+    maxima = []
+    for i,pred in enumerate(preds):
+        # blur preds to grid
+        gridvals, gridcoords = gridify_pts(bounds[i], pred[:,:2], pred[:,2], 
+                    abs_sigma=ARGS.gaussian_sigma, resolution=grid_resolution)
+
+        # find local maxima
+        peak_pixel_inds = peak_local_max(gridvals, 
+                                threshold_abs=min_conf_threshold, # must meet the min threshold
+                                min_distance=2) # disallow maxima in adjacent pixels
+        peak_pixel_inds = tuple(peak_pixel_inds.T)
+
+        # get geo coords of the maxima pixels
+        peak_confs = gridvals[peak_pixel_inds]
+        peak_coords = gridcoords[peak_pixel_inds]
+        # convert back to format of input preds
+        peak_pts = np.concatenate((peak_coords, peak_confs[...,np.newaxis]), axis=-1)
+        maxima.append(peak_pts)
+
+    return maxima
+
+
+def pointmatch(all_gts, all_preds, all_bounds, conf_threshold, max_match_dist):
+    """
+    args:
+        all_gts: array of shape (npatches,npoints,3) where channels are (x,y,isvalid)
+        all_preds: array of shape (npatches,npoints,3) where channels are (x,y,confidence)
+        all_bounds: array of bounds for patches, format (left,right,bottom,top)
         conf_threshold: list (must be in sorted order, low to high) of confidence thresholds to test
     returns:
         precisions, recalls, fscores, rmses: each the same length as conf_threshold
@@ -143,10 +190,10 @@ def pointmatch(all_gts, all_preds, conf_threshold, max_match_dist):
         gt = all_gts[i]
         pred = all_preds[i]
 
-        # filter valid and preds
+        # filter valid gt trees and preds
         gt = gt[gt[:,2] > 0.5]
         pred = pred[pred[:,2] >= conf_threshold]
-        
+
         if len(gt) == 0:
             all_tp += 0
             all_fp += len(pred)
@@ -222,31 +269,35 @@ def pointmatch(all_gts, all_preds, conf_threshold, max_match_dist):
     return results
 
 
-def distribute_pointmatching(gts, preds, thresholds):
+def distribute_pointmatching(gts, preds, bounds, thresholds):
     """
     args:
         gts: array of shape (npatches,npoints,3) where channels are (x,y,isvalid)
         preds: array of shape (npatches,npoints,3) where channels are (x,y,confidence)
+        bounds: list, len=npatches, of Bounds objects
         max_match_dist: max distance (meters) between gt and pred trees that are considered a match
     returns:
         dict of pointmatching stats
     """
     results = []
-    for thresh in thresholds:
-        result = pointmatch(gts, preds, thresh, MAX_MATCH_DIST)
+    for thresh in thresholds:      
+        result = pointmatch.remote(gts, preds, bounds, thresh, max_match_dist=MAX_MATCH_DIST)
         results.append(result)
 
     # find best, by fscore
     best_idx = np.argmax([x["fscore"] for x in results])
 
-    all_stats = {k:[x[k] for x in results] for k in results[0].keys()}
-    all_stats["threshold"] = thresholds
     best_stats = {k:results[best_idx][k] for k in results[0].keys()}
     best_stats["threshold"] = thresholds[best_idx]
+    best_stats["mode"] = modes[best_idx]
+
+    all_stats = {k:[x[k] for x in results] for k in results[0].keys()}
+    all_stats["threshold"] = thresholds
+    all_stats["mode"] = modes
 
     stats = {
-        "all": all_stats,
         "best": best_stats,
+        "all": all_stats,
     }
     return stats
 
@@ -274,23 +325,43 @@ def evaluate_model(patchgen, model, model_dir, pointmatch_thresholds):
     x, y = patchgen.load_all()
     x = np.squeeze(x.numpy())
     y = np.squeeze(y.numpy())
-    pred = np.squeeze(model.predict(x))
+    preds_raw = np.squeeze(model.predict(x))
     patch_ids = patchgen.patch_ids
+    patch_bounds = [patchgen.get_patch_bounds(x) for x in patch_ids]
 
     # denormalize data
     for i in range(len(x)):
         x[i] = patchgen.denormalize_pts(x[i], patch_id=patch_ids[i])
-        pred[i,:,:2] = patchgen.denormalize_pts(pred[i,:,:2], patch_id=patch_ids[i])
+        preds_raw[i,:,:2] = patchgen.denormalize_pts(preds_raw[i,:,:2], patch_id=patch_ids[i])
         y[i,:,:2] = patchgen.denormalize_pts(y[i,:,:2], patch_id=patch_ids[i])
+
+    # find localmax peak predictions
+    pred_peaks = find_local_maxima(preds_raw, bounds, min_conf_threshold=min(thresholds))
 
     # save raw sample prediction
     with open(outdir.joinpath("sample_predictions.txt"), "w") as f:
         f.write("First 5 predictions, ground truths:\n")
         for i in range(min(5, len(pred))):
-            f.write("pred {}:\n".format(i))
-            f.write(str(pred[i])+"\n")
+            f.write("pred raw {}:\n".format(i))
+            f.write(str(preds_raw[i])+"\n")
+            f.write("pred localmax peaks {}:\n".format(i))
+            f.write(str(pred_peaks[i])+"\n")
             f.write("gt {}:\n".format(i))
             f.write(str(y[i])+"\n")
+
+    """
+    Pointmatching
+    """
+    print("Pointmatching")
+
+    pointmatch_stats = distribute_pointmatching(y, pred_peaks, patch_bounds, pointmatch_thresholds)
+
+    print("results:")
+    pprint(pointmatch_stats["best"])
+    with open(outdir.joinpath("results_pointmatch.json"), "w") as f:
+        json.dump(pointmatch_stats, f, indent=2)
+
+    best_thresh = pointmatch_stats["best"]["threshold"]
 
     """
     data visualizations
@@ -304,11 +375,12 @@ def evaluate_model(patchgen, model, model_dir, pointmatch_thresholds):
         for i in range(0, len(patch_ids), len(patch_ids)//10):
             x_i = x[i]
             y_i = y[i]
-            pred_i = pred[i]
+            pred_i = preds_raw[i]
+            peaks_i = pred_peaks[i]
             patch_id = patch_ids[i]
             naip = patchgen.get_naip(patch_id)
             plot_one_example(x_i, y_i, patch_id, pred=pred_i, naip=naip, 
-                has_ndvi=patchgen.use_ndvi, outdir=VIS_DIR)
+                has_ndvi=patchgen.use_ndvi, outdir=VIS_DIR, pred_peaks=peaks_i)
 
     """
     Evaluate Model Metrics
@@ -321,24 +393,12 @@ def evaluate_model(patchgen, model, model_dir, pointmatch_thresholds):
     else:
         results = {model.metrics_names[i]:v for i,v in enumerate(metric_vals)}
 
-    with open(outdir.joinpath("results.json"), "w") as f:
+    with open(outdir.joinpath("results_model_metrics.json"), "w") as f:
         json.dump(results, f, indent=2)
 
     print("\nResults on", patchgen.name, "dataset:")
     for k,v in results.items():
         print(k+":", v)
-
-    """
-    Pointmatching
-    """
-    print("Pointmatching")
-
-    pointmatch_stats = distribute_pointmatching(y, pred, pointmatch_thresholds)
-
-    pprint(pointmatch_stats["best"])
-
-    with open(outdir.joinpath("pointmatch_results.json"), "w") as f:
-        json.dump(pointmatch_stats, f, indent=2)
     
     return pointmatch_stats
 

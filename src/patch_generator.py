@@ -16,7 +16,7 @@ from tensorflow.keras import backend as K
 from tensorflow.keras import layers
 
 from src import ARGS, REPO_ROOT, DATA_DIR
-from src.utils import raster_plot, rotate_pts, get_all_regions, get_naipfile_path
+from src.utils import raster_plot, rotate_pts, get_all_regions, get_naipfile_path, Bounds
 
 VAL_SPLIT = 0.1
 TEST_SPLIT = 0.15
@@ -24,16 +24,17 @@ TEST_SPLIT = 0.15
 def subdivide_bounds(bounds_dict, n_subdivide):
     subdiv_bounds = {}
     if n_subdivide == 1:
-        for (region, patch_num), bounds in bounds_dict.items():
-            subdiv_bounds[(region, patch_num, 0)] = bounds
+        for (region, patch_num), bound in bounds_dict.items():
+            subdiv_bounds[(region, patch_num, 0)] = bound
     else:
-        for (region, patch_num), (left,bottom,right,top) in bounds_dict.items():
+        for (region, patch_num), bounboundds in bounds_dict.items():
+            left, right, bott, top = bound.xy_fmt()
             x_width = (right - left) / n_subdivide
             y_width = (top - bottom) / n_subdivide
             i = 0
             for x in np.linspace(left, right, n_subdivide+1)[:-1]:
                 for y in np.linspace(bottom, top, n_subdivide+1)[:-1]:
-                    bound = [x, y, x+x_width, y+y_width]
+                    bound = Bounds.from_minmax([x, y, x+x_width, y+y_width])
                     subdiv_bounds[(region, patch_num, i)] = bound
                     i += 1
     return subdiv_bounds
@@ -48,7 +49,8 @@ def filter_pts(bounds_dict, points_dict, keyfunc):
         keyfunc: translates the keys of bounds_dict to the keys of points_dict
     """
     out = {}
-    for key, (left,bott,right,top) in bounds_dict.items():
+    for key, bound in bounds_dict.items():
+        left,bott,right,top = bound.minmax_fmt()
         pts_key = keyfunc(key)
         pts = points_dict[pts_key]
         x = pts[:,0]
@@ -145,7 +147,7 @@ class LidarPatchGen(keras.utils.Sequence):
         for (region,patch_num) in self.orig_patch_ids:
             naipfile = NAIP_DIR.joinpath(region, "{}_training_NAIP_NAD83_UTM11_{}.tif".format(region, patch_num)).as_posix()
             with rasterio.open(naipfile) as raster:
-                orig_bounds[(region,patch_num)] = [i for i in raster.bounds]
+                orig_bounds[(region,patch_num)] = Bounds.from_minmax(raster.bounds)
             lidarfile = LIDAR_DIR.joinpath(region, "lidar_patch_{}.npy".format(patch_num)).as_posix()
             orig_lidar[(region,patch_num)] = np.load(lidarfile)
 
@@ -181,7 +183,8 @@ class LidarPatchGen(keras.utils.Sequence):
         # get normalization data
         self.norm_mins = {}
         self.norm_maxs = {}
-        for patch_key, (left,bott,right,top) in self.patch_bounds.items():
+        for patch_key, bound in self.patch_bounds.items():
+            left,bott,right,top = bound.minmax_fmt()
             min_xyz = [left, bott, 0]
             max_xyz = [right, top, self.z_max]
             # ndvi, varies from -1 to 1
@@ -353,12 +356,19 @@ class LidarPatchGen(keras.utils.Sequence):
         naipfile = get_naipfile_path(region, patch_num)
         with rasterio.open(naipfile) as raster:
             # https://gis.stackexchange.com/questions/336874/get-a-window-from-a-raster-in-rasterio-using-coordinates-instead-of-row-column-o
-            im = raster.read(window=rasterio.windows.from_bounds(*bounds, raster.transform))
+            im = raster.read(window=rasterio.windows.from_bounds(*bounds.minmax_fmt(), raster.transform))
         # channels last format
         im = np.moveaxis(im, 0, -1) / 255.0
         # sometimes it selects a row of pixels outside of the image, which results in spurious very large negative numbers
         im = np.clip(im, 0, 1)
         return im
+
+    def get_patch_bounds(self, patch_id):
+        """
+        args:
+            patch_id: tuple: (region, patch_num, subdiv_num)
+        """
+        return self.patch_bounds[patch_id]
 
     def get_batch_shape(self):
         """

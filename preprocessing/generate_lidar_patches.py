@@ -22,6 +22,7 @@ dn = os.path.dirname
 sys.path.append(dn(dn(os.path.abspath(__file__))))
 
 from src import DATA_DIR
+from src.utils import Bounds
 
 def naip2ndvi(im):
     nir = im[...,3]
@@ -32,6 +33,9 @@ def naip2ndvi(im):
 
 
 def load_lidar(las_file, patch_bounds, out_dict):
+    """
+    load points in chunks from a lidar file and seperate into patches
+    """
     chunk_size = 5_000_000
 
     print("  reading", las_file)
@@ -44,9 +48,11 @@ def load_lidar(las_file, patch_bounds, out_dict):
             z = pts["HeightAboveGround"]
             pts = np.stack((x,y,z), axis=-1)
 
-            for patch_id, (left,bott,right,top) in patch_bounds.items():
+            for patch_id, bnds in patch_bounds.items():
+                left,right,bott,top = bnds.xy_fmt()
                 cond = np.logical_and.reduce(
-                    (x >= left, y >= bott, x <= right, y <= top)
+                    (x >= left, x <= right, 
+                     y >= bott, y <= top)
                 )
                 selected = pts[cond]
                 if len(selected):
@@ -83,7 +89,7 @@ def process_region(regionname, spec, outdir):
         patch_id = int(PurePath(filename).stem.split("_")[-1])
         raster = rasterio.open(filename)
         rasters[patch_id] = raster
-        bounds[patch_id] = [i for i in raster.bounds]
+        bounds[patch_id] = Bounds.from_minmax(raster.bounds)
     
     if not isinstance(spec["lidar"], list):
         spec["lidar"] = [spec["lidar"]]
