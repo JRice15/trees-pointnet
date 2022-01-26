@@ -193,7 +193,7 @@ def get_default_dsname():
         dataset_dir, dsname
     """
     existing_datasets = [i for i in os.listdir(DATA_DIR.joinpath("lidar")) 
-                        if os.path.isdir(DATA_DIR.joinpath("lidar").joinpath(i))]
+                        if os.path.isdir(DATA_DIR.joinpath("lidar", i))]
     if len(existing_datasets) > 1:
         raise ValueError("Multiple datasets exist in `data/lidar`. Specify which with the --dsname argument")
     elif len(existing_datasets) == 0:
@@ -232,7 +232,7 @@ def get_all_regions(dsname=None):
         files = glob.glob(globpath)
         regions = [PurePath(x).stem.split("_")[0] for x in files]
     else:
-        globpath = DATA_DIR.joinpath("lidar", dsname, "*").as_posix()
+        globpath = DATA_DIR.joinpath("lidar", dsname, "regions", "*").as_posix()
         if globpath[-1] != "/":
             globpath += "/"
         regiondirs = glob.glob(globpath)

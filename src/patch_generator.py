@@ -110,11 +110,10 @@ class LidarPatchGen(keras.utils.Sequence):
         self.random = np.random.default_rng(seed=44)
 
     def init_data(self):
-        LIDAR_DIR = DATA_DIR.joinpath("lidar", ARGS.dsname)
+        LIDAR_DIR = DATA_DIR.joinpath("lidar", ARGS.dsname, "regions")
         NAIP_DIR = DATA_DIR.joinpath("NAIP_patches")
         GT_DIR = DATA_DIR.joinpath("ground_truth_csvs")
 
-        # always in (x,y) format
         x_column_options = ("long_nad83", "long_utm11", "point_x")
         y_column_options = ("lat_nad83", "lat_utm11", "point_y")
 

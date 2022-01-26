@@ -83,6 +83,9 @@ def plot_one_example(x, y, patch_id, outdir, pred=None, pred_peaks=None,
         naip: naip image
         has_ndvi: bool, whether x has ndvi as last channel
     """
+    if not os.path.exists(outdir):
+        os.makedirs(outdir, exist_ok=True)
+
     patchname = "_".join([str(x) for x in patch_id])
     ylocs = y[y[...,2] == 1][...,:2]
 
@@ -101,7 +104,7 @@ def plot_one_example(x, y, patch_id, outdir, pred=None, pred_peaks=None,
 
     # lidar height (second-highest mode, to avoid noise)
     raster_plot(x_locs, weights=x_heights, 
-        weight_label="height (meters)",
+        weight_label="height",
         abs_sigma=sigma, 
         mode="second-highest", 
         filename=outdir.joinpath("{}_lidar_height".format(patchname)), 
@@ -346,6 +349,8 @@ def evaluate_model(patchgen, model, model_dir, pointmatch_thresholds):
             f.write(str(pred_peaks[i])+"\n")
             f.write("gt {}:\n".format(i))
             f.write(str(y[i])+"\n")
+            f.write("first 100 input points {}:\n".format(i))
+            f.write(str(x[i,:100])+"\n")
 
     """
     Pointmatching
@@ -360,6 +365,10 @@ def evaluate_model(patchgen, model, model_dir, pointmatch_thresholds):
         json.dump(pointmatch_stats, f, indent=2)
 
     best_thresh = pointmatch_stats["best"]["threshold"]
+
+    # threshold peaks by best threshold
+    for i in range(len(pred_peaks)):
+        pred_peaks[i] = pred_peaks[i][pred_peaks[i][:,2] >= best_thresh]
 
     """
     data visualizations

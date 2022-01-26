@@ -137,15 +137,20 @@ train_gen.summary()
 val_gen.summary()
 inpt_shape = train_gen.get_batch_shape()[0][1:]
 
+print("Generating example batch plots")
 train_viz_dir = MODEL_DIR.joinpath("training/example_batch_viz/")
-os.makedirs(train_viz_dir, exist_ok=True)
 train_gen.__getitem__(0) # generate and throw away one batch, to make sure we don't have errors that dont appear the first time around
 X,Y,ids = train_gen.__getitem__(1, return_ids=True, no_rotate=True)
 for i in range(len(X)):
     naip = train_gen.get_naip(ids[i])
-    evaluate.plot_one_example(X[i].numpy(), Y[i].numpy(), ids[i], naip=naip, has_ndvi=ARGS.ndvi,
-        outdir=train_viz_dir, zero_one_bounds=True)
-
+    x = X[i].numpy()
+    y = Y[i].numpy()
+    evaluate.plot_one_example(x, y, ids[i], naip=naip, has_ndvi=ARGS.ndvi,
+        outdir=train_viz_dir.joinpath("normalized"), zero_one_bounds=True)
+    x = train_gen.denormalize_pts(x, ids[i])
+    y[:,:2] = train_gen.denormalize_pts(y[:,:2], ids[i])
+    evaluate.plot_one_example(x, y, ids[i], naip=naip, has_ndvi=ARGS.ndvi,
+        outdir=train_viz_dir.joinpath("original_scale"), zero_one_bounds=False)
 
 """
 create model

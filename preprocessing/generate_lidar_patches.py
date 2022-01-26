@@ -131,7 +131,7 @@ def main():
 
     for region_name, region_spec in data_specs.items():
         print("\nGenerating region:", region_name)
-        OUTDIR = DATA_DIR.joinpath("lidar", ARGS.outname, region_name)
+        OUTDIR = DATA_DIR.joinpath("lidar", ARGS.outname, "regions", region_name)
         # check for existing outputs
         existing_outputs = glob.glob(OUTDIR.joinpath("*.npy").as_posix())
         if len(existing_outputs) and not ARGS.overwrite:

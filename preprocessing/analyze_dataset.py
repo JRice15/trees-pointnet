@@ -12,13 +12,11 @@ from pathlib import PurePath
 import argparse
 
 import geopandas as gpd
-import h5py
 import matplotlib.pyplot as plt
 import matplotlib
 import matplotlib.cm as cm
 import numpy as np
 import pandas as pd
-import tables
 import seaborn
 
 # add parent directory
@@ -26,8 +24,6 @@ dn = os.path.dirname
 sys.path.append(dn(dn(os.path.abspath(__file__))))
 
 from src import DATA_DIR
-from src.utils import raster_plot
-
 
 
 def jitter(vals, percent):
@@ -44,201 +40,107 @@ def jitter(vals, percent):
     return vals + (rand * jittersize)
 
 
+def output_binned_stats(bin_stats, heightbins, ndvibins, region_name, outdir):
+    # generate binned stats plots
+    seaborn.barplot(y=bin_stats["heights"], x=heightbins[:-1].astype(int))
+    plt.yscale("log")
+    plt.ylabel("count"), plt.xlabel("height (meters)")
+    plt.ylim(bottom=1)
+    plt.title(region_name + " lidar point heights")
+    plt.savefig(outdir.joinpath("heights").as_posix())
+    plt.clf()
+
+    seaborn.barplot(y=bin_stats["ndvis"], x=ndvibins[:-1].round(1))
+    plt.yscale("log")
+    plt.ylabel("count"), plt.xlabel("NDVI")
+    plt.ylim(bottom=1)
+    plt.title(region_name + " lidar point NDVIs")
+    plt.savefig(outdir.joinpath("ndvis").as_posix())
+    plt.clf()
+
+
+
 def main(dsname):
     print("Running analyze_dataset.py")
-    combined_stats = None
+    all_stats = {}
+    cumulative_df = None
+    cumulative_bins = None
 
-    DS_DIR = DATA_DIR.joinpath("generated", dsname)
-    region_files = glob.glob(DS_DIR.joinpath("*.h5").as_posix())
+    DS_dir = DATA_DIR.joinpath("lidar", dsname, "regions")
+    region_dirs = glob.glob(DS_dir.as_posix() + "/*/")
 
-    for region_file in region_files:
-        region_file = PurePath(region_file)
-        region_name = region_file.stem
-        print("Analyzing", region_name, region_file)
+    for region_dir in region_dirs:
+        region_name = PurePath(region_dir).stem
+        print("Analyzing", region_name)
 
-        outdir = DS_DIR.joinpath("stats", region_name)
-        os.makedirs(outdir.as_posix(), exist_ok=True)
+        outdir = DATA_DIR.joinpath("lidar", dsname, "stats", region_name)
+        os.makedirs(outdir, exist_ok=True)
 
-        stats = pd.Series(dtype="int")
-        with h5py.File(region_file.as_posix(), "r") as hf:
-            stats["n_patches"] = len(hf["lidar"].keys())
-            stats["total_lidar_points"] = sum([pts.shape[0] for pts in hf["lidar"].values()])
-            stats["total_gt_trees"] = sum([pts.shape[0] for pts in hf["gt"].values()])
-            patch_coords = hf["/patch_coords"][:]
+        patch_files = glob.glob(region_dir + "*.npy")
 
-        grid_x = patch_coords[...,0]
-        grid_y = patch_coords[...,1]
+        # patchwise stats for the region
+        patch_stats = []
+        bin_stats = []
+        for file in patch_files:
+            pts = np.load(file)
+            patch_stats.append({
+                "n_patches": 1,
+                "n_points": pts.shape[0],
+            })
+            binned_heights,heightbins = np.histogram(pts[:,2], bins=15, range=(0, 150))
+            binned_ndvi,ndvibins = np.histogram(pts[:,3], bins=12, range=(-1.2, 1.2))
+            bin_stats.append({
+                "heights": binned_heights,
+                "ndvis": binned_ndvi,
+            })
 
-        patch_df = pd.DataFrame({"x": grid_x, "y": grid_y})
-        patch_df["x_jit"] = jitter(patch_df["x"], 3)
-        patch_df["y_jit"] = jitter(patch_df["y"], 3)
+        patch_df = pd.DataFrame(patch_stats)
+        bin_stats = pd.DataFrame(bin_stats).sum(axis=0)
 
-        with h5py.File(region_file.as_posix(), "r") as hf:
-            patch_ids = hf["lidar"].keys()
-            n_patches = len(patch_ids)
-            patch_df["pt_count"] = [hf["lidar/patch"+str(pnum)].shape[0] for pnum in range(n_patches)]
-            patch_df["gt_count"] = [hf["gt/patch"+str(pnum)].shape[0] for pnum in range(n_patches)]
+        # generate patchwise plots
+        seaborn.histplot(data=patch_df, x="n_points", bins=20, 
+                binrange=(0,patch_df["n_points"].max()))
+        plt.title(region_name + " points per patch")
+        plt.savefig(outdir.joinpath("pount_counts").as_posix())
+        plt.clf()
 
-            seaborn.scatterplot(data=patch_df, x="x_jit", y="y_jit", hue="pt_count")
-            plt.title("Patch locations")
-            plt.savefig(outdir.joinpath("patch_locations").as_posix())
-            plt.clf()
+        # generate binned plots
+        output_binned_stats(bin_stats, heightbins, ndvibins, region_name, outdir)
 
-            seaborn.histplot(data=patch_df, x="pt_count")
-            plt.title("Points per patch")
-            plt.savefig(outdir.joinpath("pount_counts").as_posix())
-            plt.clf()
+        # save region-cumulative stats
+        region_stats = patch_df.sum(axis=0).to_dict()
+        with open(outdir.joinpath("computed_stats.json"), "w") as f:
+            json.dump(region_stats, f, indent=2)
 
-            seaborn.histplot(data=patch_df, x="gt_count")
-            plt.title("Groundtruth trees per patch")
-            plt.savefig(outdir.joinpath("gt_counts").as_posix())
-            plt.clf()
-
-            # TODO heights, NDVI values
-            # heights = 
-            # example plots
-
-        with open(outdir.joinpath("stats.json"), "w") as f:
-            json.dump(stats.to_dict(), f, indent=2)
-
-        if combined_stats is None:
-            combined_stats = stats
+        if cumulative_df is None:
+            cumulative_df = patch_df
+            cumulative_bins = bin_stats
         else:
-            combined_stats += stats
+            cumulative_df = pd.concat([cumulative_df, patch_df])
+            cumulative_bins += bin_stats
 
-        # exit()
+    outdir = DATA_DIR.joinpath("lidar", dsname, "stats")
 
-        # with tables.open_file("../data/train_patches.h5", "r") as train_fp, \
-        #         tables.open_file("../data/test_patches.h5", "r") as test_fp:
+    # generate all-region patchwise plot
+    seaborn.histplot(data=cumulative_df, x="n_points", bins=20, 
+            binrange=(0,cumulative_df["n_points"].max()))
+    plt.title("all-regions points per patch")
+    plt.savefig(outdir.joinpath("pount_counts").as_posix())
+    plt.clf()
 
-        #     train_attrs = train_fp.get_node("/lidar")._v_attrs
-        #     test_attrs = test_fp.get_node("/lidar")._v_attrs
-        #     for i in train_attrs._f_list():
-        #         print("train", i, train_attrs[i])
-        #     for i in test_attrs._f_list():
-        #         print("test", i, test_attrs[i])
-        #     train_attrs = train_fp.get_node("/gt")._v_attrs
-        #     test_attrs = test_fp.get_node("/gt")._v_attrs
-        #     for i in train_attrs._f_list():
-        #         print("train", i, train_attrs[i])
-        #     for i in test_attrs._f_list():
-        #         print("test", i, test_attrs[i])
+    # cumulative binned plots
+    output_binned_stats(cumulative_bins, heightbins, ndvibins, "all-regions", outdir)
 
-        #     train_patch_lens = [i.shape[0] for i in train_fp.get_node("/lidar")]
-        #     train_gt_lens = [i.shape[0] for i in train_fp.get_node("/gt")]
-        #     test_patch_lens = [i.shape[0] for i in test_fp.get_node("/lidar")]
-        #     test_gt_lens = [i.shape[0] for i in test_fp.get_node("/gt")]
-
-        #     pts_min = min(min(train_patch_lens), min(test_patch_lens))
-        #     pts_max = max(max(train_patch_lens), max(test_patch_lens))
-        #     step = (pts_max - pts_min) // 20
-        #     plt.hist([train_patch_lens, test_patch_lens], label=["train", "test"], density=True, bins=range(pts_min, pts_max+1, step))
-        #     plt.legend()
-        #     plt.savefig("output/pts_per_patch")
-        #     plt.close()
-
-        #     trees_min = min(min(train_gt_lens), min(test_gt_lens))
-        #     trees_max = max(max(train_gt_lens), max(test_gt_lens))
-        #     step = (trees_max - trees_min) // 20
-        #     plt.hist([train_gt_lens, test_gt_lens], label=["train", "test"], density=True, bins=range(trees_min, trees_max+1, step))
-        #     plt.legend()
-        #     plt.savefig("output/trees_per_patch")
-        #     plt.close()
-
-        #     train_heights = [i[:,2].max() for i in train_fp.get_node("/lidar")]
-        #     test_heights = [i[:,2].max() for i in train_fp.get_node("/lidar")]
-        #     plt.hist([train_heights, test_heights], label=["train", "test"], density=True)
-        #     plt.legend()
-        #     plt.savefig("output/patch_max_heights")
-        #     plt.close()
+    cumulative_stats = cumulative_df.sum(axis=0).to_dict()
+    with open(outdir.joinpath("cumulative_stats.json"), "w") as f:
+        json.dump(cumulative_stats, f, indent=2)
 
 
-        # with h5py.File("../data/test_patches.h5", "r") as f:
-        #     print("generating visualizations")
-        #     # vizualize 20 patches
-        #     keys = sorted(list(f["lidar"].keys()))
-        #     for i in range(0, len(keys), len(keys)//20):
-        #         patchname = keys[i]
-        #         x = f["lidar/"+patchname][:]
-        #         y = f["gt/"+patchname][:]
-        #         naip = f["naip/"+patchname][:]
-                
-        #         xlocs = x[...,:2]
-        #         xweights = x[...,2]
-        #         raster_plot(xlocs, weights=xweights, mode="max", gaussian_sigma=0.04, mark=y,
-        #             filename="output/example_patches/{}_lidar_height.png".format(patchname))
-
-        #         x_ndvi = x[...,3]
-        #         raster_plot(xlocs, weights=x_ndvi, mode="max", gaussian_sigma=0.04, mark=y,
-        #             filename="output/example_patches/{}_lidar_ndvi.png".format(patchname))
-
-        #         step = len(x) // 3000
-        #         if step > 0:
-        #             leftover = len(x) % 3000
-        #             x_sampled = x[0:len(x)-leftover:step]
-        #             assert len(x_sampled) == 3000
-        #             xlocs = x_sampled[...,:2]
-        #             xweights = x_sampled[...,2]
-        #             raster_plot(xlocs, weights=xweights, mode="max", gaussian_sigma=0.04, mark=y,
-        #                 filename="output/example_patches/{}_lidar_height_sampled3k.png".format(patchname))
-
-        #         plt.imshow(naip[...,:3])
-        #         plt.colorbar()
-        #         plt.tight_layout()
-        #         plt.savefig("output/example_patches/"+patchname+"_NAIP.png")
-        #         plt.clf()
-        #         plt.close()
-
-
-        #     xys = [f["gt/"+key][:] for key in keys]
-        #     xys = np.concatenate(xys, axis=0)
-        #     xs, ys = xys[:,0], xys[:,1]
-
-        #     trees = gpd.GeoDataFrame(
-        #         geometry=gpd.points_from_xy(xs, ys),
-        #         crs="EPSG:26911")
-            
-        #     trees.to_file("output/test_patches.shp")
-
-
-
-        # with h5py.File("../data/train_patches.h5", "r") as f:
-        #     assert len(f["lidar"].keys()) == len(f["gt"].keys())
-        #     print("First 10 Lidar, GT patches:")
-        #     print(list(f["lidar"].keys())[:10])
-        #     print(list(f["gt"].keys())[:10])
-
-
-    # if ROWS == 44:
-    #     """
-    #     verify correct patches are selected for test
-    #     """
-    #     with h5py.File("../data/test_patches.h5", "r") as f:
-    #         keys = list(f["gt"].keys())
-    #         keys = [re.sub(r"patch", "", i) for i in keys]
-    #         keys = [i.split("_") for i in keys]
-    #         keys = [(int(x), int(y)) for x,y in keys]
-    #         keys.sort()
-
-    #     # a few of the test patches, hand indexed. These are indexed from 1, like the grid
-    #     expected = [
-    #         (25,7),
-    #         (29,8),
-    #         (32,10),
-    #         (21,10),
-    #         (25,14)
-    #     ]
-
-    #     expected.sort()
-    #     assert all([i in keys for i in expected])
-
-    with open(DS_DIR.joinpath("stats", "combined_stats.json"), "w") as f:
-        json.dump(combined_stats.to_dict(), f, indent=2)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dsname",required=True,help="name of the generated dataset")
+    parser.add_argument("--dsname",required=True,help="name of the lidar dataset")
     ARGS = parser.parse_args()
 
     main(ARGS.dsname)
