@@ -237,6 +237,8 @@ def get_all_regions(dsname=None):
             globpath += "/"
         regiondirs = glob.glob(globpath)
         regions = [PurePath(x).stem for x in regiondirs]
+    if len(regions) < 1:
+        raise ValueError("No regions found for lidar dataset {}".format(dsname))
     return regions
 
 def get_naipfile_path(region, patch_num):
