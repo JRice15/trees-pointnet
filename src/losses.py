@@ -1,4 +1,3 @@
-import h5py
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras import Model

@@ -5,7 +5,6 @@ import json
 import time
 from pathlib import PurePath
 
-import h5py
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np

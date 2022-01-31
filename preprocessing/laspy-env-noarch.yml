@@ -7,7 +7,6 @@ dependancies:
   - conda-forge 
   - gdal 
   - geopandas 
-  - h5py 
   - matplotlib 
   - numpy 
   - pandas 
