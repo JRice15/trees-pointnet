@@ -10,7 +10,6 @@ import time
 import shutil
 import itertools
 
-import h5py
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras

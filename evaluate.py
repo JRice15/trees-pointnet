@@ -9,11 +9,9 @@ from pprint import pprint
 from pathlib import PurePath
 import time
 
-import h5py
 import matplotlib.pyplot as plt
 import matplotlib
 import numpy as np
-import ray
 from sklearn.metrics import pairwise_distances
 from scipy.optimize import linear_sum_assignment
 from skimage.feature import peak_local_max
