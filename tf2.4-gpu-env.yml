@@ -10,5 +10,7 @@ dependencies:
   - pip
   - rasterio
   - hyperopt
+  - scikit-learn
+  - scikit-image
   - pip:
     - gast==0.3.3
