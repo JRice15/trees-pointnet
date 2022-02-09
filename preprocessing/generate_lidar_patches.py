@@ -29,7 +29,7 @@ def naip2ndvi(im):
     red = im[...,0]
     ndvi = (nir - red) / (nir + red)
     ndvi = np.nan_to_num(ndvi, nan=0.0)
-    return ndvi
+    return ndvi[...,np.newaxis]
 
 
 def load_lidar(las_file, patch_bounds, out_dict):
@@ -64,21 +64,6 @@ def load_lidar(las_file, patch_bounds, out_dict):
     return out_dict
 
 
-def add_ndvi_to_pts(seperated_lidar, raster_map):
-    out = {}
-    for patch_id, pts in tqdm(seperated_lidar.items()):
-        raster = raster_map[patch_id]
-        xys = pts[:,:2]
-        naip = raster.sample(xys) # returns generator
-        # convert to float
-        naip = np.array([val for val in naip]) / 256
-        assert len(naip) == len(pts)
-        ndvi = naip2ndvi(naip).reshape(-1, 1)
-        pts = np.concatenate([pts, ndvi], axis=-1)
-        out[patch_id] = pts
-    return out
-
-
 def process_region(regionname, spec, outdir):
     os.makedirs(outdir, exist_ok=True)
 
@@ -97,9 +82,16 @@ def process_region(regionname, spec, outdir):
     for lidarfile in spec["lidar"]:
         seperated_pts = load_lidar(lidarfile, bounds, seperated_pts)
 
-    seperated_pts = add_ndvi_to_pts(seperated_pts, rasters)
-
-    for patch_id, pts in seperated_pts.items():
+    print("  adding RBG-NIR-NDVI and saving")
+    for patch_id, pts in tqdm(seperated_pts.items()):
+        raster = rasters[patch_id]
+        xys = pts[:,:2]
+        naip = raster.sample(xys) # returns generator
+        # convert to float
+        naip = np.array([val for val in naip]) / 256
+        assert len(naip) == len(pts)
+        ndvi = naip2ndvi(naip)
+        pts = np.concatenate([pts, naip, ndvi], axis=-1)
         outfile = outdir.joinpath("lidar_patch_"+str(patch_id)+".npy").as_posix()
         np.save(outfile, pts)
     
@@ -122,6 +114,7 @@ def main():
     parser.add_argument("--specs",required=True,help="json file with dataset specs")
     parser.add_argument("--outname",required=True,help="name of output h5 file (to be placed within the `../data` directory)")
     parser.add_argument("--overwrite",action="store_true")
+    parser.add_argument("--regions",default="ALL",nargs="+",help="regions to consider")
     ARGS = parser.parse_args()
 
     with open(ARGS.specs, "r") as f:
@@ -130,6 +123,8 @@ def main():
     statuses = {}
 
     for region_name, region_spec in data_specs.items():
+        if ARGS.regions != "ALL" and region_name not in ARGS.regions:
+            continue
         print("\nGenerating region:", region_name)
         OUTDIR = DATA_DIR.joinpath("lidar", ARGS.outname, "regions", region_name)
         # check for existing outputs
