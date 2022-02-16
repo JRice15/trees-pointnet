@@ -425,8 +425,15 @@ def main():
 
     model = load_saved_model(MODEL_PATH.as_posix())
 
+    train_gen, val_gen = patch_generator.get_train_val_gens(ARGS.dsname, ARGS.regions, train_batchsize=1, val_batchsize=1)
+
+    # train set evaluation
+    train_gen.training = False
+    train_gen.summary()
+    thresholds = list(np.arange(0.025, 1, 0.025))
+    pointmatch_stats = evaluate_model(train_gen, model, MODEL_DIR, thresholds)
+
     # validation set evaluation
-    _, val_gen = patch_generator.get_train_val_gens(ARGS.dsname, ARGS.regions, val_batchsize=1)
     val_gen.summary()
     thresholds = list(np.arange(0.025, 1, 0.025))
     pointmatch_stats = evaluate_model(val_gen, model, MODEL_DIR, thresholds)

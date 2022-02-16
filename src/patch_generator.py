@@ -442,14 +442,14 @@ def get_tvt_split(dsname, regions):
 
 
 
-def get_train_val_gens(dsname, regions, val_batchsize=None):
+def get_train_val_gens(dsname, regions, val_batchsize=None, train_batchsize=None):
     """
     returns:
         train Keras Sequence, val Sequence or raw data, test Sequence
     """
     train, val, test = get_tvt_split(dsname, regions)
 
-    train_gen = LidarPatchGen(train, name="train", training=True)
+    train_gen = LidarPatchGen(train, name="train", training=True, batchsize=train_batchsize)
     val_gen = LidarPatchGen(val, name="validation", batchsize=val_batchsize)
     return train_gen, val_gen
 

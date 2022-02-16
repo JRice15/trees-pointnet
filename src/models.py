@@ -25,11 +25,7 @@ def pointnet_conv(outchannels, kernel_size, name, strides=1, bn=True, activation
     if ARGS.ragged:
         for i,v in enumerate(layer_list):
             layer_list[i] = layers.TimeDistributed(v, name=v.name+"_timedistrib")
-    def op(x):
-        for layer in layer_list:
-            x = layer(x)
-        return x
-    return op
+    return keras.Sequential(layer_list)
 
 
 def pointnet_dense(outchannels, name, bn=True, activation=True):
@@ -37,14 +33,14 @@ def pointnet_dense(outchannels, name, bn=True, activation=True):
     returns callable, which creates pipeline of dense, batchnorm, and relu
     input: (B,N,K)
     """
-    def op(x):
-        x = layers.Dense(int(outchannels), kernel_initializer="glorot_normal", name=name)(x)
-        if bn:
-            x = layers.BatchNormalization(name=name+"_bn")(x)
-        if activation:
-            x = layers.ReLU(name=name+"_relu")(x)
-        return x
-    return op
+    seq = keras.Sequential([
+        layers.Dense(int(outchannels), kernel_initializer="glorot_normal", name=name)
+    ])
+    if bn:
+        seq.add( layers.BatchNormalization(name=name+"_bn") )
+    if activation:
+        seq.add( layers.ReLU(name=name+"_relu") )
+    return seq
 
 
 def pointnet_transform(x_in, batchsize, kind):
@@ -125,11 +121,11 @@ def cls_output_flow(global_feature, outchannels):
     x = global_feature
 
     x = pointnet_dense(512, "outmlp_dense1")(x)
-    if ARGS.dropout > 0:
-        x = layers.Dropout(ARGS.dropout, name="outmlp_dropout1")(x)
+    if ARGS.dropout_rate > 0:
+        x = layers.Dropout(ARGS.dropout_rate, name="outmlp_dropout1")(x)
     x = pointnet_dense(256, "outmlp_dense2")(x)
     if ARGS.dropout > 0:
-        x = layers.Dropout(ARGS.dropout, name="outmlp_dropout2")(x)
+        x = layers.Dropout(ARGS.dropout_rate, name="outmlp_dropout2")(x)
 
     x = pointnet_dense(outchannels, "outmlp_dense3", bn=False, 
             activation=False)(x)
@@ -161,18 +157,17 @@ def dense_output_flow_2(global_feature, out_npoints, out_channels):
 
 
 
-def pointnet(inpt_shape, size_multiplier, output_channels, reg_weight=0.001):
-    """
-    args:
-        output_channels: num features per output point
-    """
-    npoints, nattributes = inpt_shape
-    inpt = layers.Input(inpt_shape, ragged=ARGS.ragged, 
-                batch_size=ARGS.batchsize if ARGS.ragged else None) # (B,N,K)
-    xy_locs = inpt[...,:2]
 
-    x = inpt
-    x = customlayers.ExpandDims(axis=2, name="add_channels_1")(x) # (B,N,1,K)
+def pointnet_1(x, size_multiplier, output_channels):
+    """
+    original pointnet
+    args:
+        x: input tensor, shape (B,N,1,K)
+    returns:
+        output tensor
+        dict mapping loss names to losses
+    """
+    output_losses = {}
 
     if ARGS.use_tnet_1:
         # input transform
@@ -211,6 +206,91 @@ def pointnet(inpt_shape, size_multiplier, output_channels, reg_weight=0.001):
     else:
         raise NotImplementedError()
     
+    if ARGS.use_tnet_2:
+        # feature transformation matrix orthogonality loss
+        dims = feat_trans_matrix.shape[1]
+        ortho_diff = tf.matmul(feat_trans_matrix,
+                        tf.transpose(feat_trans_matrix, perm=[0,2,1]))
+        ortho_diff -= tf.constant(tf.eye(dims), dtype=tf.float32)
+        ortho_loss = ARGS.ortho_weight * tf.nn.l2_loss(ortho_diff)
+        output_losses["ortho_loss"] = ortho_loss
+
+    return output, output_losses
+
+
+
+def pointnet_2(inputs, npoints, size_multiplier, output_channels):
+    """
+    adapted from:
+    https://github.com/dgriffiths3/pointnet2-tensorflow2
+    """
+    from src.pnet2_layers.layers import Pointnet_SA_MSG, Pointnet_SA
+
+    layer1 = Pointnet_SA_MSG(
+        npoint=npoints,
+        radius_list=[0.1,0.2,0.4],
+        nsample_list=[16,32,128],
+        mlp=[[32,32,64], [64,64,128], [64,96,128]],
+        bn=ARGS.use_batchnorm,
+    )
+    xyz, features = layer1(inputs, None)
+
+    layer2 = Pointnet_SA_MSG(
+        npoint=512,
+        radius_list=[0.2,0.4,0.8],
+        nsample_list=[32,64,128],
+        mlp=[[64,64,128], [128,128,256], [128,128,256]],
+        bn=ARGS.use_batchnorm
+    )
+    xyz, features = layer2(xyz, features)
+
+    layer3 = Pointnet_SA(
+        npoint=None,
+        radius=None,
+        nsample=None,
+        mlp=[256, 512, 1024],
+        group_all=True,
+        bn=ARGS.use_batchnorm,
+    )
+    xyz, features = layer3(xyz, features)
+
+    print(features.shape)
+    x = customlayers.ReduceDims(axis=-1)(features)
+
+    x = layers.Dense(512, activation="relu")(x)
+    if ARGS.dropout_rate > 0:
+        x = layers.Dropout(ARGS.dropout_rate)(x)
+
+    x = layers.Dense(128, activation="relu")(x)
+    if ARGS.dropout_rate > 0:
+        x = layers.Dropout(ARGS.dropout_rate)(x)
+
+    x = layers.Dense(output_channels, activation="relu")(x)
+
+    return x
+
+
+
+def pointnet(inpt_shape, size_multiplier, output_channels):
+    """
+    args:
+        inpt_shape: tuple
+        size_mult: multiply channels by this amount
+        output_channels: num features per output point
+    """
+    npoints, nattributes = inpt_shape
+    inpt = layers.Input(inpt_shape, ragged=ARGS.ragged, 
+                batch_size=ARGS.batchsize if ARGS.ragged else None) # (B,N,K)
+    xy_locs = inpt[...,:2]
+
+    x = inpt
+    x = customlayers.ExpandDims(axis=2, name="add_channels_1")(x) # (B,N,1,K)
+
+    if ARGS.use_pnet2:
+        output, losses = pointnet_2(x, npoints, size_multiplier, output_channels)
+    else:
+        output, losses = pointnet_1(x, size_multiplier, output_channels)
+
     # optional post processing for some methods
     if ARGS.loss in ("mmd", "gridmse"):
         assert output_channels == 3
@@ -230,15 +310,9 @@ def pointnet(inpt_shape, size_multiplier, output_channels, reg_weight=0.001):
 
     model = Model(inpt, output)
 
-    if ARGS.use_tnet_2:
-        # feature transformation matrix orthogonality loss
-        dims = feat_trans_matrix.shape[1]
-        ortho_diff = tf.matmul(feat_trans_matrix,
-                        tf.transpose(feat_trans_matrix, perm=[0,2,1]))
-        ortho_diff -= tf.constant(tf.eye(dims), dtype=tf.float32)
-        ortho_loss = reg_weight * tf.nn.l2_loss(ortho_diff)
-        model.add_loss(ortho_loss)
-        model.add_metric(ortho_loss, name="ortho_loss", aggregation="mean")
+    for loss_name, loss_val in losses.items():
+        model.add_loss(loss_val)
+        model.add_metric(loss_val, name=loss_name, aggregation="mean")
 
     return model
 
