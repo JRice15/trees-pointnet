@@ -16,7 +16,7 @@ def pointnet_conv(outchannels, kernel_size, name, strides=1, bn=True, activation
     """
     layer_list = [
         layers.Conv1D(int(outchannels), kernel_size=kernel_size, padding=padding,
-                    strides=strides, kernel_initializer="glorot_normal", name=name),
+                    strides=strides, kernel_initializer="glorot_normal", name=name)
     ]
     if bn:
         layer_list.append(layers.BatchNormalization(name=name+"_bn"))

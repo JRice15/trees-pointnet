@@ -153,10 +153,13 @@ for i in range(len(X)):
     y[:,:2] = train_gen.denormalize_pts(y[:,:2], ids[i])
     evaluate.plot_one_example(x, y, ids[i], naip=naip, has_ndvi=ARGS.ndvi,
         outdir=train_viz_dir.joinpath("original_scale"), zero_one_bounds=False)
+    if ARGS.test:
+        break
 
 """
 create model
 """
+print("Building model")
 
 # map loss modes to number of output features and points
 output_channels_map = {
