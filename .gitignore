@@ -144,6 +144,7 @@ models/
 
 # other outputs
 output/
+hpo/studies
 
 # temp files
 temp.py

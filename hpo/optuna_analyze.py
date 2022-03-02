@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 import optuna
 
+from hpo_utils import get_study
 
 
 
@@ -27,14 +28,7 @@ def main():
     args = parser.parse_args()
 
     # load study
-    storage = "sqlite:///hpo/{}.db".format(args.name)
-    try:
-        study = optuna.load_study(
-            study_name=args.name,
-            storage=storage
-        )
-    except Exception as e:
-        raise ValueError(f"Error loading study '{args.name}': {str(e)}")
+    study = get_study(args.name, assume_exists=True)
 
     df = study.trials_dataframe()
 

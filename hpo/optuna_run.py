@@ -6,17 +6,16 @@ import glob
 import argparse
 import signal
 import logging
-import pickle
-import shutil
 import sys
 import subprocess
 import multiprocessing
 from pathlib import PurePath
-from pprint import pprint, pformat
 
 import numpy as np
 import pandas as pd
 import optuna
+
+from hpo_utils import ROOT, get_study, ignore_kbint, KilledTrial
 
 # frequency with which workers check their subprocesses
 WORKER_POLL_FREQ = 2
@@ -26,15 +25,13 @@ valid_optimizers = ["adam", "adadelta", "nadam", "adamax"]
 valid_output_modes = ["seg", "dense"]
 valid_losses = ["mmd", "gridmse"]
 
-class KilledTrial(Exception): pass
-
 
 def make_objective_func(args, interrupt_event):
     # def objective(trial):
         # train_args = {}
 
     def objective(trial):
-        p = subprocess.Popen(["python3", "temp.py"])
+        p = subprocess.Popen(["python3", f"{ROOT}/hpo/temp.py"])
         # wait for process to finish
         while True:
             # poll, then sleep, so that interrupt event has sufficient time to propogate, 
@@ -69,21 +66,6 @@ class NoImprovementStopping:
         ...
 
 
-class ignore_kbint():
-    """
-    ignore keyboard interrupts
-    """
-
-    def __enter__(self):
-        self.old_handler = signal.signal(signal.SIGINT, self.handler)
-                
-    def handler(self, sig, frame):
-        logging.debug('SIGINT received. Ignoring.')
-    
-    def __exit__(self, type, value, traceback):
-        signal.signal(signal.SIGINT, self.old_handler)
-
-
 def optuna_worker(worker_id, args, interrupt_event):
     # study already created by main process
     study = get_study(args.name, assume_exists=True)
@@ -99,38 +81,8 @@ def optuna_worker(worker_id, args, interrupt_event):
                 pass
 
 
-def get_study(name, assume_exists=False):
-    """
-    get optuna study. If actual existence is different from assume_exists, error is raised
-    """
-    storage = optuna.storages.RDBStorage(
-        url="sqlite:///hpo/{}.db".format(name),
-        engine_kwargs={"connect_args": {"timeout": 15}}, # longer than usual timeout is ok, because 15s is insignificant compared to the time each trial takes
-    )
-    if assume_exists:
-        try:
-            return optuna.load_study(
-                study_name=name,
-                storage=storage,
-            )
-        except Exception as e:
-            raise ValueError(f"Error loading study '{name}': {str(e)}")
-    else:
-        try:
-            return optuna.create_study(
-                study_name=name,
-                storage=storage,
-                direction="maximize",
-            )
-        except optuna.exceptions.DuplicatedStudyError:
-            raise ValueError(f"Study named '{name}' already exists. Supply the --resume flag if you want to resume it")
-
-
-
 
 def main():
-    os.makedirs("hpo/", exist_ok=True)
-
     parser = argparse.ArgumentParser()
     parser.add_argument("--name",required=True,help="subdirectory inside models/ to save these trials under")
     parser.add_argument("--timeout",default=4,type=float,help="max number of hours each model is allowed to run")
@@ -146,7 +98,7 @@ def main():
 
     assert not (args.overwrite and args.resume)
     if args.overwrite:
-        dbpath = "hpo/{}.db".format(args.name)
+        dbpath = f"{ROOT}/hpo/studies/{args.name}.db"
         if os.path.exists(dbpath):
             os.remove(dbpath)
 
@@ -163,6 +115,8 @@ def main():
             p = multiprocessing.Process(target=optuna_worker, args=(worker_id, args, intrpt_event))
             procs.append(p)
             p.start()
+            # stagger start times
+            time.sleep(2)
     
     try:
         for p in procs: 
