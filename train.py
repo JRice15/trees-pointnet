@@ -69,7 +69,7 @@ hypergrp.add_argument("--epochs",type=int,default=500)
 hypergrp.add_argument("--batchsize",type=int,default=16)
 hypergrp.add_argument("--lr",type=float,default=0.001,help="initial learning rate")
 hypergrp.add_argument("--reducelr-factor",type=float,default=0.2,help="factor to multiply lr by for reducelronplateau")
-hypergrp.add_argument("--reducelr-patience",type=int,default=20,help="number of epochs with no valloss improvement to reduce lr")
+hypergrp.add_argument("--reducelr-patience",type=int,default=12,help="number of epochs with no valloss improvement to reduce lr")
 
 # model parameters
 modelgrp = parser.add_argument_group("model parameters")

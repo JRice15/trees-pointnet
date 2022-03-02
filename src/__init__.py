@@ -1,5 +1,5 @@
 """
-__init__.py: loads CL ARGS and sets random seeds seeds
+__init__.py: initializes constants and sets random seeds
 """
 
 import argparse
@@ -26,15 +26,25 @@ DATA_DIR = REPO_ROOT.joinpath("data")
 os.makedirs(REPO_ROOT.joinpath("models"), exist_ok=True)
 
 
+np.random.seed(9999)
+
+
+has_tf = False
 try:
     import tensorflow as tf
+    has_tf = True
+except ModuleNotFoundError:
+    pass
+    # we don't always need tensorflow, so it's ok if we don't have it here
+
+
+if has_tf:
     from tensorflow import keras
     from tensorflow.keras import Model
     from tensorflow.keras import backend as K
     from tensorflow.keras import layers
     from tensorflow.keras.optimizers import Adam
 
-    np.random.seed(9999)
     tf.random.set_seed(9999)
     tf.compat.v1.set_random_seed(9999)
     gpus = tf.config.list_physical_devices('GPU')
@@ -45,8 +55,4 @@ try:
         except Exception as e:
             print("! Cannot set memory growth on device", gpu)
             print(e)
-except ModuleNotFoundError:
-    pass
-    # we don't always need tensorflow, so it's ok if we don't have it here
-
 
