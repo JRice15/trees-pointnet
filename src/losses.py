@@ -58,8 +58,8 @@ def tf_gridify_pts(weighted_pts, gaussian_sigma, resolution=50):
     """
     batchsize = tf.shape(weighted_pts)[0]
 
-    x = tf.linspace(0, 1, resolution)
-    y = tf.linspace(0, 1, resolution)
+    x = tf.linspace(0.0, 1.0, resolution)
+    y = tf.linspace(0.0, 1.0, resolution)
     x, y = tf.meshgrid(x, y)
     gridcoords = tf.cast(tf.stack([x,y], axis=-1), dtype=weighted_pts.dtype)
     # expand out to batch shape

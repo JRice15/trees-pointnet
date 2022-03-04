@@ -67,7 +67,7 @@ def load_lidar(las_file, patch_bounds, out_dict):
 def process_region(regionname, spec, outdir):
     os.makedirs(outdir, exist_ok=True)
 
-    globpath = DATA_DIR.joinpath("NAIP_patches/" + regionname.lower() + "_*.tif")
+    globpath = DATA_DIR.joinpath("NAIP_patches/" + regionname.lower() + "/*.tif")
     bounds = {}
     rasters = {}
     for filename in glob.glob(globpath.as_posix()):
@@ -75,6 +75,7 @@ def process_region(regionname, spec, outdir):
         raster = rasterio.open(filename)
         rasters[patch_id] = raster
         bounds[patch_id] = Bounds.from_minmax(raster.bounds)
+    assert len(bounds) > 0, "No NAIP tiles found!"
     
     if not isinstance(spec["lidar"], list):
         spec["lidar"] = [spec["lidar"]]
@@ -125,8 +126,8 @@ def main():
     for region_name, region_spec in data_specs.items():
         if ARGS.regions != "ALL" and region_name not in ARGS.regions:
             continue
-        print("\nGenerating region:", region_name)
         OUTDIR = DATA_DIR.joinpath("lidar", ARGS.outname, "regions", region_name)
+        print("\nGenerating region:", region_name, "at", OUTDIR)
         # check for existing outputs
         existing_outputs = glob.glob(OUTDIR.joinpath("*.npy").as_posix())
         if len(existing_outputs) and not ARGS.overwrite:

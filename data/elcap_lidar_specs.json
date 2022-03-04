@@ -1,0 +1,17 @@
+{
+    "santamonica": {
+        "lidar": "/data2/urban-forest/pointnet_data/samo/SantaMonica_HAG_epsg26911.laz"
+    },
+    "longbeach": {
+        "lidar": "/data2/urban-forest/pointnet_data/longbeach/LongBeach_HAG_epsg26911.laz"
+    },
+    "riverside": {
+      "lidar": "/data2/urban-forest/pointnet_data/riverside/Riverside_HAG_epsg:26911.laz"
+    },
+    "claremont": {
+        "lidar": [
+            "/data2/urban-forest/pointnet_data/claremont/Claremont_HAG_EPSG:26911.laz",
+            "/data2/urban-forest/pointnet_data/claremont/Claremont_LA_HAG_epsg:26911.laz"
+        ]
+    }
+}
