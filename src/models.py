@@ -16,7 +16,7 @@ def pointnet_conv(outchannels, kernel_size, name, strides=1, bn=True, activation
     """
     layer_list = [
         layers.Conv2D(int(outchannels), kernel_size=kernel_size, padding=padding,
-                    strides=strides, kernel_initializer="glorot_normal", name=name)
+                    strides=strides, kernel_initializer="glorot_normal", name=name+"_conv")
     ]
     if bn:
         layer_list.append(layers.BatchNormalization(name=name+"_bn"))
@@ -25,7 +25,7 @@ def pointnet_conv(outchannels, kernel_size, name, strides=1, bn=True, activation
     if ARGS.ragged:
         for i,v in enumerate(layer_list):
             layer_list[i] = layers.TimeDistributed(v, name=v.name+"_timedistrib")
-    return keras.Sequential(layer_list)
+    return keras.Sequential(layer_list, name=name)
 
 
 def pointnet_dense(outchannels, name, bn=True, activation=True):
@@ -34,8 +34,8 @@ def pointnet_dense(outchannels, name, bn=True, activation=True):
     input: (B,N,K)
     """
     seq = keras.Sequential([
-        layers.Dense(int(outchannels), kernel_initializer="glorot_normal", name=name)
-    ])
+        layers.Dense(int(outchannels), kernel_initializer="glorot_normal", name=name+"_dense")
+    ], name=name)
     if bn:
         seq.add( layers.BatchNormalization(name=name+"_bn") )
     if activation:
@@ -151,7 +151,7 @@ def dense_output_flow_2(global_feature, out_npoints, out_channels):
     x = pointnet_dense(intermediate_size, "outmlp_dense1")(x)
     x = pointnet_dense(target_size, "outmlp_dense2")(x)
     x = layers.Reshape((out_npoints, out_channels))(x)
-    x = pointnet_conv(out_channels, 1, bn=False, activation=False, name="out_channels_conv")(x)
+    x = pointnet_dense(out_channels, bn=False, activation=False, name="out_channels_dense")(x)
 
     return x
 

@@ -99,6 +99,7 @@ lossgrp.add_argument("--ortho-weight",type=float,default=0.001,
 # misc
 miscgrp = parser.add_argument_group("misc")
 miscgrp.add_argument("--test",action="store_true",help="run minimal batches and epochs to test functionality")
+miscgrp.add_argument("--noplot",action="store_true",help="no batch plots")
 
 
 ARGS = parser.parse_args(namespace=ARGS)
@@ -139,22 +140,24 @@ train_gen.summary()
 val_gen.summary()
 inpt_shape = train_gen.get_batch_shape()[0][1:]
 
-print("Generating example batch plots")
-train_viz_dir = MODEL_DIR.joinpath("training/example_batch_viz/")
-train_gen.__getitem__(0) # generate and throw away one batch, to make sure we don't have errors that dont appear the first time around
-X,Y,ids = train_gen.__getitem__(1, return_ids=True, no_rotate=True)
-for i in range(len(X)):
-    naip = train_gen.get_naip(ids[i])
-    x = X[i].numpy()
-    y = Y[i].numpy()
-    evaluate.plot_one_example(x, y, ids[i], naip=naip, has_ndvi=ARGS.ndvi,
-        outdir=train_viz_dir.joinpath("normalized"), zero_one_bounds=True)
-    x = train_gen.denormalize_pts(x, ids[i])
-    y[:,:2] = train_gen.denormalize_pts(y[:,:2], ids[i])
-    evaluate.plot_one_example(x, y, ids[i], naip=naip, has_ndvi=ARGS.ndvi,
-        outdir=train_viz_dir.joinpath("original_scale"), zero_one_bounds=False)
-    if ARGS.test:
-        break
+
+if not ARGS.noplot:
+    print("Generating example batch plots")
+    train_viz_dir = MODEL_DIR.joinpath("training/example_batch_viz/")
+    train_gen.__getitem__(0) # generate and throw away one batch, to make sure we don't have errors that dont appear the first time around
+    X,Y,ids = train_gen.__getitem__(1, return_ids=True, no_rotate=True)
+    for i in range(len(X)):
+        naip = train_gen.get_naip(ids[i])
+        x = X[i].numpy()
+        y = Y[i].numpy()
+        evaluate.plot_one_example(x, y, ids[i], naip=naip, has_ndvi=ARGS.ndvi,
+            outdir=train_viz_dir.joinpath("normalized"), zero_one_bounds=True)
+        x = train_gen.denormalize_pts(x, ids[i])
+        y[:,:2] = train_gen.denormalize_pts(y[:,:2], ids[i])
+        evaluate.plot_one_example(x, y, ids[i], naip=naip, has_ndvi=ARGS.ndvi,
+            outdir=train_viz_dir.joinpath("original_scale"), zero_one_bounds=False)
+        if ARGS.test:
+            break
 
 """
 create model
@@ -190,7 +193,7 @@ callback_dict = {
     "reducelr": callbacks.ReduceLROnPlateau(factor=ARGS.reducelr_factor, patience=ARGS.reducelr_patience,
         min_lr=1e-6, verbose=1),
     "earlystopping": callbacks.EarlyStopping(verbose=1, patience=int(ARGS.reducelr_patience*2.5)),
-    "modelcheckpoint": MyModelCheckpoint(MODEL_PATH, verbose=1, 
+    "modelcheckpoint": MyModelCheckpoint(MODEL_PATH.as_posix(), verbose=1, 
         epoch_per_save=(5 if not ARGS.test else 1), save_best_only=True)
 }
 

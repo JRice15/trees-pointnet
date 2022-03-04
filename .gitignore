@@ -140,6 +140,7 @@ data/lidar
 
 # compiled results
 *.cu.o
+*_so.so
 
 # model outputs
 model.png
