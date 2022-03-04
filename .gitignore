@@ -138,6 +138,9 @@ data/generated
 data/NAIP_patches
 data/lidar
 
+# compiled results
+*.cu.o
+
 # model outputs
 model.png
 models/
@@ -148,3 +151,4 @@ output/
 # temp files
 temp.py
 old
+old_*/

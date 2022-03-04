@@ -15,7 +15,7 @@ def pointnet_conv(outchannels, kernel_size, name, strides=1, bn=True, activation
     input: (B,N,1,K)
     """
     layer_list = [
-        layers.Conv1D(int(outchannels), kernel_size=kernel_size, padding=padding,
+        layers.Conv2D(int(outchannels), kernel_size=kernel_size, padding=padding,
                     strides=strides, kernel_initializer="glorot_normal", name=name)
     ]
     if bn:

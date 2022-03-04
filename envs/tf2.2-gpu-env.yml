@@ -1,0 +1,16 @@
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - tensorflow-gpu=2.2
+  - numpy=1.19
+  - pandas
+  - pydot
+  - matplotlib
+  - pip
+  - rasterio
+  - hyperopt
+  - scikit-learn
+  - scikit-image
+  - pip:
+    - gast==0.3.3
