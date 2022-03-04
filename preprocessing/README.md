@@ -1,0 +1,1 @@
+A directory holding scripts for preprocessing and formatting data, primarily LIDAR

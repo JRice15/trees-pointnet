@@ -97,7 +97,7 @@ def seg_output_flow(local_features, global_feature, outchannels):
         _, npoints, _, _ = local_features.shape
         global_feature = customlayers.Tile(npoints, axis=1)(global_feature)
 
-    full_features = layers.Concatenate(axis=-1)([local_features, global_feature])
+    full_features = layers.Concatenate(axis=-1, name="seg_concat")([local_features, global_feature])
 
     # output flow
     x = full_features
@@ -150,7 +150,7 @@ def dense_output_flow_2(global_feature, out_npoints, out_channels):
 
     x = pointnet_dense(intermediate_size, "outmlp_dense1")(x)
     x = pointnet_dense(target_size, "outmlp_dense2")(x)
-    x = layers.Reshape((out_npoints, out_channels))(x)
+    x = layers.Reshape((out_npoints, out_channels), name="outmlp_reshape")(x)
     x = pointnet_dense(out_channels, bn=False, activation=False, name="out_channels_dense")(x)
 
     return x
