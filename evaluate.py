@@ -68,7 +68,7 @@ def count_errors(pred, y):
 
 
 def plot_one_example(x, y, patch_id, outdir, pred=None, pred_peaks=None, 
-        naip=None, has_ndvi=False, zero_one_bounds=False):
+        naip=None, zero_one_bounds=False):
     """
     generate raster plots for one example input and output from a dataset
     args:
@@ -79,7 +79,6 @@ def plot_one_example(x, y, patch_id, outdir, pred=None, pred_peaks=None,
         pred: raw predictions from network
         pred_peaks: thresholded peaks from the predictions blurred to grid; ie the true final predictions
         naip: naip image
-        has_ndvi: bool, whether x has ndvi as last channel
     """
     if not os.path.exists(outdir):
         os.makedirs(outdir, exist_ok=True)
@@ -110,15 +109,14 @@ def plot_one_example(x, y, patch_id, outdir, pred=None, pred_peaks=None,
         zero_one_bounds=zero_one_bounds)
     
     # lidar ndvi
-    if has_ndvi:
-        x_ndvi = x[...,3]
-        raster_plot(x_locs, weights=x_ndvi, 
-            weight_label="ndvi", 
-            mode="max",
-            abs_sigma=sigma, 
-            filename=outdir.joinpath("{}_lidar_ndvi".format(patchname)),
-            mark=markings, 
-            zero_one_bounds=zero_one_bounds)
+    x_ndvi = x[...,-1]
+    raster_plot(x_locs, weights=x_ndvi, 
+        weight_label="ndvi", 
+        mode="max",
+        abs_sigma=sigma, 
+        filename=outdir.joinpath("{}_lidar_ndvi".format(patchname)),
+        mark=markings, 
+        zero_one_bounds=zero_one_bounds)
 
     if pred is not None:
         # prediction confidence raster
@@ -380,7 +378,7 @@ def evaluate_model(patchgen, model, model_dir, pointmatch_thresholds):
         for i in range(0, len(patch_ids), len(patch_ids)//10):
             naip = patchgen.get_naip(patch_ids[i])
             plot_one_example(x[i], y[i], patch_ids[i], pred=preds_raw[i], naip=naip, 
-                has_ndvi=patchgen.use_ndvi, outdir=VIS_DIR, pred_peaks=pred_peaks[i])
+                outdir=VIS_DIR, pred_peaks=pred_peaks[i])
 
     """
     Evaluate Model Metrics

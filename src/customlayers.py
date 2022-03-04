@@ -170,10 +170,7 @@ def Activation(actname, **kwargs):
     ARGS:
         actname: name of activation function
     """
-    if ARGS.ragged:
-        return layers.TimeDistributed(layers.Activation(actname), **kwargs)
-    else:
-        return layers.Activation(actname, **kwargs)
+    return layers.Activation(actname, **kwargs)
 
 
 def ExpandDims(axis, **kwargs):

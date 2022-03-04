@@ -21,10 +21,11 @@ def get_loss():
     """
     if ARGS.loss == "treetop":
         assert ARGS.output_mode in ("seg", "dense")
-        if ARGS.ragged:
-            return ragged_pointwise_treetop()
-        else:
-            return nonrag_pointwise_treetop()
+        raise NotADirectoryError()
+        # if ARGS.ragged:
+        #     return ragged_pointwise_treetop()
+        # else:
+        #     return nonrag_pointwise_treetop()
     if ARGS.loss == "mmd":
         assert ARGS.output_mode in ("seg", "dense")
         return max_mean_discrepancy()

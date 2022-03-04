@@ -78,7 +78,6 @@ modelgrp.add_argument("--npoints",type=int,default=500,help="number of points to
 modelgrp.add_argument("--out-npoints",type=int,default=256,help="(dense output mode): number of output points")
 modelgrp.add_argument("--size-multiplier",type=float,default=1.0,help="number to multiply all default conv output filters by")
 modelgrp.add_argument("--dropout",dest="dropout_rate",type=float,default=0.0,help="dropout rate")
-modelgrp.add_argument("--no-ndvi",dest="ndvi",action="store_false",help="whether to use pointwise NDVi channel")
 modelgrp.add_argument("--no-tnet1",dest="use_tnet_1",action="store_false",help="whether to use input transform TNet")
 modelgrp.add_argument("--no-tnet2",dest="use_tnet_2",action="store_false",help="whether to use feature transform TNet")
 
@@ -150,11 +149,11 @@ if not ARGS.noplot:
         naip = train_gen.get_naip(ids[i])
         x = X[i].numpy()
         y = Y[i].numpy()
-        evaluate.plot_one_example(x, y, ids[i], naip=naip, has_ndvi=ARGS.ndvi,
+        evaluate.plot_one_example(x, y, ids[i], naip=naip, 
             outdir=train_viz_dir.joinpath("normalized"), zero_one_bounds=True)
         x = train_gen.denormalize_pts(x, ids[i])
         y[:,:2] = train_gen.denormalize_pts(y[:,:2], ids[i])
-        evaluate.plot_one_example(x, y, ids[i], naip=naip, has_ndvi=ARGS.ndvi,
+        evaluate.plot_one_example(x, y, ids[i], naip=naip, 
             outdir=train_viz_dir.joinpath("original_scale"), zero_one_bounds=False)
         if ARGS.test:
             break
@@ -201,114 +200,42 @@ callback_dict = {
 train model
 """
 
-if not ARGS.ragged:
-    try:
-        H = model.fit(
-            x=train_gen,
-            validation_data=val_gen.load_all(),
-            epochs=ARGS.epochs,
-            callbacks=list(callback_dict.values()),
-            batch_size=ARGS.batchsize,
-        )
-    except KeyboardInterrupt:
-        # allow manual stopping by user
-        H = callback_dict["history"]
-    except Exception as e:
-        # otherwise log then throw the error
-        import traceback
-        # create signal file
-        with open(MODEL_DIR.joinpath("training_failed.txt"), "w") as f:
-            traceback.print_exc(file=f)
-        raise e
+try:
+    H = model.fit(
+        x=train_gen,
+        validation_data=val_gen.load_all(),
+        epochs=ARGS.epochs,
+        callbacks=list(callback_dict.values()),
+        batch_size=ARGS.batchsize,
+    )
+except KeyboardInterrupt:
+    # allow manual stopping by user
+    H = callback_dict["history"]
+except Exception as e:
+    # otherwise log then throw the error
+    import traceback
+    # create signal file
+    with open(MODEL_DIR.joinpath("training_failed.txt"), "w") as f:
+        traceback.print_exc(file=f)
+    raise e
 
-    # save training data
-    with open(MODEL_DIR.joinpath("training/stats.json"), "w") as f:
-        val_results = {
-            "best_val_loss": callback_dict["modelcheckpoint"].best_val_loss()
-        }
-        json.dump(val_results, f, indent=2)
-    # save metric plots
-    for k in H.history.keys():
-        if not k.startswith("val_"):
-            plt.plot(H.history[k])
-            plt.plot(H.history["val_"+k])
-            plt.legend(['train', 'val'])
-            plt.title(k)
-            plt.xlabel('epoch')
-            plt.savefig(os.path.join(MODEL_DIR, "training", k+".png"))
-            plt.close()
+# save training data
+with open(MODEL_DIR.joinpath("training/stats.json"), "w") as f:
+    val_results = {
+        "best_val_loss": callback_dict["modelcheckpoint"].best_val_loss()
+    }
+    json.dump(val_results, f, indent=2)
+# save metric plots
+for k in H.history.keys():
+    if not k.startswith("val_"):
+        plt.plot(H.history[k])
+        plt.plot(H.history["val_"+k])
+        plt.legend(['train', 'val'])
+        plt.title(k)
+        plt.xlabel('epoch')
+        plt.savefig(os.path.join(MODEL_DIR, "training", k+".png"))
+        plt.close()
 
-else:
-    """
-    adapted from https://keras.io/guides/writing_a_training_loop_from_scratch/
-    """
-
-    @tf.function
-    def train_step(x, y):
-        with tf.GradientTape() as tape:
-            logits = model(x, training=True)
-            loss_values = model.loss(y, logits)
-            loss_values += model.losses
-        grads = tape.gradient(loss_values, model.trainable_weights)
-        model.optimizer.apply_gradients(zip(grads, model.trainable_weights))
-        for m in model.metrics:
-            m.update_state(y, logits)
-        return loss_values
-
-    @tf.function
-    def test_step(x, y):
-        logits = model(x, training=False)
-        loss_values = model.loss(y, logits)
-        loss_values += np.sum(model.losses)
-        for m in model.metrics:
-            m.update_state(y, logits)
-        return loss_values
-
-    def eval_metrics():
-        metric_vals = [m.result() for m in model.metrics]
-        return ", ".join(["{} {:.5f}".format(name, val) for name, val in zip(model.metrics_names, metric_vals)])
-
-    LOG_FREQ = 20 # in batches
-
-    for epoch in range(ARGS.epochs):
-        print("Epoch {}".format(epoch))
-        start_time = time.perf_counter()
-
-        step_time = 0
-        batch_time = 0
-        step_end_time = start_time
-        # Iterate over the batches of the dataset.
-        for step, (x_batch_train, y_batch_train) in enumerate(train_gen):
-            step_start_time = time.perf_counter()
-            batch_time += step_start_time - step_end_time
-
-            loss_values = train_step(x_batch_train, y_batch_train)
-            # loss_values = model.train_on_batch(x_batch_train, y_batch_train)
-
-            step_end_time = time.perf_counter()
-            step_time += step_end_time - step_start_time
-            # Log every n batches.
-            if step % LOG_FREQ == 0:
-                print("   {:>3d} -- avg time: step {:.3f}, batch {:.3f} -- loss {:.5f}, {}".format(
-                    step, step_time/LOG_FREQ, batch_time/LOG_FREQ, np.mean(loss_values), eval_metrics()))
-                step_time = 0
-                batch_time = 0
-
-        # Train metrics
-        print("Train -- loss {:.5f}, {}".format(np.mean(loss_values), eval_metrics()))
-        for m in model.metrics:
-            m.reset_states()
-            
-        # Validation
-        for x_batch_val, y_batch_val in val_gen:
-            val_loss = test_step(x_batch_val, y_batch_val)
-        print("Val   -- loss {:.5f}, {}".format(np.mean(val_loss), eval_metrics()))
-        for m in model.metrics:
-            m.reset_states()
-        for c in callback_list:
-            c.on_epoch_end(epoch, logs={"val_loss": np.mean(val_loss)})
-
-        print("  Time taken: %.2fs" % (time.perf_counter() - start_time))
 
 del train_gen
 del val_gen

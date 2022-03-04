@@ -23,7 +23,7 @@ import seaborn
 dn = os.path.dirname
 sys.path.append(dn(dn(os.path.abspath(__file__))))
 
-from src import DATA_DIR
+from src import DATA_DIR, LIDAR_CHANNELS
 
 
 def jitter(vals, percent):
@@ -59,6 +59,8 @@ def output_binned_stats(bin_stats, heightbins, ndvibins, region_name, outdir):
     plt.clf()
 
 
+NDVI_CHAN = LIDAR_CHANNELS.index("ndvi")
+
 
 def main(dsname):
     print("Running analyze_dataset.py")
@@ -88,7 +90,7 @@ def main(dsname):
                 "n_points": pts.shape[0],
             })
             binned_heights,heightbins = np.histogram(pts[:,2], bins=15, range=(0, 150))
-            binned_ndvi,ndvibins = np.histogram(pts[:,3], bins=12, range=(-1.2, 1.2))
+            binned_ndvi,ndvibins = np.histogram(pts[:,NDVI_CHAN], bins=12, range=(-1.2, 1.2))
             bin_stats.append({
                 "heights": binned_heights,
                 "ndvis": binned_ndvi,

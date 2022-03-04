@@ -22,9 +22,7 @@ def pointnet_conv(outchannels, kernel_size, name, strides=1, bn=True, activation
         layer_list.append(layers.BatchNormalization(name=name+"_bn"))
     if activation:
         layer_list.append(layers.ReLU(name=name+"_relu"))
-    if ARGS.ragged:
-        for i,v in enumerate(layer_list):
-            layer_list[i] = layers.TimeDistributed(v, name=v.name+"_timedistrib")
+
     return keras.Sequential(layer_list, name=name)
 
 
@@ -77,10 +75,7 @@ def pointnet_transform(x_in, batchsize, kind):
     x_in = customlayers.ReduceDims(axis=2, name=prefix+"squeeze2")(x_in)
     
     # apply transformation matrix
-    if ARGS.ragged:
-        x_out = customlayers.RaggedMatMul(name=prefix+"matmul")([x_in, trans_matrix])
-    else:
-        x_out = customlayers.MatMul(name=prefix+"matmul")([x_in, trans_matrix])
+    x_out = customlayers.MatMul(name=prefix+"matmul")([x_in, trans_matrix])
 
     return x_out, trans_matrix
 
@@ -93,9 +88,8 @@ def seg_output_flow(local_features, global_feature, outchannels):
     """
     # concat local and global
     global_feature = layers.Reshape((1,1,1024), name="expand_global_feature_reshape")(global_feature)
-    if not ARGS.ragged:
-        _, npoints, _, _ = local_features.shape
-        global_feature = customlayers.Tile(npoints, axis=1)(global_feature)
+    _, npoints, _, _ = local_features.shape
+    global_feature = customlayers.Tile(npoints, axis=1)(global_feature)
 
     full_features = layers.Concatenate(axis=-1, name="seg_concat")([local_features, global_feature])
 
@@ -211,7 +205,7 @@ def pointnet_1(x, size_multiplier, output_channels):
         dims = feat_trans_matrix.shape[1]
         ortho_diff = tf.matmul(feat_trans_matrix,
                         tf.transpose(feat_trans_matrix, perm=[0,2,1]))
-        ortho_diff -= tf.constant(tf.eye(dims), dtype=tf.float32)
+        ortho_diff -= tf.constant(tf.eye(dims), dtype=K.floatx())
         ortho_loss = ARGS.ortho_weight * tf.nn.l2_loss(ortho_diff)
         output_losses["ortho_loss"] = ortho_loss
 
@@ -279,8 +273,7 @@ def pointnet(inpt_shape, size_multiplier, output_channels):
         output_channels: num features per output point
     """
     npoints, nattributes = inpt_shape
-    inpt = layers.Input(inpt_shape, ragged=ARGS.ragged, 
-                batch_size=ARGS.batchsize if ARGS.ragged else None) # (B,N,K)
+    inpt = layers.Input(inpt_shape, name="inpt_layer") # (B,N,K)
     xy_locs = inpt[...,:2]
 
     x = inpt

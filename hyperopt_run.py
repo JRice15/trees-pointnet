@@ -46,7 +46,6 @@ def build_search_space():
         #     False,
         #     hp.quniform("dropout", 0.05, 0.8, 0.05)
         # ]),
-        "ndvi": hp.choice("ndvi", [False, True]),
         "gaussian-sigma": ARGS.abs_sigma,
         "mmd-kernel": ARGS.mmd_kernel,
         "ortho-weight": 10 ** hp.quniform("ortho", -6, 0, 0.5) # 1e-6 to 1

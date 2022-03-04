@@ -1,3 +1,31 @@
+"""
+
+Creates a three-level system for parallelized hyper-parameter optimization
+For example, with 2 GPUs and 2 workers per GPU:
+
+                 master
+    ________________|_________________
+    |          |          |          |
+    |          |          |          |
+worker0-0  worker0-1  worker1-0  worker1-1
+    |-- GPU0 --|          |-- GPU1 --|
+    |          |          |          |
+  trial      trial      trial      trial
+
+
+The master persists, essentially just sitting and waiting for a keyboard interrupt,
+or for the study to finish
+
+The master spins up N workers (N = num GPUS * workers per GPU), which spawn trials
+repeatedly. The workers also persist until killed by keyboard interrupt, or the study
+finishes.
+
+Trials are a subprocess of the worker, which runs the actual training. Trial run until
+complete, and then are replaced. They can error out without hurting the study as well.
+"""
+
+
+
 import json
 import os
 import re
@@ -18,7 +46,11 @@ import optuna
 from hpo_utils import ROOT, get_study, ignore_kbint, KilledTrial
 
 # frequency with which workers check their subprocesses
-WORKER_POLL_FREQ = 2
+WORKER_POLL_FREQ = 10
+
+
+docker_cmd = "docker run "
+
 
 
 valid_optimizers = ["adam", "adadelta", "nadam", "adamax"]
@@ -26,11 +58,14 @@ valid_output_modes = ["seg", "dense"]
 valid_losses = ["mmd", "gridmse"]
 
 
-def make_objective_func(args, interrupt_event):
+def make_objective_func(args, gpu, interrupt_event):
     # def objective(trial):
         # train_args = {}
 
     def objective(trial):
+        """
+        function that spawns a trial process
+        """
         p = subprocess.Popen(["python3", f"{ROOT}/hpo/temp.py"])
         # wait for process to finish
         while True:
@@ -66,11 +101,15 @@ class NoImprovementStopping:
         ...
 
 
-def optuna_worker(worker_id, args, interrupt_event):
+def optuna_worker(gpu, worker_num, args, interrupt_event):
+    """
+    worker process
+    """
+    worker_id = "{}-{}".format(gpu, worker_num)
     # study already created by main process
     study = get_study(args.name, assume_exists=True)
 
-    objective = make_objective_func(args, interrupt_event)
+    objective = make_objective_func(args, gpu, interrupt_event)
 
     print("Running worker", worker_id)
     with ignore_kbint():
@@ -83,6 +122,9 @@ def optuna_worker(worker_id, args, interrupt_event):
 
 
 def main():
+    """
+    master process
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--name",required=True,help="subdirectory inside models/ to save these trials under")
     parser.add_argument("--timeout",default=4,type=float,help="max number of hours each model is allowed to run")
@@ -111,8 +153,7 @@ def main():
     procs = []
     for gpu in args.gpu_ids:
         for i in range(args.per_gpu):
-            worker_id = "{}-{}".format(gpu, i)
-            p = multiprocessing.Process(target=optuna_worker, args=(worker_id, args, intrpt_event))
+            p = multiprocessing.Process(target=optuna_worker, args=(gpu, i, args, intrpt_event))
             procs.append(p)
             p.start()
             # stagger start times

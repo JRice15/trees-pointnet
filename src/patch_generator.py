@@ -15,7 +15,7 @@ from tensorflow.keras import Model
 from tensorflow.keras import backend as K
 from tensorflow.keras import layers
 
-from src import ARGS, REPO_ROOT, DATA_DIR
+from src import ARGS, REPO_ROOT, DATA_DIR, LIDAR_CHANNELS
 from src.utils import raster_plot, rotate_pts, get_all_regions, get_naipfile_path, Bounds
 
 VAL_SPLIT = 0.1
@@ -85,22 +85,17 @@ class LidarPatchGen(keras.utils.Sequence):
         self.name = name
         self.dsname = ARGS.dsname
         self.batch_size = ARGS.batchsize if batchsize is None else batchsize
-        self.use_ndvi = ARGS.ndvi
         self.n_subdivide = ARGS.subdivide
         self.orig_patch_ids = patch_ids
         self.regions = list(set([i[0] for i in self.orig_patch_ids]))
         self.y_counts_only = False
         if ARGS.loss == "count":
             self.y_counts_only = True
-        self.nattributes = 3 + (1 if self.use_ndvi else 0)
+        self.nattributes = len(LIDAR_CHANNELS)
         self.npoints = ARGS.npoints
         self.z_max = 50 # for normalization
         self.batch_time = 0
         self.training = training
-        if ARGS.ragged:
-            self._f_getitem = self._ragged_getitem
-        else:
-            self._f_getitem = self._nonrag_getitem
 
         # initialize the data
         self.init_data()
@@ -184,12 +179,9 @@ class LidarPatchGen(keras.utils.Sequence):
         self.norm_maxs = {}
         for patch_key, bound in self.patch_bounds.items():
             left,bott,right,top = bound.minmax_fmt()
-            min_xyz = [left, bott, 0]
-            max_xyz = [right, top, self.z_max]
-            # ndvi, varies from -1 to 1
-            if self.use_ndvi:
-                min_xyz.append(-1)
-                max_xyz.append(1)
+            # spatial channels, then spectral channels. Last channel is NDVI
+            min_xyz = [left, bott, 0] + [0, 0, 0, 0, -1]
+            max_xyz = [right, top, self.z_max] + [1, 1, 1, 1, 1]
             self.norm_mins[patch_key] = np.array(min_xyz)
             self.norm_maxs[patch_key] = np.array(max_xyz)
 
@@ -199,27 +191,28 @@ class LidarPatchGen(keras.utils.Sequence):
         self.init_random()
         # deterministic random shuffle
         self.random.shuffle(self.patch_ids)
-        if not ARGS.ragged:
-            self._x_batch = np.empty((self.batch_size, self.npoints, self.nattributes))
-            if self.y_counts_only:
-                self._y_batch = np.empty((self.batch_size,))
-            else:
-                self._y_batch = np.empty((self.batch_size, self.max_trees, 3)) # 3 -> (x,y,isvalid)
+
+        # create batch objects
+        self.x_batch_shape = (self.batch_size, self.npoints, self.nattributes)
+        if self.y_counts_only:
+            self.y_batch_shape = (self.batch_size,)
+        else:
+            self.y_batch_shape = (self.batch_size, self.max_trees, 3) # 3 -> (x,y,isvalid)
 
     def __len__(self):
         return self.num_ids // self.batch_size
 
-    def __getitem__(self, idx, **kwargs):
-        return self._f_getitem(idx, **kwargs)
-
-    def _nonrag_getitem(self, idx, return_ids=False, no_rotate=False):
+    def __getitem__(self, idx, return_ids=False, no_rotate=False):
         """
         __getitem__ for nonragged outputs
         """
         t1 = time.perf_counter()
         idx = idx * self.batch_size
         end_idx = idx + self.batch_size
-        self._y_batch.fill(0)
+
+        X_batch = tf.zeros(self.x_batch_shape, dtype=K.floatx())
+        Y_batch = tf.zeros(self.y_batch_shape, dtype=K.floatx())
+
         for i, patch_key in enumerate(self.patch_ids[idx:end_idx]):
             # get pts
             lidar_patch = self.patched_lidar[patch_key]
@@ -234,70 +227,45 @@ class LidarPatchGen(keras.utils.Sequence):
             else:
                 rand_offset = self.random.integers(leftover) # randomly generated int
             top_offset = leftover - rand_offset
-            self._x_batch[i] = lidar_patch[rand_offset:num_x_pts-top_offset:step, :self.nattributes]
+            X_batch[i] = lidar_patch[rand_offset:num_x_pts-top_offset:step]
 
             # normalize data
             min_xyz = self.norm_mins[patch_key]
             max_xyz = self.norm_maxs[patch_key]
-            self._x_batch[i] = (self._x_batch[i] - min_xyz) / (max_xyz - min_xyz)
+            X_batch[i] = (X_batch[i] - min_xyz) / (max_xyz - min_xyz)
             
             # select all gt y points, or just y count
             y_pts = self.patched_gt[patch_key]
             n_y_pts = y_pts.shape[0]
             if self.y_counts_only:
-                self._y_batch[i] = n_y_pts
+                Y_batch[i] = n_y_pts
             else:
                 min_xy, max_xy = min_xyz[:2], max_xyz[:2]
-                self._y_batch[i,:n_y_pts,2] = 1
-                self._y_batch[i,n_y_pts:,2] = 0
-                self._y_batch[i,:n_y_pts,:2] = (y_pts - min_xy) / (max_xy - min_xy)
+                Y_batch[i,:n_y_pts,2] = 1
+                Y_batch[i,n_y_pts:,2] = 0
+                Y_batch[i,:n_y_pts,:2] = (y_pts - min_xy) / (max_xy - min_xy)
 
         # shuffle input points within each patch
         #  this shuffles the points within each seperate patch in the same way, but that is random enough for me
-        self.random.shuffle(self._x_batch, axis=1)
+        self.random.shuffle(X_batch, axis=1)
 
         if self.training:
             if not no_rotate:
                 # augment by a random rotation
                 rot_degrees = self.random.choice([0, 90, 180, 270])
-                self._x_batch = rotate_pts(self._x_batch, degrees=rot_degrees)
+                X_batch = rotate_pts(X_batch, degrees=rot_degrees)
                 if not self.y_counts_only:
-                    self._y_batch = rotate_pts(self._y_batch, degrees=rot_degrees)
+                    Y_batch = rotate_pts(Y_batch, degrees=rot_degrees)
             # random gaussian noise
             if ARGS.noise_sigma is not None:
-                self._x_batch += self.random.normal(
+                X_batch += self.random.normal(
                                         loc=0, 
                                         scale=ARGS.noise_sigma, 
-                                        size=self._x_batch.shape)
+                                        size=self.x_batch_shape)
 
-        x = tf.constant(self._x_batch, dtype=tf.float32)
-        y = tf.constant(self._y_batch, dtype=tf.float32)
         self.batch_time += time.perf_counter() - t1
         if return_ids:
             return x, y, self.patch_ids[idx:end_idx]
-        return x, y
-
-    def _ragged_getitem(self, idx):
-        """
-        __getitem__ for ragged outputs
-        PROBABLY DOESNT WORK ANYMORE, I haven't kept the ragged code up to date
-        since it is much slower and less effective
-        """
-        raise NotImplementedError()
-        t1 = time.perf_counter()
-        idx = idx * self.batch_size
-        end_idx = idx + self.batch_size
-        x = []
-        y = []
-        for i in self.patch_ids[idx:end_idx]:
-            x.append(self.file['lidar/'+i][:])
-            if self.y_counts_only:
-                y.append(self.file['gt/'+i].shape[0])
-            else:
-                y.append(self.file['gt/'+i][:])
-        x = tf.ragged.constant(x, ragged_rank=1, inner_shape=(self.nattributes,), dtype=tf.float32)
-        y = tf.constant(y, dtype=tf.float32)
-        self.batch_time += time.perf_counter() - t1
         return x, y
 
     def load_all(self):
@@ -341,7 +309,7 @@ class LidarPatchGen(keras.utils.Sequence):
         self.patch_ids = old_ids
         self.batch_size = old_batchsize
         self.training = old_training
-        return x[0], y[0], id
+        return x[0], y[0], key
 
     def get_naip(self, patch_id):
         """
@@ -374,11 +342,8 @@ class LidarPatchGen(keras.utils.Sequence):
         get x,y shape of one batch
         x: (batchsize; npoints or None if ragged; nattributes per point)
         """
-        x, y = self[0]
-        print("Batch shape x:", x.shape, "y:", y.shape)
-        print(x)
-        print(y)
-        return x.shape, y.shape
+        print("Batch shape x:", self.x_batch_shape, "y:", self.y_batch_shape)
+        return self.x_batch_shape, self.y_batch_shape
 
     def denormalize_pts(self, pts, patch_id):
         """
@@ -397,8 +362,8 @@ class LidarPatchGen(keras.utils.Sequence):
         print(" ", self.num_ids, "patches, in", len(self), "batches, batchsize", self.batch_size)
         print(" ", self.npoints, "points per patch.", self.num_filtered_ids, "patches dropped for having too few lidar points")
         try:
-            print("  xbatch shape:", self._x_batch.shape)
-            print("  ybatch shape:", self._y_batch.shape)
+            print("  xbatch shape:", self.x_batch_shape)
+            print("  ybatch shape:", self.y_batch_shape)
         except AttributeError:
             pass
 
