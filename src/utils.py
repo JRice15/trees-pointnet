@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import rasterio
 
-from src import ARGS, DATA_DIR, REPO_ROOT
+from src import ARGS, DATA_DIR, REPO_ROOT, MODEL_SAVE_FMT
 
 
 class Bounds:
@@ -161,11 +161,11 @@ def glob_modeldir(modelname):
     allmodels_dir = REPO_ROOT.joinpath("models/")
 
     # first try exact match
-    matching_models = glob.glob(os.path.join(allmodels_dir.as_posix(), modelname+"-??????-??????", "model.tf"))
+    matching_models = glob.glob(os.path.join(allmodels_dir.as_posix(), modelname+"-??????-??????", "model"+MODEL_SAVE_FMT))
     if len(matching_models) == 0:
         print("No exact model name matches")
         # then try autofill match
-        matching_models = glob.glob(os.path.join(allmodels_dir.as_posix(), modelname+"*", "model.tf"))
+        matching_models = glob.glob(os.path.join(allmodels_dir.as_posix(), modelname+"*", "model"+MODEL_SAVE_FMT))
     
     if len(matching_models) > 1:
         print("Multiple models match 'name' argument:")

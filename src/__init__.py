@@ -25,6 +25,7 @@ REPO_ROOT = PurePath(os.path.dirname(os.path.dirname(__file__)))
 DATA_DIR = REPO_ROOT.joinpath("data")
 os.makedirs(REPO_ROOT.joinpath("models"), exist_ok=True)
 
+MODEL_SAVE_FMT = ".h5"
 
 np.random.seed(9999)
 

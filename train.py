@@ -19,7 +19,7 @@ from tensorflow.keras import callbacks, layers
 from tensorflow.keras import optimizers
 import matplotlib.pyplot as plt
 
-from src import DATA_DIR, REPO_ROOT, ARGS, patch_generator
+from src import DATA_DIR, REPO_ROOT, ARGS, MODEL_SAVE_FMT, patch_generator
 from src.losses import get_loss
 from src.models import pointnet
 from src.tf_utils import MyModelCheckpoint, output_model, load_saved_model
@@ -118,7 +118,7 @@ now = datetime.datetime.now()
 modelname = ARGS.name + now.strftime("-%y%m%d-%H%M%S")
 MODEL_DIR = REPO_ROOT.joinpath("models/"+modelname)
 os.makedirs(MODEL_DIR, exist_ok=False)
-MODEL_PATH = MODEL_DIR.joinpath("model.tf")
+MODEL_PATH = MODEL_DIR.joinpath("model"+MODEL_SAVE_FMT)
 
 if ARGS.dsname is None:
     ARGS.dsname = get_default_dsname()

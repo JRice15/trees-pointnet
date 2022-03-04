@@ -23,7 +23,7 @@ from tensorflow.keras import backend as K
 from tensorflow.keras import callbacks, layers
 from tensorflow.keras.optimizers import Adam
 
-from src import DATA_DIR, REPO_ROOT, ARGS, patch_generator
+from src import DATA_DIR, REPO_ROOT, ARGS, MODEL_SAVE_FMT, patch_generator
 from src.losses import get_loss
 from src.models import pointnet
 from src.tf_utils import MyModelCheckpoint, output_model, load_saved_model
@@ -405,7 +405,7 @@ def evaluate_model(patchgen, model, model_dir, pointmatch_thresholds):
 
 def main():
     MODEL_DIR = glob_modeldir(ARGS.name)
-    MODEL_PATH = MODEL_DIR.joinpath("model.tf")
+    MODEL_PATH = MODEL_DIR.joinpath("model"+MODEL_SAVE_FMT)
 
     # load original params into ARGS object
     params_file = MODEL_DIR.joinpath("params.json")
