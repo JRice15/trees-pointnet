@@ -210,8 +210,8 @@ class LidarPatchGen(keras.utils.Sequence):
         idx = idx * self.batch_size
         end_idx = idx + self.batch_size
 
-        X_batch = tf.zeros(self.x_batch_shape, dtype=K.floatx())
-        Y_batch = tf.zeros(self.y_batch_shape, dtype=K.floatx())
+        X_batch = np.empty(self.x_batch_shape, dtype=K.floatx())
+        Y_batch = np.zeros(self.y_batch_shape, dtype=K.floatx())
 
         for i, patch_key in enumerate(self.patch_ids[idx:end_idx]):
             # get pts
@@ -242,7 +242,6 @@ class LidarPatchGen(keras.utils.Sequence):
             else:
                 min_xy, max_xy = min_xyz[:2], max_xyz[:2]
                 Y_batch[i,:n_y_pts,2] = 1
-                Y_batch[i,n_y_pts:,2] = 0
                 Y_batch[i,:n_y_pts,:2] = (y_pts - min_xy) / (max_xy - min_xy)
 
         # shuffle input points within each patch
@@ -262,6 +261,9 @@ class LidarPatchGen(keras.utils.Sequence):
                                         loc=0, 
                                         scale=ARGS.noise_sigma, 
                                         size=self.x_batch_shape)
+
+        x = tf.constant(X_batch, dtype=K.floatx())
+        y = tf.constant(Y_batch, dtype=K.floatx())
 
         self.batch_time += time.perf_counter() - t1
         if return_ids:
