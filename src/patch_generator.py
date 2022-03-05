@@ -109,8 +109,8 @@ class LidarPatchGen(keras.utils.Sequence):
         NAIP_DIR = DATA_DIR.joinpath("NAIP_patches")
         GT_DIR = DATA_DIR.joinpath("ground_truth_csvs")
 
-        x_column_options = ("long_nad83", "long_utm11", "point_x")
-        y_column_options = ("lat_nad83", "lat_utm11", "point_y")
+        x_column_options = ("long_nad83", "long_utm11", "point_x", "x")
+        y_column_options = ("lat_nad83", "lat_utm11", "point_y", "y")
 
         # load ground-truth trees
         orig_gt_trees = {}

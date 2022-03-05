@@ -1,8 +1,6 @@
+#!/bin/bash
 
-if [ "$1" = "" ]; then
-    echo "supply a gpu number"
-    exit 1
-fi
+[ "$1" -ge 0 ] || { echo "supply a non-negative gpu number" && exit 1; }
 
 docker run -u $(id -u):$(id -g) --rm -it \
     -v /data:/data \
@@ -11,6 +9,6 @@ docker run -u $(id -u):$(id -g) --rm -it \
     -v /home/$USER:/home/$USER \
     -e USER=$USER \
     -w $PWD \
-    trees2.2.2 bash
+    trees2.2.2 "${@:2}"
 
 
