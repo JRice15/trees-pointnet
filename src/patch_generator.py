@@ -139,7 +139,7 @@ class LidarPatchGen(keras.utils.Sequence):
         orig_bounds = {}
         orig_lidar = {}
         for (region,patch_num) in self.orig_patch_ids:
-            naipfile = NAIP_DIR.joinpath(region, "{}_training_NAIP_NAD83_UTM11_{}.tif".format(region, patch_num)).as_posix()
+            naipfile = get_naipfile_path(region, patch_num)
             with rasterio.open(naipfile) as raster:
                 orig_bounds[(region,patch_num)] = Bounds.from_minmax(raster.bounds)
             lidarfile = LIDAR_DIR.joinpath(region, "lidar_patch_{}.npy".format(patch_num)).as_posix()
@@ -204,7 +204,7 @@ class LidarPatchGen(keras.utils.Sequence):
 
     def __getitem__(self, idx, return_ids=False, no_rotate=False):
         """
-        __getitem__ for nonragged outputs
+        load one batch
         """
         t1 = time.perf_counter()
         idx = idx * self.batch_size
