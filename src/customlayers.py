@@ -19,11 +19,13 @@ class TNet(keras.layers.Layer):
         w_init = tf.constant_initializer(0.0)
         self.w = tf.Variable(
             initial_value=w_init((in_channels, out_channels*out_channels)),
-            trainable=True
+            trainable=True,
+            name=name+"_w"
         )
         self.b = tf.Variable(
             initial_value=K.flatten(K.eye(out_channels, dtype=tf.float32)),
-            trainable=True
+            trainable=True,
+            name=name+"_b"
         )
 
     def call(self, x):
