@@ -244,8 +244,12 @@ def get_naipfile_path(region, patch_num):
     """
     returns: str
     """
-    filename = "{}_training_NAIP_NAD83_UTM11_{}.tif".format(region, patch_num)
-    return DATA_DIR.joinpath("NAIP_patches", region, filename).as_posix()
+    globname = "{}_*_{}.tif".format(region, patch_num)
+    globpath = DATA_DIR.joinpath("NAIP_patches/", globname).as_posix()
+    found = glob.glob(globpath)
+    if len(found) != 1:
+        raise ValueError("{} matching NAIP files found for '{} {}'. Expected exactly 1".format(len(found), region, patch_num))
+    return found[0]
 
 
 def get_avg_patch_size():
