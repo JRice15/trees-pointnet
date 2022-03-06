@@ -152,13 +152,14 @@ def dense_output_flow_2(global_feature, out_npoints, out_channels):
 
 
 
-def pointnet_1(x, size_multiplier, output_channels):
+def pointnet_1(x, size_multiplier):
     """
     original pointnet
     args:
         x: input tensor, shape (B,N,1,K)
     returns:
-        output tensor
+        local features tensor
+        global feature tensor
         dict mapping loss names to losses
     """
     output_losses = {}
@@ -191,16 +192,6 @@ def pointnet_1(x, size_multiplier, output_channels):
     x = layers.GlobalMaxPool1D(name="global_feature_maxpool")(x) # (B,K)
 
     global_feature = x
-
-    # output flow
-    if ARGS.output_mode == "seg":
-        output = seg_output_flow(local_features, global_feature, output_channels)
-    elif ARGS.output_mode == "count":
-        output = cls_output_flow(global_feature, output_channels)
-    elif ARGS.output_mode == "dense":
-        output = dense_output_flow_2(global_feature, ARGS.out_npoints, output_channels)
-    else:
-        raise NotImplementedError()
     
     if ARGS.use_tnet_2:
         # feature transformation matrix orthogonality loss
@@ -211,7 +202,7 @@ def pointnet_1(x, size_multiplier, output_channels):
         ortho_loss = ARGS.ortho_weight * tf.nn.l2_loss(ortho_diff)
         output_losses["ortho_loss"] = ortho_loss
 
-    return output, output_losses
+    return local_features, global_feature, output_losses
 
 
 
@@ -219,15 +210,22 @@ def pointnet_2(inputs, npoints, size_multiplier, output_channels):
     """
     adapted from:
     https://github.com/dgriffiths3/pointnet2-tensorflow2
+
+    returns:
+        local features tensor
+        global feature tensor
+        (always empty) loss dict
     """
     from src.pnet2_layers.layers import Pointnet_SA_MSG, Pointnet_SA
 
     if inputs.get_shape()[-1] > 3:
         xyz = inputs[...,:3]
-        features = inputs[...,3:]
+        input_features = inputs[...,3:]
     else:
         xyz = inputs
-        features = None
+        input_features = None
+
+    # TODO size multiplier
 
     layer1 = Pointnet_SA_MSG(
         npoint=npoints,
@@ -236,7 +234,7 @@ def pointnet_2(inputs, npoints, size_multiplier, output_channels):
         mlp=[[32,32,64], [64,64,128], [64,96,128]],
         bn=ARGS.use_batchnorm,
     )
-    xyz, features = layer1(xyz, features)
+    xyz, local_features = layer1(xyz, inpt_features)
 
     layer2 = Pointnet_SA_MSG(
         npoint=512,
@@ -245,7 +243,7 @@ def pointnet_2(inputs, npoints, size_multiplier, output_channels):
         mlp=[[64,64,128], [128,128,256], [128,128,256]],
         bn=ARGS.use_batchnorm
     )
-    xyz, features = layer2(xyz, features)
+    xyz, intermediate_features = layer2(xyz, local_features)
 
     layer3 = Pointnet_SA(
         npoint=None,
@@ -255,21 +253,10 @@ def pointnet_2(inputs, npoints, size_multiplier, output_channels):
         group_all=True,
         bn=ARGS.use_batchnorm,
     )
-    xyz, features = layer3(xyz, features)
+    xyz, global_feature = layer3(xyz, intermediate_features)
 
-    x = features
 
-    x = layers.Dense(512, activation="relu")(x)
-    if ARGS.dropout_rate > 0:
-        x = layers.Dropout(ARGS.dropout_rate)(x)
-
-    x = layers.Dense(128, activation="relu")(x)
-    if ARGS.dropout_rate > 0:
-        x = layers.Dropout(ARGS.dropout_rate)(x)
-
-    x = layers.Dense(output_channels, activation="relu")(x)
-
-    return x, {}
+    return local_features, global_feature, {}
 
 
 
@@ -287,9 +274,19 @@ def pointnet(inpt_shape, size_multiplier, output_channels):
     x = inpt
 
     if ARGS.use_pnet2:
-        output, losses = pointnet_2(x, npoints, size_multiplier, output_channels)
+        local_features, global_feature, losses = pointnet_2(x, npoints, size_multiplier)
     else:
-        output, losses = pointnet_1(x, size_multiplier, output_channels)
+        local_features, global_feature, losses = pointnet_1(x, size_multiplier)
+
+    # output flow
+    if ARGS.output_mode == "seg":
+        output = seg_output_flow(local_features, global_feature, output_channels)
+    elif ARGS.output_mode == "count":
+        output = cls_output_flow(global_feature, output_channels)
+    elif ARGS.output_mode == "dense":
+        output = dense_output_flow_2(global_feature, ARGS.out_npoints, output_channels)
+    else:
+        raise NotImplementedError()
 
     # optional post processing for some methods
     if ARGS.loss in ("mmd", "gridmse"):
