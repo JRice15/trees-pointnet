@@ -210,6 +210,7 @@ try:
     )
 except KeyboardInterrupt:
     # allow manual stopping by user
+    print("training ended manually...")
     H = callback_dict["history"]
 except Exception as e:
     # otherwise log then throw the error
@@ -218,6 +219,8 @@ except Exception as e:
     with open(MODEL_DIR.joinpath("training_failed.txt"), "w") as f:
         traceback.print_exc(file=f)
     raise e
+
+os.makedirs(MODEL_DIR.joinpath("training"), exist_ok=True)
 
 # save training data
 with open(MODEL_DIR.joinpath("training/stats.json"), "w") as f:

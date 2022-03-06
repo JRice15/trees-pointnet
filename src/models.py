@@ -162,6 +162,8 @@ def pointnet_1(x, size_multiplier, output_channels):
         dict mapping loss names to losses
     """
     output_losses = {}
+    
+    x = customlayers.ExpandDims(axis=2, name="add_channels_1")(x) # (B,N,1,K)
 
     if ARGS.use_tnet_1:
         # input transform
@@ -220,6 +222,13 @@ def pointnet_2(inputs, npoints, size_multiplier, output_channels):
     """
     from src.pnet2_layers.layers import Pointnet_SA_MSG, Pointnet_SA
 
+    if inputs.get_shape()[-1] > 3:
+        xyz = inputs[...,:3]
+        features = inputs[...,3:]
+    else:
+        xyz = inputs
+        features = None
+
     layer1 = Pointnet_SA_MSG(
         npoint=npoints,
         radius_list=[0.1,0.2,0.4],
@@ -227,7 +236,7 @@ def pointnet_2(inputs, npoints, size_multiplier, output_channels):
         mlp=[[32,32,64], [64,64,128], [64,96,128]],
         bn=ARGS.use_batchnorm,
     )
-    xyz, features = layer1(inputs, None)
+    xyz, features = layer1(xyz, features)
 
     layer2 = Pointnet_SA_MSG(
         npoint=512,
@@ -248,8 +257,7 @@ def pointnet_2(inputs, npoints, size_multiplier, output_channels):
     )
     xyz, features = layer3(xyz, features)
 
-    print(features.shape)
-    x = customlayers.ReduceDims(axis=-1)(features)
+    x = features
 
     x = layers.Dense(512, activation="relu")(x)
     if ARGS.dropout_rate > 0:
@@ -261,7 +269,7 @@ def pointnet_2(inputs, npoints, size_multiplier, output_channels):
 
     x = layers.Dense(output_channels, activation="relu")(x)
 
-    return x
+    return x, {}
 
 
 
@@ -273,11 +281,10 @@ def pointnet(inpt_shape, size_multiplier, output_channels):
         output_channels: num features per output point
     """
     npoints, nattributes = inpt_shape
-    inpt = layers.Input(inpt_shape, name="inpt_layer") # (B,N,K)
+    inpt = layers.Input(inpt_shape, name="inpt_layer", batch_size=ARGS.batchsize) # (B,N,K)
     xy_locs = inpt[...,:2]
 
     x = inpt
-    x = customlayers.ExpandDims(axis=2, name="add_channels_1")(x) # (B,N,1,K)
 
     if ARGS.use_pnet2:
         output, losses = pointnet_2(x, npoints, size_multiplier, output_channels)
