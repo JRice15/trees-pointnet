@@ -21,7 +21,10 @@ def pointnet_conv(outchannels, kernel_size, name, strides=1, bn=True, activation
     if bn:
         layer_list.append(layers.BatchNormalization(name=name+"_bn"))
     if activation:
-        layer_list.append(layers.ReLU(name=name+"_relu"))
+        if activation is True:
+            layer_list.append(layers.ReLU(name=name+"_relu"))
+        else:
+            layer_list.append(layers.Activation(activation, name=name+"_act"))
 
     return keras.Sequential(layer_list, name=name)
 
@@ -216,7 +219,7 @@ def pointnet_2(inputs, npoints, size_multiplier):
         global feature tensor
         (always empty) loss dict
     """
-    from src.pnet2_layers.layers import Pointnet_SA_MSG, Pointnet_SA
+    from src.pnet2.layers import Pointnet_SA_MSG, Pointnet_SA
 
     if inputs.get_shape()[-1] > 3:
         xyz = inputs[...,:3]

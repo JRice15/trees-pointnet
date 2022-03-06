@@ -9,7 +9,7 @@ echo "python version:"
 python -c 'import tensorflow as tf; print(tf.__version__)'
 which python
 
-cd src/pnet2_layers/tf_ops
+cd src/pnet2/tf_ops
 
 g++ -std=c++11 -shared ./3d_interpolation/tf_interpolate.cpp -o ./3d_interpolation/tf_interpolate_so.so  -I $CUDA_ROOT/include -lcudart -L $CUDA_ROOT/lib64/ -fPIC ${TF_CFLAGS} ${TF_LFLAGS} -O2
 echo $?

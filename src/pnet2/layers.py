@@ -1,7 +1,7 @@
 import tensorflow as tf
 from tensorflow.keras.layers import Layer, BatchNormalization
 
-from src.pnet2_layers import utils
+from src.pnet2 import utils
 
 
 class Pointnet_SA(Layer):
@@ -27,8 +27,11 @@ class Pointnet_SA(Layer):
 		self.mlp_list = []
 
 	def build(self, input_shape):
+		from src.models import pointnet_conv
 		for i, n_filters in enumerate(self.mlp):
-			self.mlp_list.append(utils.Conv2d(n_filters, activation=self.activation, bn=self.bn))
+			self.mlp_list.append(
+				pointnet_conv(n_filters, 1, activation=self.activation, bn=self.bn)
+			)
 
 		super(Pointnet_SA, self).build(input_shape)
 
@@ -83,7 +86,7 @@ class Pointnet_SA_MSG(Layer):
 	"""
 
 	def __init__(
-		self, npoint, radius_list, nsample_list, mlp, use_xyz=True, activation=tf.nn.relu, 
+		self, npoint, radius_list, nsample_list, mlp, use_xyz=True, activation="relu", 
         bn=False, **kwargs
 	):
 
@@ -100,11 +103,14 @@ class Pointnet_SA_MSG(Layer):
 		self.mlp_list = []
 
 	def build(self, input_shape):
+		from src.models import pointnet_conv
 
 		for i in range(len(self.radius_list)):
 			tmp_list = []
 			for i, n_filters in enumerate(self.mlp[i]):
-				tmp_list.append(utils.Conv2d(n_filters, activation=self.activation, bn=self.bn))
+				tmp_list.append(
+					pointnet_conv(n_filters, 1, activation=self.activation, bn=self.bn)
+				)
 			self.mlp_list.append(tmp_list)
 
 		super(Pointnet_SA_MSG, self).build(input_shape)
@@ -177,9 +183,11 @@ class Pointnet_FP(Layer):
 
 
 	def build(self, input_shape):
-
+		from src.models import pointnet_conv
 		for i, n_filters in enumerate(self.mlp):
-			self.mlp_list.append(utils.Conv2d(n_filters, activation=self.activation, bn=self.bn))
+			self.mlp_list.append(
+				pointnet_conv(n_filters, 1, activation=self.activation, bn=self.bn)
+			)
 		super(Pointnet_FP, self).build(input_shape)
 
 	def call(self, xyz1, xyz2, points1, points2, training=True):
