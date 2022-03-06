@@ -206,7 +206,7 @@ def pointnet_1(x, size_multiplier):
 
 
 
-def pointnet_2(inputs, npoints, size_multiplier, output_channels):
+def pointnet_2(inputs, npoints, size_multiplier):
     """
     adapted from:
     https://github.com/dgriffiths3/pointnet2-tensorflow2
@@ -234,7 +234,7 @@ def pointnet_2(inputs, npoints, size_multiplier, output_channels):
         mlp=[[32,32,64], [64,64,128], [64,96,128]],
         bn=ARGS.use_batchnorm,
     )
-    xyz, local_features = layer1(xyz, inpt_features)
+    xyz, local_features = layer1(xyz, input_features)
 
     layer2 = Pointnet_SA_MSG(
         npoint=512,
