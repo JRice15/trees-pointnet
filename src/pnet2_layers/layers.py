@@ -59,6 +59,23 @@ class Pointnet_SA(Layer):
 
 		return new_xyz, tf.squeeze(new_points)
 
+	def get_config(self):
+		config = super().get_config()
+		return {
+			"npoint": self.npoint,
+			"radius": self.radius,
+			"nsample": self.nsample,
+			"mlp": self.mlp,
+			"group_all": self.group_all,
+			"knn": self.knn,
+			"use_xyz": self.use_xyz,
+			"activation": self.activation,
+			"bn": self.bn,
+			**config
+		}
+
+
+
 
 class Pointnet_SA_MSG(Layer):
 	"""
@@ -125,6 +142,20 @@ class Pointnet_SA_MSG(Layer):
 
 		return new_xyz, new_points_concat
 
+	def get_config(self):
+		config = super().get_config()
+		return {
+			"npoint": self.npoint,
+			"radius_list": self.radius_list,
+			"nsample_list": self.nsample_list,
+			"mlp": self.mlp,
+			"use_xyz": self.use_xyz,
+			"activation": self.activation,
+			"bn": self.bn,
+			**config
+		}
+
+
 
 class Pointnet_FP(Layer):
 	"""
@@ -180,3 +211,14 @@ class Pointnet_FP(Layer):
 			new_points1 = tf.expand_dims(new_points1, axis=0)
 
 		return new_points1
+
+
+	def get_config(self):
+		config = super().get_config()
+		return {
+			"mlp": self.mlp,
+			"activation": self.activation,
+			"bn": self.bn,
+			**config
+		}
+

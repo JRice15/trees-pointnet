@@ -35,13 +35,12 @@ class TNet(keras.layers.Layer):
 
     def get_config(self):
         # super.get_config fails?
-        # config = super().get_config()
-        config = {}
-        config.update({
+        config = super().get_config()
+        return {
             "in_channels": self.in_channels,
             "out_channels": self.out_channels,
-        })
-        return config
+            **config
+        }
 
 
 class ConcatGrid(layers.Layer):
@@ -94,10 +93,10 @@ class GatherTopK(layers.Layer):
 
     def get_config(self):
         config = super().get_config()
-        config.update({
+        return {
             "k": self.k,
-        })
-        return config
+            **config
+        }
 
 
 class MatMul(layers.Layer):
@@ -139,10 +138,10 @@ class RaggedMatMul(layers.Layer):
     
     def get_config(self):
         config = super().get_config()
-        config.update({
-            "batchsize": self.batchsize
-        })
-        return config
+        return {
+            "batchsize": self.batchsize,
+            **config
+        }
 
 
 class Tile(layers.Layer):
@@ -160,11 +159,11 @@ class Tile(layers.Layer):
 
     def get_config(self):
         config = super().get_config()
-        config.update({
+        return {
             "num": self.num,
             "axis": self.axis,
-        })
-        return config
+            **config
+        }
 
 
 def Activation(actname, **kwargs):
