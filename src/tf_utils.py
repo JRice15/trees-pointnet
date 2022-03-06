@@ -39,10 +39,12 @@ def load_saved_model(model_dir):
     Load the best model iteration saved by ModelCheckpoint for a particular model configuration
     """
     print("Loading model in", model_dir)
-    if os.path.exists(model_dir + "model.h5"):
-        modelpath = model_dir + "model.h5"
-    elif os.path.exists(model_dir + "model.tf"):
-        modelpath = model_dir + "model.tf"
+    h5path = model_dir.joinpath("model.h5")
+    tfpath = model_dir.joinpath("model.tf")
+    if os.path.exists(h5path):
+        modelpath = h5path
+    elif os.path.exists(tfpath):
+        modelpath = tfpath
     else:
         raise ValueError("No model found in {}".format(model_dir))
 
@@ -57,7 +59,7 @@ def load_saved_model(model_dir):
         custom_objs["Pointnet_SA_MSG"] = Pointnet_SA_MSG
         custom_objs["Pointnet_FP"] = Pointnet_FP
 
-    model = keras.models.load_model(model_path, custom_objects=custom_objs)
+    model = keras.models.load_model(model_path.as_posix(), custom_objects=custom_objs)
 
     # model.compile(
     #     optimizer=model.optimizer,

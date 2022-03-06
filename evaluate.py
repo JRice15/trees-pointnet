@@ -420,7 +420,7 @@ def main():
     Evaluation
     """
 
-    model = load_saved_model(MODEL_DIR.as_posix())
+    model = load_saved_model(MODEL_DIR)
 
     train_gen, val_gen = patch_generator.get_train_val_gens(ARGS.dsname, ARGS.regions, train_batchsize=1, val_batchsize=1)
 
