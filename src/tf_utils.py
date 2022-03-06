@@ -54,12 +54,12 @@ def load_saved_model(model_dir):
     if metrics is not None:
         custom_objs.update({m.__name__:m for m in metrics})
     if ARGS.use_pnet2:
-        from src.pnet2_layers import Pointnet_SA, Pointnet_SA_MSG, Pointnet_FP
+        from src.pnet2_layers.layers import Pointnet_SA, Pointnet_SA_MSG, Pointnet_FP
         custom_objs["Pointnet_SA"] = Pointnet_SA
         custom_objs["Pointnet_SA_MSG"] = Pointnet_SA_MSG
         custom_objs["Pointnet_FP"] = Pointnet_FP
 
-    model = keras.models.load_model(model_path.as_posix(), custom_objects=custom_objs)
+    model = keras.models.load_model(modelpath.as_posix(), custom_objects=custom_objs)
 
     # model.compile(
     #     optimizer=model.optimizer,

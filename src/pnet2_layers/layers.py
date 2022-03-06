@@ -10,9 +10,9 @@ class Pointnet_SA(Layer):
 	"""
 
 	def __init__(self, npoint, radius, nsample, mlp, group_all=False, knn=False, 
-		use_xyz=True, activation=tf.nn.relu, bn=False):
+		use_xyz=True, activation=tf.nn.relu, bn=False, **kwargs):
 
-		super(Pointnet_SA, self).__init__()
+		super(Pointnet_SA, self).__init__(**kwargs)
 
 		self.npoint = npoint
 		self.radius = radius
@@ -83,10 +83,11 @@ class Pointnet_SA_MSG(Layer):
 	"""
 
 	def __init__(
-		self, npoint, radius_list, nsample_list, mlp, use_xyz=True, activation=tf.nn.relu, bn = False
+		self, npoint, radius_list, nsample_list, mlp, use_xyz=True, activation=tf.nn.relu, 
+        bn=False, **kwargs
 	):
 
-		super(Pointnet_SA_MSG, self).__init__()
+		super(Pointnet_SA_MSG, self).__init__(**kwargs)
 
 		self.npoint = npoint
 		self.radius_list = radius_list
@@ -163,10 +164,10 @@ class Pointnet_FP(Layer):
 	"""
 
 	def __init__(
-		self, mlp, activation=tf.nn.relu, bn=False
+		self, mlp, activation=tf.nn.relu, bn=False, **kwargs
 	):
 
-		super(Pointnet_FP, self).__init__()
+		super(Pointnet_FP, self).__init__(**kwargs)
 
 		self.mlp = mlp
 		self.activation = activation
