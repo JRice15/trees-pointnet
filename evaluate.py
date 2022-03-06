@@ -403,7 +403,6 @@ def evaluate_model(patchgen, model, model_dir, pointmatch_thresholds):
 
 def main():
     MODEL_DIR = glob_modeldir(ARGS.name)
-    MODEL_PATH = MODEL_DIR.joinpath("model"+MODEL_SAVE_FMT)
 
     # load original params into ARGS object
     params_file = MODEL_DIR.joinpath("params.json")
@@ -421,7 +420,7 @@ def main():
     Evaluation
     """
 
-    model = load_saved_model(MODEL_PATH.as_posix())
+    model = load_saved_model(MODEL_DIR.as_posix())
 
     train_gen, val_gen = patch_generator.get_train_val_gens(ARGS.dsname, ARGS.regions, train_batchsize=1, val_batchsize=1)
 

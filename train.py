@@ -117,7 +117,6 @@ now = datetime.datetime.now()
 modelname = ARGS.name + now.strftime("-%y%m%d-%H%M%S")
 MODEL_DIR = REPO_ROOT.joinpath("models/"+modelname)
 os.makedirs(MODEL_DIR, exist_ok=False)
-MODEL_PATH = MODEL_DIR.joinpath("model"+MODEL_SAVE_FMT)
 
 if ARGS.dsname is None:
     ARGS.dsname = get_default_dsname()
@@ -192,7 +191,7 @@ callback_dict = {
     "reducelr": callbacks.ReduceLROnPlateau(factor=ARGS.reducelr_factor, patience=ARGS.reducelr_patience,
         min_lr=1e-6, verbose=1),
     "earlystopping": callbacks.EarlyStopping(verbose=1, patience=int(ARGS.reducelr_patience*2.5)),
-    "modelcheckpoint": MyModelCheckpoint(MODEL_PATH.as_posix(), verbose=1, 
+    "modelcheckpoint": MyModelCheckpoint(MODEL_DIR.as_posix(), verbose=1, 
         epoch_per_save=(5 if not ARGS.test else 1), save_best_only=True)
 }
 

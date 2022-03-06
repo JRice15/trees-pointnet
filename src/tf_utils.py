@@ -34,16 +34,28 @@ class MyModelCheckpoint(tf.keras.callbacks.ModelCheckpoint):
         return self.best
 
 
-def load_saved_model(model_path):
+def load_saved_model(model_dir):
     """
     Load the best model iteration saved by ModelCheckpoint for a particular model configuration
     """
-    print("Loading model", model_path)
+    print("Loading model in", model_dir)
+    if os.path.exists(model_dir + "model.h5"):
+        modelpath = model_dir + "model.h5"
+    elif os.path.exists(model_dir + "model.tf"):
+        modelpath = model_dir + "model.tf"
+    else:
+        raise ValueError("No model found in {}".format(model_dir))
+
     loss_fun, metrics = get_loss()
 
     custom_objs = {loss_fun.__name__: loss_fun}
     if metrics is not None:
         custom_objs.update({m.__name__:m for m in metrics})
+    if ARGS.use_pnet2:
+        from src.pnet2_layers import Pointnet_SA, Pointnet_SA_MSG, Pointnet_FP
+        custom_objs["Pointnet_SA"] = Pointnet_SA
+        custom_objs["Pointnet_SA_MSG"] = Pointnet_SA_MSG
+        custom_objs["Pointnet_FP"] = Pointnet_FP
 
     model = keras.models.load_model(model_path, custom_objects=custom_objs)
 
