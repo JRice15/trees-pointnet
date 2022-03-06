@@ -30,7 +30,7 @@ class Pointnet_SA(Layer):
 		from src.models import pointnet_conv
 		for i, n_filters in enumerate(self.mlp):
 			self.mlp_list.append(
-				pointnet_conv(n_filters, 1, activation=self.activation, bn=self.bn)
+				pointnet_conv(n_filters, 1, activation=self.activation, bn=self.bn, name=self.name+f"_{i}")
 			)
 
 		super(Pointnet_SA, self).build(input_shape)
@@ -107,9 +107,9 @@ class Pointnet_SA_MSG(Layer):
 
 		for i in range(len(self.radius_list)):
 			tmp_list = []
-			for i, n_filters in enumerate(self.mlp[i]):
+			for j, n_filters in enumerate(self.mlp[i]):
 				tmp_list.append(
-					pointnet_conv(n_filters, 1, activation=self.activation, bn=self.bn)
+					pointnet_conv(n_filters, 1, activation=self.activation, bn=self.bn, name=self.name+f"_{i}_{j}")
 				)
 			self.mlp_list.append(tmp_list)
 
@@ -186,7 +186,7 @@ class Pointnet_FP(Layer):
 		from src.models import pointnet_conv
 		for i, n_filters in enumerate(self.mlp):
 			self.mlp_list.append(
-				pointnet_conv(n_filters, 1, activation=self.activation, bn=self.bn)
+				pointnet_conv(n_filters, 1, activation=self.activation, bn=self.bn, name=self.name+f"_{i}")
 			)
 		super(Pointnet_FP, self).build(input_shape)
 

@@ -30,7 +30,7 @@ Optionally:
 
 First time only: `./docker_build.sh`
 
-Then, use `./docker_run N` where N is the GPU index you would like to use to activate the docker container. If this is the first time you have ever activated the container, run `./compile_ops` inside as well.
+Then, use `./docker_run N` where N is the GPU index you would like to use to activate the docker container. If this is the first time you have ever activated the container, run `./compile_ops.sh` inside as well. `./docker_run` also accepts following position arguments as a command, so `./docker_run 3 ./compile_ops.sh` runs compile_ops.sh inside the container.
 
 Finally, run
 
