@@ -10,7 +10,7 @@ class Pointnet_SA(Layer):
 	"""
 
 	def __init__(self, npoint, radius, nsample, mlp, group_all=False, knn=False, 
-		use_xyz=True, activation=tf.nn.relu, bn=False, **kwargs):
+		use_xyz=True, bn=False, **kwargs):
 
 		super(Pointnet_SA, self).__init__(**kwargs)
 
@@ -30,7 +30,7 @@ class Pointnet_SA(Layer):
 		from src.models import pointnet_conv
 		for i, n_filters in enumerate(self.mlp):
 			self.mlp_list.append(
-				pointnet_conv(n_filters, 1, activation=self.activation, bn=self.bn, name=self.name+f"_{i}")
+				pointnet_conv(n_filters, bn=self.bn, name=self.name+f"_{i}")
 			)
 
 		super(Pointnet_SA, self).build(input_shape)
@@ -72,7 +72,6 @@ class Pointnet_SA(Layer):
 			"group_all": self.group_all,
 			"knn": self.knn,
 			"use_xyz": self.use_xyz,
-			"activation": self.activation,
 			"bn": self.bn,
 			**config
 		}
@@ -86,10 +85,8 @@ class Pointnet_SA_MSG(Layer):
 	"""
 
 	def __init__(
-		self, npoint, radius_list, nsample_list, mlp, use_xyz=True, activation="relu", 
-        bn=False, **kwargs
+		self, npoint, radius_list, nsample_list, mlp, use_xyz=True, bn=False, **kwargs
 	):
-
 		super(Pointnet_SA_MSG, self).__init__(**kwargs)
 
 		self.npoint = npoint
@@ -97,7 +94,6 @@ class Pointnet_SA_MSG(Layer):
 		self.nsample_list = nsample_list
 		self.mlp = mlp
 		self.use_xyz = use_xyz
-		self.activation = activation
 		self.bn = bn
 
 		self.mlp_list = []
@@ -109,7 +105,7 @@ class Pointnet_SA_MSG(Layer):
 			tmp_list = []
 			for j, n_filters in enumerate(self.mlp[i]):
 				tmp_list.append(
-					pointnet_conv(n_filters, 1, activation=self.activation, bn=self.bn, name=self.name+f"_{i}_{j}")
+					pointnet_conv(n_filters, bn=self.bn, name=self.name+f"_{i}_{j}")
 				)
 			self.mlp_list.append(tmp_list)
 
@@ -157,7 +153,6 @@ class Pointnet_SA_MSG(Layer):
 			"nsample_list": self.nsample_list,
 			"mlp": self.mlp,
 			"use_xyz": self.use_xyz,
-			"activation": self.activation,
 			"bn": self.bn,
 			**config
 		}
@@ -170,13 +165,12 @@ class Pointnet_FP(Layer):
 	"""
 
 	def __init__(
-		self, mlp, activation=tf.nn.relu, bn=False, **kwargs
+		self, mlp, bn=False, **kwargs
 	):
 
 		super(Pointnet_FP, self).__init__(**kwargs)
 
 		self.mlp = mlp
-		self.activation = activation
 		self.bn = bn
 
 		self.mlp_list = []
@@ -186,7 +180,7 @@ class Pointnet_FP(Layer):
 		from src.models import pointnet_conv
 		for i, n_filters in enumerate(self.mlp):
 			self.mlp_list.append(
-				pointnet_conv(n_filters, 1, activation=self.activation, bn=self.bn, name=self.name+f"_{i}")
+				pointnet_conv(n_filters, bn=self.bn, name=self.name+f"_{i}")
 			)
 		super(Pointnet_FP, self).build(input_shape)
 
@@ -226,7 +220,6 @@ class Pointnet_FP(Layer):
 		config = super().get_config()
 		return {
 			"mlp": self.mlp,
-			"activation": self.activation,
 			"bn": self.bn,
 			**config
 		}

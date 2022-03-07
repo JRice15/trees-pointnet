@@ -8,15 +8,16 @@ from tensorflow import keras
 from src import customlayers, ARGS
 
 
-def pointnet_conv(outchannels, kernel_size, name, strides=1, bn=True, activation=True,
-        padding="valid"):
+def pointnet_conv(outchannels, name, bn=True, activation=True):
     """
     returns callable, which creates pipeline of conv, batchnorm, and relu
     input: (B,N,1,K)
+    args:
+        activation: bool (defaults to relu if true), or activation name otherwise
     """
     layer_list = [
-        layers.Conv2D(int(outchannels), kernel_size=kernel_size, padding=padding,
-                    strides=strides, kernel_initializer="glorot_normal", name=name+"_conv")
+        layers.Conv2D(int(outchannels), kernel_size=1, padding="valid",
+                    strides=1, kernel_initializer="glorot_normal", name=name+"_conv")
     ]
     if bn:
         layer_list.append(layers.BatchNormalization(name=name+"_bn"))
@@ -61,9 +62,9 @@ def pointnet_transform(x_in, batchsize, kind):
 
     x = x_in
 
-    x = pointnet_conv(64, kernel_size=1, name=prefix+"conv1")(x)
-    x = pointnet_conv(128, kernel_size=1, name=prefix+"conv2")(x)
-    x = pointnet_conv(1024, kernel_size=1, name=prefix+"conv3")(x)
+    x = pointnet_conv(64, name=prefix+"conv1")(x)
+    x = pointnet_conv(128, name=prefix+"conv2")(x)
+    x = pointnet_conv(1024, name=prefix+"conv3")(x)
 
     x = customlayers.ReduceDims(axis=2, name=prefix+"squeeze")(x) # (B,N,K)
     x = layers.GlobalMaxPool1D(name=prefix+"maxpool")(x) # (B,K)
@@ -98,12 +99,12 @@ def seg_output_flow(local_features, global_feature, outchannels):
 
     # output flow
     x = full_features
-    x = pointnet_conv(512, 1, name="outmlp_conv1")(x)
-    x = pointnet_conv(256, 1, name="outmlp_conv2")(x)
-    x = pointnet_conv(128, 1, name="outmlp_conv3")(x)
-    x = pointnet_conv(128, 1, name="outmlp_conv4")(x)
+    x = pointnet_conv(512, name="outmlp_conv1")(x)
+    x = pointnet_conv(256, name="outmlp_conv2")(x)
+    x = pointnet_conv(128, name="outmlp_conv3")(x)
+    x = pointnet_conv(128, name="outmlp_conv4")(x)
 
-    x = pointnet_conv(outchannels, 1, name="outmlp_conv_final",
+    x = pointnet_conv(outchannels, name="outmlp_conv_final",
                       bn=False, activation=False)(x)
     x = customlayers.ReduceDims(axis=2, name="outmlp_squeeze")(x)
     
@@ -175,8 +176,8 @@ def pointnet_1(x, size_multiplier):
         x = customlayers.ExpandDims(axis=2, name="add_channels_2")(x) # (B,N,1,K)
 
     # mlp 1
-    x = pointnet_conv(64*size_multiplier, 1, name="mlp1_conv1")(x)
-    x = pointnet_conv(64*size_multiplier, 1, name="mlp1_conv2")(x)
+    x = pointnet_conv(64*size_multiplier, name="mlp1_conv1")(x)
+    x = pointnet_conv(64*size_multiplier, name="mlp1_conv2")(x)
 
     if ARGS.use_tnet_2:
         # feature transform
@@ -186,9 +187,9 @@ def pointnet_1(x, size_multiplier):
     local_features = x
 
     # mlp 2
-    x = pointnet_conv(64*size_multiplier, 1, name="mlp2_conv1")(x)
-    x = pointnet_conv(128*size_multiplier, 1, name="mlp2_conv2")(x)
-    x = pointnet_conv(1024*size_multiplier, 1, name="mlp2_conv3")(x)
+    x = pointnet_conv(64*size_multiplier, name="mlp2_conv1")(x)
+    x = pointnet_conv(128*size_multiplier, name="mlp2_conv2")(x)
+    x = pointnet_conv(1024*size_multiplier, name="mlp2_conv3")(x)
 
     # symmetric function: max pooling
     x = customlayers.ReduceDims(axis=2, name="remove_channels")(x) # (B,N,K)

@@ -203,6 +203,7 @@ try:
     H = model.fit(
         x=train_gen,
         validation_data=val_gen.load_all(),
+        validation_batch_size=ARGS.batch_size
         epochs=ARGS.epochs,
         callbacks=list(callback_dict.values()),
         batch_size=ARGS.batchsize,

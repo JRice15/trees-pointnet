@@ -21,7 +21,7 @@ def get_loss():
     """
     if ARGS.loss == "treetop":
         assert ARGS.output_mode in ("seg", "dense")
-        raise NotADirectoryError()
+        raise NotImplementedError()
         # if ARGS.ragged:
         #     return ragged_pointwise_treetop()
         # else:
