@@ -12,7 +12,7 @@ from tensorflow.keras import backend as K
 from tensorflow.keras import layers
 from tensorflow.keras.optimizers import Adam
 
-from src import ARGS, DATA_DIR, REPO_ROOT
+from src import ARGS, DATA_DIR, REPO_ROOT, MODEL_SAVE_FMT
 from src.utils import raster_plot
 from src.losses import get_loss
 
@@ -22,9 +22,10 @@ class MyModelCheckpoint(tf.keras.callbacks.ModelCheckpoint):
     https://github.com/tensorflow/tensorflow/issues/33163
     """
 
-    def __init__(self, *args, epoch_per_save=1, **kwargs):
+    def __init__(self, path, *args, epoch_per_save=1, **kwargs):
         self.epochs_per_save = epoch_per_save
-        super().__init__(*args, save_freq="epoch", **kwargs)
+        path = path.joinpath("model" + MODEL_SAVE_FMT).as_posix()
+        super().__init__(path, *args, save_freq="epoch", **kwargs)
 
     def on_epoch_end(self, epoch, logs):
         if epoch % self.epochs_per_save == 0:

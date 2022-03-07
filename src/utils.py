@@ -175,8 +175,7 @@ def glob_modeldir(modelname):
         matching_models.sort()
         model_path = PurePath(matching_models[-1])
     elif len(matching_models) == 0:
-        print("No matching models!")
-        exit()
+        raise FileNotFoundError("No matching models!")
     else:
         model_path = PurePath(matching_models[0])
 
