@@ -147,7 +147,8 @@ def max_mean_discrepancy():
     else:
         raise ValueError("Unknown mmd kernel '{}' to mmd loss".format(ARGS.mmd_kernel))
 
-    @tf.function(experimental_relax_shapes=True)
+    #@tf.function(experimental_relax_shapes=True)
+    @tf.function
     def mmd_loss_term(a, b):
         a = tf.expand_dims(a, axis=1)
         a_locs = a[...,:2]

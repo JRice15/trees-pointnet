@@ -35,11 +35,12 @@ class TNet(keras.layers.Layer):
 
     def get_config(self):
         # super.get_config fails?
-        config = super().get_config()
+        #config = super().get_config()
         return {
             "in_channels": self.in_channels,
             "out_channels": self.out_channels,
-            **config
+            "name": self.name,
+            #**config
         }
 
 
