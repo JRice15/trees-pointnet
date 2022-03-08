@@ -160,6 +160,12 @@ class LidarPatchGen(keras.utils.Sequence):
         self.patch_bounds = {k:v for k,v in subdiv_bounds.items() if k in self.patch_ids}
         self.patched_lidar = {k:v for k,v in subdiv_lidar.items() if k in self.patch_ids}
 
+        # handle no-data values in spectral data
+        for patch_id,pts in self.patched_lidar.items():
+            spectral = pts[3:]
+            spectral[spectral < -1e20] = -1
+            pts[3:] = spectral
+
         self.num_ids = len(self.patch_ids)
         self.num_filtered_ids = len(orig_ids) - self.num_ids
         if ARGS.test:

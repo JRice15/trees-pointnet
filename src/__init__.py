@@ -22,8 +22,7 @@ ARGS = argparse.Namespace()
 
 """ set global constants """
 
-# z is HAG
-LIDAR_CHANNELS = ('x', 'y', 'z', 'r', 'g', 'b', 'nir', 'ndvi')
+LIDAR_CHANNELS = ('x', 'y', 'height', 'red', 'green', 'blue', 'nir', 'ndvi')
 
 REPO_ROOT = PurePath(os.path.dirname(os.path.dirname(__file__)))
 DATA_DIR = REPO_ROOT.joinpath("data")
