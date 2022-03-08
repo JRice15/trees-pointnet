@@ -45,6 +45,9 @@ class TNet(keras.layers.Layer):
 
 
 class ConcatGrid(layers.Layer):
+    """
+    unused
+    """
 
     def __init__(self, gridsize, depth_factor, **kwargs):
         super().__init__(self, **kwargs)
@@ -76,6 +79,7 @@ class ConcatGrid(layers.Layer):
 
 class GatherTopK(layers.Layer):
     """
+    DEPRECATED
     Does not work, I think
     call signiture:
         l = GatherTopK(...)
