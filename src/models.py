@@ -58,7 +58,7 @@ def pointnet_transform(x_in, batchsize, kind):
     prefix = kind + "_transform_"
 
     # (B, N, 1, K)
-    batchsize, _, _, nattributes = x_in.shape
+    nattributes = x_in.shape[-1]
 
     x = x_in
 
@@ -273,7 +273,7 @@ def pointnet(inpt_shape, size_multiplier, output_channels):
     inpt = layers.Input(inpt_shape, name="inpt_layer", 
         #batch_size=ARGS.batchsize
     ) # (B,N,K)
-    
+
     xy_locs = inpt[...,:2]
 
     x = inpt
@@ -299,16 +299,17 @@ def pointnet(inpt_shape, size_multiplier, output_channels):
         pts = output[...,:2]
         confs = output[...,-1:]
         # limit location coords to 0-1
-        pts = layers.ReLU(max_value=1.0)(pts)
+        pts = layers.ReLU(max_value=1.0, name="loc-lim")(pts)
         # limit confidence to >= 0
-        confs = layers.Activation("softplus")(confs)
-        output = layers.Concatenate(axis=-1)([pts, confs])
-    if ARGS.loss == "treetop":
-        assert output_channels == 1
-        # limit confidences to 0 to 1
-        output = customlayers.Activation("sigmoid", name="pwtt-sigmoid")(output)
-        # add input xy locations to each point
-        output = layers.Concatenate(axis=-1, name="pwtt-concat_inpt")([xy_locs, output])
+        confs = layers.Activation("softplus", name="conf-lim")(confs)
+        output = layers.Concatenate(axis=-1, name="final-concat")([pts, confs])
+        
+    # if ARGS.loss == "treetop":
+    #     assert output_channels == 1
+    #     # limit confidences to 0 to 1
+    #     output = layers.Activation("sigmoid", name="pwtt-sigmoid")(output)
+    #     # add input xy locations to each point
+    #     output = layers.Concatenate(axis=-1, name="pwtt-concat_inpt")([xy_locs, output])
 
     model = Model(inpt, output)
 

@@ -12,7 +12,7 @@ from tensorflow.keras import backend as K
 from tensorflow.keras import layers
 from tensorflow.keras.optimizers import Adam
 
-from src import ARGS, DATA_DIR, REPO_ROOT, MODEL_SAVE_FMT
+from src import ARGS, DATA_DIR, REPO_ROOT, MODEL_SAVE_FMT, CUSTOM_LAYERS
 from src.utils import raster_plot
 from src.losses import get_loss
 
@@ -51,14 +51,9 @@ def load_saved_model(model_dir):
 
     loss_fun, metrics = get_loss()
 
-    custom_objs = {loss_fun.__name__: loss_fun}
+    custom_objs = {loss_fun.__name__: loss_fun, **CUSTOM_LAYERS}
     if metrics is not None:
         custom_objs.update({m.__name__:m for m in metrics})
-    if ARGS.use_pnet2:
-        from src.pnet2.layers import Pointnet_SA, Pointnet_SA_MSG, Pointnet_FP
-        custom_objs["Pointnet_SA"] = Pointnet_SA
-        custom_objs["Pointnet_SA_MSG"] = Pointnet_SA_MSG
-        custom_objs["Pointnet_FP"] = Pointnet_FP
 
     model = keras.models.load_model(modelpath.as_posix(), custom_objects=custom_objs)
 

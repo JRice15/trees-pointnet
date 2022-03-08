@@ -30,6 +30,9 @@ os.makedirs(REPO_ROOT.joinpath("models"), exist_ok=True)
 
 MODEL_SAVE_FMT = ".tf"
 
+# custom keras layers
+CUSTOM_LAYERS = {}
+
 np.random.seed(9999)
 
 

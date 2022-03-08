@@ -224,3 +224,7 @@ class Pointnet_FP(Layer):
 			**config
 		}
 
+
+CUSTOM_LAYERS["Pointnet_FP"] = Pointnet_FP
+CUSTOM_LAYERS["Pointnet_SA"] = Pointnet_SA
+CUSTOM_LAYERS["Pointnet_SA_MSG"] = Pointnet_SA_MSG

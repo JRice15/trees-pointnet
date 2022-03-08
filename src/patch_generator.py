@@ -429,7 +429,7 @@ def get_test_gen(dsname, regions):
 
 
 if __name__ == "__main__":
-    dsname = "normal1"
+    dsname = "fullchannels"
     regions = get_all_regions(dsname)
     train_gen, val_gen = get_train_val_gens(dsname, regions)
     test_gen = get_test_gen(dsname, regions)
