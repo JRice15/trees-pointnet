@@ -145,6 +145,11 @@ if not ARGS.noplot:
     train_viz_dir = MODEL_DIR.joinpath("training/example_batch_viz/")
     train_gen.__getitem__(0) # generate and throw away one batch, to make sure we don't have errors that dont appear the first time around
     X,Y,ids = train_gen.__getitem__(1, return_ids=True, no_rotate=True)
+    print("Example batches:")
+    print("X:")
+    print(X)
+    print("Y:")
+    print(Y)
     for i in range(len(X)):
         naip = train_gen.get_naip(ids[i])
         x = X[i].numpy()
@@ -157,6 +162,7 @@ if not ARGS.noplot:
             outdir=train_viz_dir.joinpath("original_scale"), zero_one_bounds=False)
         if ARGS.test:
             break
+
 
 """
 create model
