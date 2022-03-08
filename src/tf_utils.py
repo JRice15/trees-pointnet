@@ -22,9 +22,9 @@ class MyModelCheckpoint(tf.keras.callbacks.ModelCheckpoint):
     https://github.com/tensorflow/tensorflow/issues/33163
     """
 
-    def __init__(self, path, *args, epoch_per_save=1, **kwargs):
+    def __init__(self, model_dir, *args, epoch_per_save=1, **kwargs):
         self.epochs_per_save = epoch_per_save
-        path = path.joinpath("model" + MODEL_SAVE_FMT).as_posix()
+        path = model_dir.joinpath("model" + MODEL_SAVE_FMT).as_posix()
         super().__init__(path, *args, save_freq="epoch", **kwargs)
 
     def on_epoch_end(self, epoch, logs):
@@ -69,12 +69,15 @@ def load_saved_model(model_dir):
     # )
     return model
 
-def output_model(model, directory):
+def output_model(model, directory, show=False):
     """
     print and plot model structure to output dir
     """
     with open(os.path.join(directory, "model_summary.txt"), "w") as f:
         model.summary(print_fn=lambda x: f.write(x + "\n"), line_length=150)
+    if show:
+        print()
+        model.summary()
     try:
         tf.keras.utils.plot_model(model, to_file=os.path.join(directory, "model.png"))
     except Exception as e:
