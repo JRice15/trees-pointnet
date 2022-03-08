@@ -188,9 +188,9 @@ class LidarPatchGen(keras.utils.Sequence):
         # normalize lidar and gt data
         for patch_id,pts in self.patched_lidar.items():
             # handle no-data values in spectral data
-            spectral = pts[3:]
-            spectral[spectral < -1e20] = -1
-            pts[3:] = spectral
+            spectral = pts[:,3:]
+            spectral[spectral < -1] = -1.0
+            pts[:,3:] = spectral
             # normalize lidar
             mins = self.norm_mins[patch_id]
             maxs = self.norm_maxs[patch_id]
@@ -439,12 +439,36 @@ def get_test_gen(dsname, regions):
 
 
 if __name__ == "__main__":
-    dsname = "fullchannels"
-    regions = get_all_regions(dsname)
-    train_gen, val_gen = get_train_val_gens(dsname, regions)
-    test_gen = get_test_gen(dsname, regions)
+    ARGS.dsname = "fullchannels"
+    ARGS.batchsize = 16
+    ARGS.subdivide = 3
+    ARGS.loss = "mmd"
+    ARGS.npoints = 500
+    ARGS.noise_sigma = 0.0
+    ARGS.test = False
+
+    regions = get_all_regions(ARGS.dsname)
+    train_gen, val_gen = get_train_val_gens(ARGS.dsname, regions)
+    test_gen = get_test_gen(ARGS.dsname, regions)
     train_gen.summary()
     val_gen.summary()
     test_gen.summary()
 
+
+    X, Y = train_gen.load_all()
+
+    print(X.numpy().max(axis=0).max(axis=0))
+    print(X.numpy().min(axis=0).min(axis=0))
+
+    print(Y.numpy().max(axis=0).max(axis=0))
+    print(Y.numpy().min(axis=0).min(axis=0))
+
+    X, Y = val_gen.load_all()
+
+    print(X.numpy().max(axis=0).max(axis=0))
+    print(X.numpy().min(axis=0).min(axis=0))
+
+    print(Y.numpy().max(axis=0).max(axis=0))
+    print(Y.numpy().min(axis=0).min(axis=0))
+        
 
