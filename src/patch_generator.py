@@ -160,12 +160,6 @@ class LidarPatchGen(keras.utils.Sequence):
         self.patch_bounds = {k:v for k,v in subdiv_bounds.items() if k in self.patch_ids}
         self.patched_lidar = {k:v for k,v in subdiv_lidar.items() if k in self.patch_ids}
 
-        # handle no-data values in spectral data
-        for patch_id,pts in self.patched_lidar.items():
-            spectral = pts[3:]
-            spectral[spectral < -1e20] = -1
-            pts[3:] = spectral
-
         self.num_ids = len(self.patch_ids)
         self.num_filtered_ids = len(orig_ids) - self.num_ids
         if ARGS.test:
@@ -190,6 +184,22 @@ class LidarPatchGen(keras.utils.Sequence):
             max_xyz = [right, top, self.z_max] + [1, 1, 1, 1, 1]
             self.norm_mins[patch_key] = np.array(min_xyz)
             self.norm_maxs[patch_key] = np.array(max_xyz)
+
+        # normalize lidar and gt data
+        for patch_id,pts in self.patched_lidar.items():
+            # handle no-data values in spectral data
+            spectral = pts[3:]
+            spectral[spectral < -1e20] = -1
+            pts[3:] = spectral
+            # normalize lidar
+            mins = self.norm_mins[patch_id]
+            maxs = self.norm_maxs[patch_id]
+            pts = (pts - mins) / (maxs - mins)
+            self.patched_lidar[patch_id] = pts
+            # normalize gt xy locs
+            y_pts = self.patched_gt[patch_id]
+            y_pts = (y_pts - mins[:2]) / (maxs[:2] - mins[:2])
+            self.patched_gt[patch_id] = y_pts
 
         # sort for reproducibility
         self.sorted()
@@ -234,11 +244,6 @@ class LidarPatchGen(keras.utils.Sequence):
                 rand_offset = self.random.integers(leftover) # randomly generated int
             top_offset = leftover - rand_offset
             X_batch[i] = lidar_patch[rand_offset:num_x_pts-top_offset:step]
-
-            # normalize data
-            min_xyz = self.norm_mins[patch_key]
-            max_xyz = self.norm_maxs[patch_key]
-            X_batch[i] = (X_batch[i] - min_xyz) / (max_xyz - min_xyz)
             
             # select all gt y points, or just y count
             y_pts = self.patched_gt[patch_key]
@@ -248,7 +253,7 @@ class LidarPatchGen(keras.utils.Sequence):
             else:
                 min_xy, max_xy = min_xyz[:2], max_xyz[:2]
                 Y_batch[i,:n_y_pts,2] = 1
-                Y_batch[i,:n_y_pts,:2] = (y_pts - min_xy) / (max_xy - min_xy)
+                Y_batch[i,:n_y_pts,:2] = y_pts
 
         # shuffle input points within each patch
         #  this shuffles the points within each seperate patch in the same way, but that is random enough for me
