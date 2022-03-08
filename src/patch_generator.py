@@ -251,7 +251,6 @@ class LidarPatchGen(keras.utils.Sequence):
             if self.y_counts_only:
                 Y_batch[i] = n_y_pts
             else:
-                min_xy, max_xy = min_xyz[:2], max_xyz[:2]
                 Y_batch[i,:n_y_pts,2] = 1
                 Y_batch[i,:n_y_pts,:2] = y_pts
 

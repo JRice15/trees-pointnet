@@ -148,8 +148,12 @@ if not ARGS.noplot:
     print("Example batches:")
     print("X:")
     print(X)
+    print("max:", tf.reduce_max(X, axis=[0,1]))
+    print("min:", tf.reduce_min(X, axis=[0,1]))
     print("Y:")
     print(Y)
+    print("max:", tf.reduce_max(Y, axis=[0,1]))
+    print("min:", tf.reduce_min(Y, axis=[0,1]))
     for i in range(len(X)):
         naip = train_gen.get_naip(ids[i])
         x = X[i].numpy()
