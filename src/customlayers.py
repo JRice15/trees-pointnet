@@ -21,15 +21,16 @@ class TNet(layers.Layer):
         in_channels = int(input_shape[-1])
         w_init = tf.constant_initializer(0.0)
         self.w = tf.Variable(
-            initial_value=w_init((in_channels, self.out_size**2)),
+            initial_value=w_init((in_channels, self.out_size**2), dtype=K.floatx()),
             trainable=True,
             name=self.name+"_w"
         )
         self.b = tf.Variable(
-            initial_value=K.flatten(K.eye(self.out_size, dtype=tf.float32)),
+            initial_value=K.flatten(K.eye(self.out_size, dtype=K.floatx())),
             trainable=True,
             name=self.name+"_b"
         )
+        super().build(input_shape)
 
     def call(self, x):
         x = tf.matmul(x, self.w)
@@ -39,11 +40,11 @@ class TNet(layers.Layer):
 
     def get_config(self):
         # super.get_config fails?
-        #config = super().get_config()
+        config = super().get_config()
         return {
             "out_size": self.out_size,
             "name": self.name,
-            #**config
+            **config
         }
 
 

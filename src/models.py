@@ -270,7 +270,10 @@ def pointnet(inpt_shape, size_multiplier, output_channels):
         output_channels: num features per output point
     """
     npoints, nattributes = inpt_shape
-    inpt = layers.Input(inpt_shape, name="inpt_layer", batch_size=ARGS.batchsize) # (B,N,K)
+    inpt = layers.Input(inpt_shape, name="inpt_layer", 
+        #batch_size=ARGS.batchsize
+    ) # (B,N,K)
+    
     xy_locs = inpt[...,:2]
 
     x = inpt

@@ -207,7 +207,7 @@ try:
         validation_batch_size=ARGS.batchsize,
         epochs=ARGS.epochs,
         callbacks=list(callback_dict.values()),
-        #batch_size=ARGS.batchsize,
+        # batch_size=ARGS.batchsize,
     )
 except KeyboardInterrupt:
     # allow manual stopping by user
