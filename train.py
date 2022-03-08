@@ -146,14 +146,10 @@ if not ARGS.noplot:
     train_gen.__getitem__(0) # generate and throw away one batch, to make sure we don't have errors that dont appear the first time around
     X,Y,ids = train_gen.__getitem__(1, return_ids=True, no_rotate=True)
     print("Example batches:")
-    print("X:")
-    print(X)
-    print("max:", tf.reduce_max(X, axis=[0,1]))
-    print("min:", tf.reduce_min(X, axis=[0,1]))
-    print("Y:")
-    print(Y)
-    print("max:", tf.reduce_max(Y, axis=[0,1]))
-    print("min:", tf.reduce_min(Y, axis=[0,1]))
+    print("X max:", tf.reduce_max(X, axis=[0,1]))
+    print("X min:", tf.reduce_min(X, axis=[0,1]))
+    print("Y max:", tf.reduce_max(Y, axis=[0,1]))
+    print("Y min:", tf.reduce_min(Y, axis=[0,1]))
     for i in range(len(X)):
         naip = train_gen.get_naip(ids[i])
         x = X[i].numpy()
