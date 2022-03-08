@@ -99,6 +99,7 @@ lossgrp.add_argument("--ortho-weight",type=float,default=0.001,
 miscgrp = parser.add_argument_group("misc")
 miscgrp.add_argument("--test",action="store_true",help="run minimal batches and epochs to test functionality")
 miscgrp.add_argument("--noplot",action="store_true",help="no batch plots")
+miscgrp.add_argument("--show-summary",action="store_true",help="show model summary")
 
 
 ARGS = parser.parse_args(namespace=ARGS)
@@ -175,7 +176,7 @@ model = pointnet(
     size_multiplier=ARGS.size_multiplier,
     output_channels=output_channels_map[ARGS.loss],
 )
-output_model(model, MODEL_DIR)
+output_model(model, MODEL_DIR, show=ARGS.show_summary)
 
 loss, metrics = get_loss()
 
@@ -203,10 +204,10 @@ try:
     H = model.fit(
         x=train_gen,
         validation_data=val_gen.load_all(),
-        validation_batch_size=ARGS.batch_size
+        validation_batch_size=ARGS.batchsize,
         epochs=ARGS.epochs,
         callbacks=list(callback_dict.values()),
-        batch_size=ARGS.batchsize,
+        #batch_size=ARGS.batchsize,
     )
 except KeyboardInterrupt:
     # allow manual stopping by user

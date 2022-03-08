@@ -28,8 +28,7 @@ REPO_ROOT = PurePath(os.path.dirname(os.path.dirname(__file__)))
 DATA_DIR = REPO_ROOT.joinpath("data")
 os.makedirs(REPO_ROOT.joinpath("models"), exist_ok=True)
 
-# TODO figure out the error when using .h5, cuz it is much faster
-MODEL_SAVE_FMT = ".h5"
+MODEL_SAVE_FMT = ".tf"
 
 np.random.seed(9999)
 

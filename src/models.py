@@ -72,9 +72,7 @@ def pointnet_transform(x_in, batchsize, kind):
     x = pointnet_dense(512, name=prefix+"dense1")(x)
     x = pointnet_dense(256, name=prefix+"dense2")(x)
 
-    trans_matrix = customlayers.TNet(256, nattributes, name=prefix+"tnet")(x) # (B,(K*K))
-    trans_matrix = layers.Reshape((nattributes, nattributes), 
-                        name=prefix+"transmatrix_reshape")(trans_matrix) # (B,K,K)
+    trans_matrix = customlayers.TNet(nattributes, name=prefix+"tnet")(x) # (B,(K*K))
 
     x_in = customlayers.ReduceDims(axis=2, name=prefix+"squeeze2")(x_in)
     

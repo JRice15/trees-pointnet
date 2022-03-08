@@ -7,38 +7,41 @@ from tensorflow.keras import layers
 
 from src import ARGS
 
-class TNet(keras.layers.Layer):
+class TNet(layers.Layer):
     """
-    Tranformation Network, from B*InChannels to B*OutChannels
+    Tranformation Network, which learns a transformation matrix from input 
+    from (B,inchannels) to (B,outsize,outsize)
     """
 
-    def __init__(self, in_channels, out_channels, name, **kwargs):
+    def __init__(self, out_size, name, **kwargs):
         super().__init__(self, name=name, **kwargs)
-        self.in_channels = in_channels
-        self.out_channels = out_channels
+        self.out_size = out_size
+
+    def build(self, input_shape):
+        in_channels = int(input_shape[-1])
         w_init = tf.constant_initializer(0.0)
         self.w = tf.Variable(
-            initial_value=w_init((in_channels, out_channels*out_channels)),
+            initial_value=w_init((in_channels, self.out_size**2)),
             trainable=True,
-            name=name+"_w"
+            name=self.name+"_w"
         )
         self.b = tf.Variable(
-            initial_value=K.flatten(K.eye(out_channels, dtype=tf.float32)),
+            initial_value=K.flatten(K.eye(self.out_size, dtype=tf.float32)),
             trainable=True,
-            name=name+"_b"
+            name=self.name+"_b"
         )
 
     def call(self, x):
         x = tf.matmul(x, self.w)
         x += self.b
+        x = tf.reshape(x, (-1, self.out_size, self.out_size))
         return x
 
     def get_config(self):
         # super.get_config fails?
         #config = super().get_config()
         return {
-            "in_channels": self.in_channels,
-            "out_channels": self.out_channels,
+            "out_size": self.out_size,
             "name": self.name,
             #**config
         }
