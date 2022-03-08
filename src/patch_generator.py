@@ -102,7 +102,7 @@ class LidarPatchGen(keras.utils.Sequence):
 
     def init_random(self):
         """initialize or reinitialize the random number generatore"""
-        self.random = np.random.default_rng(seed=44)
+        self.random = np.random.default_rng(seed=999)
 
     def init_data(self):
         LIDAR_DIR = DATA_DIR.joinpath("lidar", ARGS.dsname, "regions")

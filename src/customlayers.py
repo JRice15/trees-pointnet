@@ -14,7 +14,7 @@ class TNet(layers.Layer):
     """
 
     def __init__(self, out_size, name, **kwargs):
-        super().__init__(self, name=name, **kwargs)
+        super().__init__(name=name, **kwargs)
         self.out_size = out_size
 
     def build(self, input_shape):

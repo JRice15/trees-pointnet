@@ -4,6 +4,7 @@ __init__.py: initializes constants and sets random seeds
 
 import argparse
 import datetime
+import random
 import os
 import shutil
 import time
@@ -33,8 +34,9 @@ MODEL_SAVE_FMT = ".tf"
 # custom keras layers
 CUSTOM_LAYERS = {}
 
-np.random.seed(9999)
-
+# random seeds
+np.random.seed(999)
+random.seed(999)
 
 has_tf = False
 try:
@@ -52,8 +54,8 @@ if has_tf:
     from tensorflow.keras import layers
     from tensorflow.keras.optimizers import Adam
 
-    tf.random.set_seed(9999)
-    tf.compat.v1.set_random_seed(9999)
+    tf.random.set_seed(999)
+    tf.compat.v1.set_random_seed(999)
     gpus = tf.config.list_physical_devices('GPU')
     print("GPUs:", gpus)
     for gpu in gpus:
