@@ -74,7 +74,12 @@ def output_model(model, directory, show=False):
         print()
         model.summary()
     try:
-        tf.keras.utils.plot_model(model, to_file=os.path.join(directory, "model.png"))
+        keras.utils.plot_model(model, 
+            to_file=os.path.join(directory, "model.png"),
+            show_shapes=True,
+            #expand_nested=True,
+            dpi=192,
+        )
     except Exception as e:
         print("Failed to plot model: " + str(e))
 
