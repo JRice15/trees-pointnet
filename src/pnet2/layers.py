@@ -39,7 +39,7 @@ class Pointnet_SA(Layer):
 
         if points is not None:
             if len(points.shape) < 3:
-                points = tf.expand_dims(points, axis=0)
+                points = tf.expand_dims(points, axis=1)
 
         if self.group_all:
             nsample = xyz.get_shape()[1]
@@ -54,17 +54,17 @@ class Pointnet_SA(Layer):
                 self.knn,
                 use_xyz=self.use_xyz
             )
+        points = tf.expand_dims(points, axis=2)
 
         for i, mlp_layer in enumerate(self.mlp_list):
             new_points = mlp_layer(new_points, training=training)
 
         new_points = tf.math.reduce_max(new_points, axis=2, keepdims=True)
 
-        return new_xyz, tf.squeeze(new_points)
+        new_points = tf.squeeze(new_points, axis=1)
+        new_points = tf.squeeze(new_points, axis=1)
 
-    def compute_output_shape(self, input_shape):
-        batchsize = input_shape[0]
-        return (batchsize, self.npoints, 1)
+        return new_xyz, new_points
 
     def get_config(self):
         config = super().get_config()
