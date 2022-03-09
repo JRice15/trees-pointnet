@@ -5,12 +5,13 @@ TF_LFLAGS=$(python -c 'import tensorflow as tf; print(" ".join(tf.sysconfig.get_
 CUDA_ROOT=/usr/local/cuda
 
 echo "using ${CUDA_ROOT} as cuda root"
-echo "python version:"
+echo "tf version:"
 python -c 'import tensorflow as tf; print(tf.__version__)'
 which python
 
 cd src/pnet2/tf_ops
 
+echo "Return codes (nonzero is error):"
 g++ -std=c++11 -shared ./3d_interpolation/tf_interpolate.cpp -o ./3d_interpolation/tf_interpolate_so.so  -I $CUDA_ROOT/include -lcudart -L $CUDA_ROOT/lib64/ -fPIC ${TF_CFLAGS} ${TF_LFLAGS} -O2
 echo $?
 
