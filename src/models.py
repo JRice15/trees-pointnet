@@ -257,7 +257,6 @@ def pointnet_2(inputs, npoints, size_multiplier):
     )
     xyz, global_feature = layer3(xyz, intermediate_features)
 
-
     return local_features, global_feature, {}
 
 

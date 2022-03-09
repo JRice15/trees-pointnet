@@ -1,6 +1,7 @@
 import tensorflow as tf
 from tensorflow.keras.layers import Layer, BatchNormalization
 
+from src import CUSTOM_LAYERS
 from src.pnet2 import utils
 
 
@@ -21,7 +22,6 @@ class Pointnet_SA(Layer):
 		self.group_all = group_all
 		self.knn = False
 		self.use_xyz = use_xyz
-		self.activation = activation
 		self.bn = bn
 
 		self.mlp_list = []
@@ -61,6 +61,13 @@ class Pointnet_SA(Layer):
 		new_points = tf.math.reduce_max(new_points, axis=2, keepdims=True)
 
 		return new_xyz, tf.squeeze(new_points)
+
+
+    def compute_output_shape(self, input_shape):
+        batchsize = input_shape[0]
+
+        return (batchsize, self.npoints, 1)
+
 
 	def get_config(self):
 		config = super().get_config()
