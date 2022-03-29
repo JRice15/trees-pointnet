@@ -17,8 +17,8 @@ import optuna
 dirn = os.path.dirname
 ROOT = dirn(dirn(os.path.abspath(__file__)))
 
-
-class KilledTrial(Exception): pass
+class TrialTimeoutError(Exception): pass
+class KilledTrialError(Exception): pass
 
 class ignore_kbint():
     """

@@ -43,14 +43,11 @@ import numpy as np
 import pandas as pd
 import optuna
 
-from hpo_utils import ROOT, get_study, ignore_kbint, KilledTrial
+from hpo_utils import ROOT, get_study, ignore_kbint, KilledTrialError, TrialTimeoutError
+from search_spaces import SEARCH_SPACES
 
-# frequency with which workers check their subprocesses
+# frequency (seconds) with which workers check their subprocesses
 WORKER_POLL_FREQ = 10
-
-
-docker_cmd = "docker run "
-
 
 
 valid_optimizers = ["adam", "adadelta", "nadam", "adamax"]
@@ -58,15 +55,41 @@ valid_output_modes = ["seg", "dense"]
 valid_losses = ["mmd", "gridmse"]
 
 
-def make_objective_func(args, gpu, interrupt_event):
-    # def objective(trial):
-        # train_args = {}
+def make_objective_func(ARGS, gpu, interrupt_event):
+    # get search space
+    search_space_func = SEARCH_SPACES[ARGS.search_space]
 
     def objective(trial):
         """
         function that spawns a trial process
         """
-        p = subprocess.Popen(["python3", f"{ROOT}/hpo/temp.py"])
+        # constants/meta params
+        constant_params = {
+            "name": "hpo/study-{name}/{name}-trial{number}".format(name=ARGS.name, number=trial.number),
+            "dsname": ARGS.dsname,
+            "eval": ["val", "test"]
+        }
+        constant_flags = []
+
+        # search space params
+        params, flags = search_space_func(ARGS, trial)
+
+        # combine the two
+        params = dict(**params, **constant_params)
+        flags = flags + constant_flags
+
+        cmd = ["./docker_run.sh", gpu, "python", "train.py"]
+        for name, val in params.items():
+            if not isinstance(val, list):
+                val = [val]
+            val = [str(x) for x in val]
+            cmd += ["--"+name] + val
+        for flag in flags:
+            cmd.append("--"+flag)
+
+        p = subprocess.Popen(cmd)
+
+        start_time = time.perf_counter()
         # wait for process to finish
         while True:
             # poll, then sleep, so that interrupt event has sufficient time to propogate, 
@@ -78,10 +101,13 @@ def make_objective_func(args, gpu, interrupt_event):
                 # kill the proc
                 p.terminate()
                 p.wait()
-                raise KilledTrial()
+                raise KilledTrialError()
             # check if process finished
             if poll_val is not None:
                 break
+            # check if we've timed out
+            if (time.perf_counter() - start_time) / 60 > ARGS.timeout_mins:
+                raise TrialTimeoutError()
 
         return trial.suggest_float("x", -10, 10)
 
@@ -93,30 +119,44 @@ class NoImprovementStopping:
     optuna callback to stop trials after no improvement for many trials
     """
 
-    def __init__(self, min_trials, no_improvement_trials):
+    def __init__(self, min_trials, stopping_trials, interrupt_event):
         self.min_trials = min_trials
-        self.no_improvement_trials = no_improvement_trials
+        self.stopping_trials = stopping_trials
+        self.interrupt_event = interrupt_event
     
     def __call__(self, study, trial):
-        ...
+        current_trialnum = trial.number
+        best_trialnum = study.best_trial.number
+        trials_since_best = current_trialnum - best_trialnum
+        if best_trialnum >= self.min_trials and trials_since_best >= self.stopping_trials:
+            print("NoImprovementStopping triggered.")
+            self.interrupt_event.set()
 
 
-def optuna_worker(gpu, worker_num, args, interrupt_event):
+def optuna_worker(ARGS, gpu, worker_num, interrupt_event):
     """
     worker process
     """
     worker_id = "{}-{}".format(gpu, worker_num)
     # study already created by main process
-    study = get_study(args.name, assume_exists=True)
+    study = get_study(ARGS.name, assume_exists=True)
 
-    objective = make_objective_func(args, gpu, interrupt_event)
+    objective = make_objective_func(ARGS, gpu, interrupt_event)
+
+    callbacks = [
+        NoImprovementStopping(ARGS.mintrials, ARGS.earlystop, interrupt_event),
+    ]
 
     print("Running worker", worker_id)
     with ignore_kbint():
         while not interrupt_event.is_set():
             try:
-                study.optimize(objective, n_trials=1)
-            except KilledTrial:
+                study.optimize(
+                    objective, 
+                    n_trials=1,
+                    callbacks=callbacks,
+                )
+            except KilledTrialError:
                 pass
 
 
@@ -126,34 +166,44 @@ def main():
     master process
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument("--name",required=True,help="subdirectory inside models/ to save these trials under")
-    parser.add_argument("--timeout",default=4,type=float,help="max number of hours each model is allowed to run")
+    parser.add_argument("--name",required=True,help="study name: subdirectory inside models/ to save these trials under")
+    parser.add_argument("--search-space",required=True,help="name of the search space function (defined in search_spaces.py) to use")
+    parser.add_argument("--dsname",required=True,help="name of dataset to use")
+    parser.add_argument("--gpu-ids","--gpus",required=True,type=int,nargs="+",help="GPU IDs to use")
+
     parser.add_argument("--earlystop",type=int,default=50,help="number of trials with no improvement when earlystopping occurs")
     parser.add_argument("--mintrials",type=int,default=200,help="number of trials for which earlystopping is not allowed to occur")
     parser.add_argument("--resume",action="store_true",help="resume the study of the given name, otherwise will raise an error if this study already exists")
     parser.add_argument("--overwrite",action="store_true",help="overwrite study of the given name if it exists")
-    # environment
-    # parser.add_argument("--envname",required=True,help="name of conda environment")
-    parser.add_argument("--gpu-ids","--gpus",type=int,nargs="+",required=True,help="GPU IDs to use")
+    parser.add_argument("--timeout-mins",type=float,default=(60*4),help="timeout for individual trials, in minutes (default 4 hours)")
     parser.add_argument("--per-gpu",type=int,default=2,help="number of concurrent models to train on each GPU")
-    args = parser.parse_args()
+    ARGS = parser.parse_args()
 
-    assert not (args.overwrite and args.resume)
-    if args.overwrite:
-        dbpath = f"{ROOT}/hpo/studies/{args.name}.db"
+    assert not (ARGS.overwrite and ARGS.resume), "Cannot both overwrite and resume!"
+    if ARGS.overwrite:
+        dbpath = f"{ROOT}/hpo/studies/{ARGS.name}.db"
         if os.path.exists(dbpath):
             os.remove(dbpath)
 
+    if ARGS.search_space not in SEARCH_SPACES:
+        raise ValueError("Invalid search space: not in {}".format(SEARCH_SPACES.keys()))
+
     # create the study, or verify existence
-    get_study(args.name, assume_exists=args.resume)
+    get_study(ARGS.name, assume_exists=ARGS.resume)
 
     # flag to signal keyboard interrupt to the workers
     intrpt_event = multiprocessing.Manager().Event()
 
     procs = []
-    for gpu in args.gpu_ids:
-        for i in range(args.per_gpu):
-            p = multiprocessing.Process(target=optuna_worker, args=(gpu, i, args, intrpt_event))
+    for gpu in ARGS.gpu_ids:
+        for i in range(ARGS.per_gpu):
+            kwargs = {
+                "gpu": gpu,
+                "worker_num": i,
+                "interrupt_event": intrpt_event,
+                "ARGS": ARGS,
+            }
+            p = multiprocessing.Process(target=optuna_worker, kwargs=kwargs)
             procs.append(p)
             p.start()
             # stagger start times

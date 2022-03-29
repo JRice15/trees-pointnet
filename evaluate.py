@@ -38,6 +38,7 @@ def parse_eval_args():
     """
     parser = argparse.ArgumentParser()
     parser.add_argument("--name",required=True,help="name of model to run, with possible timestamp in front")
+    parser.add_argument("--sets",dest="eval_sets",default=("train","val","test"),nargs="+",help="datasets to evaluate on: train, val, and/or test. test automatically selects val as well")
     parser.parse_args(namespace=ARGS)
 
 
@@ -314,7 +315,7 @@ def evaluate_model(patchgen, model, model_dir, pointmatch_thresholds):
     """
     generate predictions
     """
-    print("Generating predictions")
+    print("\nGenerating predictions...")
     assert patchgen.batch_size == 1
     patchgen.sorted()
     x, y = patchgen.load_all()
@@ -331,11 +332,11 @@ def evaluate_model(patchgen, model, model_dir, pointmatch_thresholds):
         y[i,:,:2] = patchgen.denormalize_pts(y[i,:,:2], patch_id=patch_ids[i])
 
     # find localmax peak predictions
-    print("Finding prediction maxima")
+    print("Finding prediction maxima...")
     pred_peaks = find_local_maxima(preds_raw, patch_bounds, min_conf_threshold=min(pointmatch_thresholds))
 
     # save raw sample prediction
-    print("Saving raw predictions")
+    print("Saving raw predictions...")
     with open(outdir.joinpath("sample_predictions.txt"), "w") as f:
         f.write("First 5 predictions, ground truths:\n")
         for i in range(min(5, len(preds_raw))):
@@ -351,7 +352,7 @@ def evaluate_model(patchgen, model, model_dir, pointmatch_thresholds):
     """
     Pointmatching
     """
-    print("Pointmatching")
+    print("Pointmatching...")
 
     pointmatch_stats = run_pointmatching(y, pred_peaks, pointmatch_thresholds)
 
@@ -383,7 +384,7 @@ def evaluate_model(patchgen, model, model_dir, pointmatch_thresholds):
     """
     Evaluate Model Metrics
     """
-    print("Evaluating model's metrics")
+    print("Evaluating model's metrics...")
 
     metric_vals = model.evaluate(patchgen)
     if not isinstance(metric_vals, list):
@@ -394,7 +395,7 @@ def evaluate_model(patchgen, model, model_dir, pointmatch_thresholds):
     with open(outdir.joinpath("results_model_metrics.json"), "w") as f:
         json.dump(results, f, indent=2)
 
-    print("\nResults on", patchgen.name, "dataset:")
+    print("Results on", patchgen.name, "dataset:")
     for k,v in results.items():
         print(k+":", v)
     
@@ -425,21 +426,24 @@ def main():
     train_gen, val_gen = patch_generator.get_train_val_gens(ARGS.dsname, ARGS.regions, train_batchsize=1, val_batchsize=1)
 
     # train set evaluation
-    train_gen.training = False
-    train_gen.summary()
-    thresholds = list(np.arange(0.025, 1, 0.025))
-    pointmatch_stats = evaluate_model(train_gen, model, MODEL_DIR, thresholds)
+    if "train" in ARGS.eval_sets:
+        train_gen.training = False
+        train_gen.summary()
+        thresholds = list(np.arange(0.025, 1, 0.025))
+        evaluate_model(train_gen, model, MODEL_DIR, thresholds)
 
-    # validation set evaluation
-    val_gen.summary()
-    thresholds = list(np.arange(0.025, 1, 0.025))
-    pointmatch_stats = evaluate_model(val_gen, model, MODEL_DIR, thresholds)
-    best_thresh = pointmatch_stats["best"]["threshold"]
+    if "val" in ARGS.eval_sets or "test" in ARGS.eval_sets:
+        # validation set evaluation
+        val_gen.summary()
+        thresholds = list(np.arange(0.025, 1, 0.025))
+        pointmatch_stats = evaluate_model(val_gen, model, MODEL_DIR, thresholds)
+        best_thresh = pointmatch_stats["best"]["threshold"]
 
-    # test set evaluation
-    test_gen = patch_generator.get_test_gen(ARGS.dsname, ARGS.regions)
-    test_gen.summary()
-    evaluate_model(test_gen, model, MODEL_DIR, [best_thresh])
+    if "test" in ARGS.eval_sets:
+        # test set evaluation
+        test_gen = patch_generator.get_test_gen(ARGS.dsname, ARGS.regions)
+        test_gen.summary()
+        evaluate_model(test_gen, model, MODEL_DIR, [best_thresh])
 
 
 

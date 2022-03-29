@@ -51,7 +51,7 @@ requiredgrp.add_argument("--loss",required=True,help="loss mode to use (must be 
 
 # main optional
 optionalgrp = parser.add_argument_group("optional")
-optionalgrp.add_argument("--eval",action="store_true",help="run test set evaluation after training")
+optionalgrp.add_argument("--eval",dest="eval_sets",nargs="+",help="specify one or more of 'train', 'val', 'test' to evaluate ('test' automatically selects 'val' as well)")
 optionalgrp.add_argument("-h", "--help", action="help", help="show this message and exit")
 
 # dataset
@@ -251,7 +251,7 @@ del train_gen
 del val_gen
 
 
-if ARGS.eval:
+if len(ARGS.eval_sets):
     """
     Testing phase
     """
