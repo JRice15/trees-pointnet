@@ -51,17 +51,16 @@ def load_saved_model(model_dir):
 
     loss_fun, metrics = get_loss()
 
+    if ARGS.use_pnet2:
+        # import pnet2 stuff which automatically updates CUSTOM_LAYERS to match
+        from src.pnet2 import layers as _
     custom_objs = {loss_fun.__name__: loss_fun, **CUSTOM_LAYERS}
     if metrics is not None:
         custom_objs.update({m.__name__:m for m in metrics})
 
+    print(custom_objs)
     model = keras.models.load_model(modelpath.as_posix(), custom_objects=custom_objs)
 
-    # model.compile(
-    #     optimizer=model.optimizer,
-    #     loss=model.loss,
-    #     metrics=metrics
-    # )
     return model
 
 def output_model(model, directory, show=False):
