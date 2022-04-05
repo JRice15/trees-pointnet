@@ -26,24 +26,26 @@ complete, and then are replaced. They can error out without hurting the study as
 
 
 
+import argparse
+import gc
+import glob
 import json
+import logging
+import multiprocessing
 import os
 import re
-import time
-import glob
-import argparse
 import signal
-import logging
-import sys
 import subprocess
-import multiprocessing
+import sys
+import time
 from pathlib import PurePath
 
 import numpy as np
-import pandas as pd
 import optuna
+import pandas as pd
 
-from hpo_utils import ROOT, get_study, ignore_kbint, KilledTrialError, TrialTimeoutError
+from hpo_utils import (ROOT, KilledTrialError, TrialFailedError, MyHpoError,
+                       TrialTimeoutError, get_study, ignore_kbint)
 from search_spaces import SEARCH_SPACES
 
 # frequency (seconds) with which workers check their subprocesses
@@ -67,9 +69,11 @@ def make_objective_func(ARGS, gpu, interrupt_event):
         constant_params = {
             "name": "hpo/study-{name}/{name}-trial{number}".format(name=ARGS.name, number=trial.number),
             "dsname": ARGS.dsname,
-            "eval": ["val", "test"]
+            "eval": ["val", "test"],
         }
-        constant_flags = []
+        if ARGS.test:
+            constant_params["epochs"] = 1
+        constant_flags = ["noplot"]
 
         # search space params
         params, flags = search_space_func(ARGS, trial)
@@ -78,7 +82,7 @@ def make_objective_func(ARGS, gpu, interrupt_event):
         params = dict(**params, **constant_params)
         flags = flags + constant_flags
 
-        cmd = ["./docker_run.sh", gpu, "python", "train.py"]
+        cmd = [f"{ROOT}/docker_run.sh", str(gpu), "python", "train.py"]
         for name, val in params.items():
             if not isinstance(val, list):
                 val = [val]
@@ -92,10 +96,8 @@ def make_objective_func(ARGS, gpu, interrupt_event):
         start_time = time.perf_counter()
         # wait for process to finish
         while True:
-            # poll, then sleep, so that interrupt event has sufficient time to propogate, 
-            #   becuase the interrupt kills the subprocess too
-            poll_val = p.poll()
             time.sleep(WORKER_POLL_FREQ)
+            poll_val = p.poll()
             # check if we should interrupt
             if interrupt_event.is_set():
                 # kill the proc
@@ -108,8 +110,15 @@ def make_objective_func(ARGS, gpu, interrupt_event):
             # check if we've timed out
             if (time.perf_counter() - start_time) / 60 > ARGS.timeout_mins:
                 raise TrialTimeoutError()
-
-        return trial.suggest_float("x", -10, 10)
+        
+        # try to read results
+        results_file = "{}/models/{}/results_test/results_pointmatch.json".format(ROOT, params["name"])
+        if not os.path.exists(results_file):
+            raise TrialFailedError(f"Results file does not exist: {results_file}")
+        with open(results_file, "r") as f:
+            results = json.load(f)
+        
+        return results["best"]["fscore"]
 
     return objective
 
@@ -149,15 +158,17 @@ def optuna_worker(ARGS, gpu, worker_num, interrupt_event):
 
     print("Running worker", worker_id)
     with ignore_kbint():
+        # run one step at a time
         while not interrupt_event.is_set():
             try:
                 study.optimize(
-                    objective, 
+                    objective,
                     n_trials=1,
                     callbacks=callbacks,
                 )
-            except KilledTrialError:
+            except MyHpoError:
                 pass
+            gc.collect()
 
 
 
@@ -176,7 +187,9 @@ def main():
     parser.add_argument("--resume",action="store_true",help="resume the study of the given name, otherwise will raise an error if this study already exists")
     parser.add_argument("--overwrite",action="store_true",help="overwrite study of the given name if it exists")
     parser.add_argument("--timeout-mins",type=float,default=(60*4),help="timeout for individual trials, in minutes (default 4 hours)")
-    parser.add_argument("--per-gpu",type=int,default=2,help="number of concurrent models to train on each GPU")
+    parser.add_argument("--per-gpu",type=int,default=1,help="number of concurrent models to train on each GPU")
+
+    parser.add_argument("--test",action="store_true",help="just run one-epoch trials")
     ARGS = parser.parse_args()
 
     assert not (ARGS.overwrite and ARGS.resume), "Cannot both overwrite and resume!"

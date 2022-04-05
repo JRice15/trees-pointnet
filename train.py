@@ -89,9 +89,9 @@ lossgrp = parser.add_argument_group("loss parameters")
 lossgrp.add_argument("--gaussian-sigma", "--sigma",type=float,default=4,
         help="in meters, std dev of gaussian smoothing applied in the loss (mmd and gridmse modes)")
 lossgrp.add_argument("--mmd-kernel",default="gaussian",
-        help="max-mean-discrepancy loss: type of kernel")
-lossgrp.add_argument("--dist-weight",type=float,default=0.9,
-        help="treetop loss: weight on distance vs count loss")
+        help="mmd loss: type of kernel")
+# lossgrp.add_argument("--dist-weight",type=float,default=0.9,
+#         help="treetop loss: weight on distance vs count loss")
 lossgrp.add_argument("--ortho-weight",type=float,default=0.001,
         help="orthogonality regularization loss weight, when using TNet2")
 

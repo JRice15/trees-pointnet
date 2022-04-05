@@ -15,10 +15,13 @@ import pandas as pd
 import optuna
 
 dirn = os.path.dirname
+# root of repository
 ROOT = dirn(dirn(os.path.abspath(__file__)))
 
-class TrialTimeoutError(Exception): pass
-class KilledTrialError(Exception): pass
+class MyHpoError(Exception): pass
+class TrialTimeoutError(MyHpoError): pass
+class KilledTrialError(MyHpoError): pass
+class TrialFailedError(MyHpoError): pass
 
 class ignore_kbint():
     """

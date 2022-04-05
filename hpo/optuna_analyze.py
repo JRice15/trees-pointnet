@@ -30,16 +30,13 @@ def main():
     # load study
     study = get_study(args.name, assume_exists=True)
 
-    df = study.trials_dataframe()
+    print("Best trial:")
+    print("  Value:", study.best_value)
+    print("  Best Params:", study.best_params)
 
-    print(df.tail(25))
-
-    print(df["datetime_complete"] - df["datetime_start"])
-
-    # print(study.trials)
-    print(study.best_trial)
-
-
+    optuna.visualization.plot_optimization_history(study).show()
+    optuna.visualization.plot_param_importances(study).show()
+    optuna.visualization.plot_slice(study).show()
 
 
 if __name__ == "__main__":
