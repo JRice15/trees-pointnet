@@ -58,7 +58,6 @@ def load_saved_model(model_dir):
     if metrics is not None:
         custom_objs.update({m.__name__:m for m in metrics})
 
-    print(custom_objs)
     model = keras.models.load_model(modelpath.as_posix(), custom_objects=custom_objs)
 
     return model

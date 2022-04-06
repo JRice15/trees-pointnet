@@ -135,7 +135,7 @@ def cls_output_flow(global_feature, outchannels):
     if ARGS.dropout_rate > 0:
         x = layers.Dropout(ARGS.dropout_rate, name="outmlp_dropout1")(x)
     x = pointnet_dense(256, "outmlp_dense2")(x)
-    if ARGS.dropout > 0:
+    if ARGS.dropout_rate > 0:
         x = layers.Dropout(ARGS.dropout_rate, name="outmlp_dropout2")(x)
 
     x = pointnet_dense(outchannels, "outmlp_dense3", bn=False, 
