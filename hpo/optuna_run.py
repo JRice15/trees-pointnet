@@ -178,13 +178,14 @@ def main():
     """
     parser = argparse.ArgumentParser()
     parser.add_argument("--name",required=True,help="study name: subdirectory inside models/ to save these trials under")
-    parser.add_argument("--search-space",required=True,help="name of the search space function (defined in search_spaces.py) to use")
-    parser.add_argument("--dsname",required=True,help="name of dataset to use")
-    parser.add_argument("--gpu-ids","--gpus",required=True,type=int,nargs="+",help="GPU IDs to use")
+    parser.add_argument("--gpus",required=True,type=int,nargs="+",help="GPU IDs to use")
+
+    parser.add_argument("--search-space",help="(if not resuming:) name of the search space function (defined in search_spaces.py) to use")
+    parser.add_argument("--dsname",help="(if not resuming:) name of dataset to use (")
+    parser.add_argument("--resume",action="store_true",help="resume the study of the given name, otherwise will raise an error if this study already exists")
 
     parser.add_argument("--earlystop",type=int,default=50,help="number of trials with no improvement when earlystopping occurs")
     parser.add_argument("--mintrials",type=int,default=200,help="number of trials for which earlystopping is not allowed to occur")
-    parser.add_argument("--resume",action="store_true",help="resume the study of the given name, otherwise will raise an error if this study already exists")
     parser.add_argument("--overwrite",action="store_true",help="overwrite study of the given name if it exists")
     parser.add_argument("--timeout-mins",type=float,default=(60*4),help="timeout for individual trials, in minutes (default 4 hours)")
     parser.add_argument("--per-gpu",type=int,default=1,help="number of concurrent models to train on each GPU")
@@ -198,17 +199,31 @@ def main():
         if os.path.exists(dbpath):
             os.remove(dbpath)
 
-    if ARGS.search_space not in SEARCH_SPACES:
-        raise ValueError("Invalid search space: not in {}".format(SEARCH_SPACES.keys()))
-
     # create the study, or verify existence
     get_study(ARGS.name, assume_exists=ARGS.resume)
+
+    if ARGS.resume:
+        if (ARGS.search_space is not None) or (ARGS.dsname is not None):
+            raise ValueError("Don't supply --search-space or --dsname when supplying --resume")
+        # read metadata
+        with open(f"{ROOT}/hpo/studies/{ARGS.name}.json", "r") as f:
+            params = json.load(f)
+        ARGS.search_space = params["search_space"]
+        ARGS.dsname = params["dsname"]
+
+    if ARGS.search_space not in SEARCH_SPACES:
+        raise ValueError("Invalid search space: {}".format(search_space))
+    if ARGS.dsname is None:
+        raise ValueError("Dataset name is required")
+    # save metadata
+    with open(f"{ROOT}/hpo/studies/{ARGS.name}.json", "w") as f:
+        json.dump(vars(ARGS), f)
 
     # flag to signal keyboard interrupt to the workers
     intrpt_event = multiprocessing.Manager().Event()
 
     procs = []
-    for gpu in ARGS.gpu_ids:
+    for gpu in ARGS.gpus:
         for i in range(ARGS.per_gpu):
             kwargs = {
                 "gpu": gpu,
