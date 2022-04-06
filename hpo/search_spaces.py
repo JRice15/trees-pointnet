@@ -1,6 +1,7 @@
 import optuna
 
 def pnet1_v1(args, trial):
+    flags = []
     params = {
         # "output-mode": trial.suggest_categorical("output-mode", ["dense", "seg"]),
         "output-mode": "dense",
@@ -14,16 +15,19 @@ def pnet1_v1(args, trial):
         "out-npoints": 2 ** trial.suggest_int("out_npoints_exp", 7, 10), # 128 to 2048
         "dropout": trial.suggest_float("dropout", 0.0, 0.6, step=0.05),
         "size-multiplier": 2 ** trial.suggest_int("sm_exp", -1, 3), # 0.5 to 8
-        "no-tnet1": trial.suggest_categorical("no_tnet1", [True, False]),
-        "no-tnet2": trial.suggest_categorical("no_tnet2", [True, False]),
-        "guassian-sigma": trial.suggest_int("guassian_sigma", 1, 15, log=True) # in meters
+        "gaussian-sigma": trial.suggest_int("guassian_sigma", 1, 10, log=True) # in meters
     }
     if params["loss"] == "mmd":
         params["mmd-kernel"] = "gaussian"
-    if not params["no-tnet2"]:
+        
+    if trial.suggest_categorical("no_tnet1", [True, False]):
+        flags.append("no-tnet1")
+
+    if trial.suggest_categorical("no_tnet1", [True, False]):
+        flags.append("no-tnet2")
+    else:
         params["ortho-weight"] = 10 ** trial.suggest_int("ortho_exp", -5, 3) # 1e-5 to 1000
 
-    flags = []
     return params, flags
 
 

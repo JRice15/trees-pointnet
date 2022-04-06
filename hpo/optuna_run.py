@@ -82,7 +82,7 @@ def make_objective_func(ARGS, gpu, interrupt_event):
         params = dict(**params, **constant_params)
         flags = flags + constant_flags
 
-        cmd = [f"{ROOT}/docker_run.sh", str(gpu), "python", "train.py"]
+        cmd = [f"{ROOT}/docker_run.sh", str(gpu), "python", f"{ROOT}/train.py"]
         for name, val in params.items():
             if not isinstance(val, list):
                 val = [val]

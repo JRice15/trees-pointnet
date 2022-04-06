@@ -60,7 +60,7 @@ datagrp.add_argument("--ragged",action="store_true")
 datagrp.add_argument("--subdivide",type=int,default=3,help="number of times to subdivide standard grids. The side of a grid square is divided N times, resulting in N-squared new grid squares")
 datagrp.add_argument("--regions",default="ALL",nargs="+",help="list of region names, defaults to all available")
 datagrp.add_argument("--dsname",help="name of generated dataset to use (required if multiple exist)")
-datagrp.add_argument("--noise-sigma",default=None,help="add gaussian noise to input points")
+datagrp.add_argument("--noise-sigma",type=float,default=None,help="add gaussian noise to input points")
 
 # training hyperparameters
 hypergrp = parser.add_argument_group("training hyperparameters")
