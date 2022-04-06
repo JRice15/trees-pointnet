@@ -82,14 +82,16 @@ def pointnet_transform(x_in, batchsize, kind):
     return x_out, trans_matrix
 
 
-def seg_output_flow(local_features, global_feature, outchannels):
+def seg_output_flow(local_features, global_feature, size_multiplier, outchannels):
     """
     Base segmentation output flow
     Returns:
         per-point feature vectors: (B,N,outchannels)
+    example shape: (16, 500, 3)
     """
     # concat local and global
-    global_feature = layers.Reshape((1,1,1024), name="expand_global_feature_reshape")(global_feature)
+    global_len = global_feature.shape[-1]
+    global_feature = layers.Reshape((1,1,global_len), name="expand_global_feature_reshape")(global_feature)
     _, npoints, _, _ = local_features.shape
     global_feature = customlayers.Tile(npoints, axis=1)(global_feature)
 
@@ -97,19 +99,20 @@ def seg_output_flow(local_features, global_feature, outchannels):
 
     # output flow
     x = full_features
-    x = pointnet_conv(512, name="outmlp_conv1")(x)
+    x = pointnet_conv(512*size_multiplier, name="outmlp_conv1")(x)
     if ARGS.dropout_rate > 0:
         x = layers.Dropout(ARGS.dropout_rate, name="outmlp_dropout1")(x)
 
-    x = pointnet_conv(256, name="outmlp_conv2")(x)
+    x = pointnet_conv(256*size_multiplier, name="outmlp_conv2")(x)
     if ARGS.dropout_rate > 0:
         x = layers.Dropout(ARGS.dropout_rate, name="outmlp_dropout2")(x)
 
-    x = pointnet_conv(256, name="outmlp_conv3")(x)
+    x = pointnet_conv(128*size_multiplier, name="outmlp_conv3")(x)
     if ARGS.dropout_rate > 0:
         x = layers.Dropout(ARGS.dropout_rate, name="outmlp_dropout3")(x)
 
-    x = pointnet_conv(256, name="outmlp_conv4")(x)
+    last_size = min(128, 128*size_multiplier)
+    x = pointnet_conv(last_size, name="outmlp_conv4")(x)
     if ARGS.dropout_rate > 0:
         x = layers.Dropout(ARGS.dropout_rate, name="outmlp_dropout4")(x)
 
@@ -124,6 +127,7 @@ def cls_output_flow(global_feature, outchannels):
     Base global classification output flow
     returns:
         global classification vector: (B,outchannels)
+    example shape: (16, 3)
     """
     x = global_feature
 
@@ -150,6 +154,7 @@ def dense_output_flow_2(global_feature, out_npoints, out_channels):
         out_channels: number of channels per point (mode dependant)
     returns:
         features for user-specified number of points: (B, outpoints, outchannels)
+    example shape: (16, 256, 3)
     """
     x = global_feature
 
@@ -302,7 +307,7 @@ def pointnet(inpt_shape, size_multiplier, output_channels):
 
     # output flow
     if ARGS.output_mode == "seg":
-        output = seg_output_flow(local_features, global_feature, output_channels)
+        output = seg_output_flow(local_features, global_feature, size_multiplier, output_channels)
     elif ARGS.output_mode == "count":
         output = cls_output_flow(global_feature, output_channels)
     elif ARGS.output_mode == "dense":
