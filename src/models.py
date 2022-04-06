@@ -98,9 +98,20 @@ def seg_output_flow(local_features, global_feature, outchannels):
     # output flow
     x = full_features
     x = pointnet_conv(512, name="outmlp_conv1")(x)
+    if ARGS.dropout_rate > 0:
+        x = layers.Dropout(ARGS.dropout_rate, name="outmlp_dropout1")(x)
+
     x = pointnet_conv(256, name="outmlp_conv2")(x)
-    x = pointnet_conv(128, name="outmlp_conv3")(x)
-    x = pointnet_conv(128, name="outmlp_conv4")(x)
+    if ARGS.dropout_rate > 0:
+        x = layers.Dropout(ARGS.dropout_rate, name="outmlp_dropout2")(x)
+
+    x = pointnet_conv(256, name="outmlp_conv3")(x)
+    if ARGS.dropout_rate > 0:
+        x = layers.Dropout(ARGS.dropout_rate, name="outmlp_dropout3")(x)
+
+    x = pointnet_conv(256, name="outmlp_conv4")(x)
+    if ARGS.dropout_rate > 0:
+        x = layers.Dropout(ARGS.dropout_rate, name="outmlp_dropout4")(x)
 
     x = pointnet_conv(outchannels, name="outmlp_conv_final",
                       bn=False, activation=False)(x)
@@ -112,7 +123,7 @@ def cls_output_flow(global_feature, outchannels):
     """
     Base global classification output flow
     returns:
-        global feature vector: (B,outchannels)
+        global classification vector: (B,outchannels)
     """
     x = global_feature
 
@@ -137,6 +148,8 @@ def dense_output_flow_2(global_feature, out_npoints, out_channels):
         global_feature
         out_npoints: number of points to output
         out_channels: number of channels per point (mode dependant)
+    returns:
+        features for user-specified number of points: (B, outpoints, outchannels)
     """
     x = global_feature
 
@@ -145,8 +158,13 @@ def dense_output_flow_2(global_feature, out_npoints, out_channels):
     intermediate_size = (input_size + target_size) // 2
 
     x = pointnet_dense(intermediate_size, "outmlp_dense1")(x)
+    if ARGS.dropout > 0:
+        x = layers.Dropout(ARGS.dropout_rate, name="outmlp_dropout2")(x)
     x = pointnet_dense(target_size, "outmlp_dense2")(x)
     x = layers.Reshape((out_npoints, out_channels), name="outmlp_reshape")(x)
+    if ARGS.dropout > 0:
+        x = layers.Dropout(ARGS.dropout_rate, name="outmlp_dropout2")(x)
+
     x = pointnet_dense(out_channels, bn=False, activation=False, name="out_channels_dense")(x)
 
     return x
