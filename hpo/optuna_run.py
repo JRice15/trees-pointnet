@@ -114,7 +114,7 @@ def make_objective_func(ARGS, gpu, interrupt_event):
         # try to read results
         results_file = "{}/models/{}/results_test/results_pointmatch.json".format(ROOT, params["name"])
         if not os.path.exists(results_file):
-            raise TrialFailedError(f"Results file does not exist: {results_file}")
+            raise TrialFailedError(f"Results file does not exist:\n{results_file}")
         with open(results_file, "r") as f:
             results = json.load(f)
         
