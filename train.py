@@ -251,7 +251,7 @@ del train_gen
 del val_gen
 
 
-if len(ARGS.eval_sets):
+if ARGS.eval_sets:
     """
     Testing phase
     """
