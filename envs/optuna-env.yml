@@ -1,0 +1,8 @@
+channels:
+ - conda-forge
+ - defaults
+dependancies:
+ - optuna
+ - numpy
+ - pandas
+
