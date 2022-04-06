@@ -69,4 +69,22 @@ def get_study(name, assume_exists):
             raise ValueError(f"Study named '{name}' already exists. Supply the --resume flag if you want to resume it")
 
 
+def glob_modeldir(modelname):
+    glob_path = f"{ROOT}/models/{modelname}-??????-??????"
 
+    matching_models = glob.glob(glob_path)
+
+    if len(matching_models) == 0:
+        raise FileNotFoundError("No matching models!")
+
+    if len(matching_models) > 1:
+        print("Multiple models match 'name' argument:")
+        print(" ", matching_models)
+        print("Defaulting to the most recent:")
+        # all the names have date/time string, so sorting gives order by time
+        matching_models.sort()
+
+    model_dir = matching_models[-1]
+    print(" ", model_dir)
+
+    return model_dir

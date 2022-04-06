@@ -45,7 +45,7 @@ import optuna
 import pandas as pd
 
 from hpo_utils import (ROOT, KilledTrialError, TrialFailedError, MyHpoError,
-                       TrialTimeoutError, get_study, ignore_kbint)
+                       TrialTimeoutError, get_study, ignore_kbint, glob_modeldir)
 from search_spaces import SEARCH_SPACES
 
 # frequency (seconds) with which workers check their subprocesses
@@ -112,7 +112,8 @@ def make_objective_func(ARGS, gpu, interrupt_event):
                 raise TrialTimeoutError()
         
         # try to read results
-        results_file = "{}/models/{}/results_test/results_pointmatch.json".format(ROOT, params["name"])
+        model_dir = glob_modeldir(params["name"])
+        results_file = model_dir + "/results_test/results_pointmatch.json"
         if not os.path.exists(results_file):
             raise TrialFailedError(f"Results file does not exist:\n{results_file}")
         with open(results_file, "r") as f:

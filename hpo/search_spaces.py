@@ -7,7 +7,7 @@ def pnet1_v1(args, trial):
         # "output-mode": "dense",
         "loss": trial.suggest_categorical("loss", ["mmd", "gridmse"]),
         "subdivide": trial.suggest_int("subdivide", 1, 5),
-        "noise-sigma": trial.suggest_float("noise_sigma", 0.0, 0.1),
+        "noise-sigma": trial.suggest_float("noise_sigma", 0.0, 3.0, step=0.1), # in meters
         "optimizer": trial.suggest_categorical("optimizer", ["adam", "adadelta", "nadam", "adamax"]),
         "batchsize": 2 ** trial.suggest_int("batchsize_exp", 3, 7), # 8 to 128
         "lr": 10 ** trial.suggest_float("learning_rate_exp", -5, -1, step=0.5), # 1e-1 to 1e-5

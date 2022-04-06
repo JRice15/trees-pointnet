@@ -1,6 +1,6 @@
+import glob
 import json
 import os
-import glob
 import sys
 import time
 from pathlib import PurePath
@@ -15,8 +15,9 @@ from tensorflow.keras import Model
 from tensorflow.keras import backend as K
 from tensorflow.keras import layers
 
-from src import ARGS, REPO_ROOT, DATA_DIR, LIDAR_CHANNELS
-from src.utils import raster_plot, rotate_pts, get_all_regions, get_naipfile_path, Bounds
+from src import ARGS, DATA_DIR, LIDAR_CHANNELS, REPO_ROOT
+from src.utils import (Bounds, get_all_regions, get_naipfile_path, raster_plot,
+                       rotate_pts, scaled_0_1)
 
 VAL_SPLIT = 0.1
 TEST_SPLIT = 0.15
@@ -267,9 +268,11 @@ class LidarPatchGen(keras.utils.Sequence):
                     Y_batch = rotate_pts(Y_batch, degrees=rot_degrees)
             # random gaussian noise
             if ARGS.noise_sigma is not None:
+                # convert meters to 0-1 scale
+                sigma = scaled_0_1(ARGS.noise_sigma)
                 X_batch += self.random.normal(
                                         loc=0, 
-                                        scale=ARGS.noise_sigma, 
+                                        scale=sigma,
                                         size=self.x_batch_shape)
 
         x = tf.constant(X_batch, dtype=K.floatx())
