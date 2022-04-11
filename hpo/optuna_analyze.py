@@ -30,6 +30,8 @@ def main():
     # load study
     study = get_study(args.name, assume_exists=True)
 
+    print(study.trials_dataframe())
+
     print("Best trial:")
     print("  Value:", study.best_value)
     print("  Best Params:", study.best_params)

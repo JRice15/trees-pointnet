@@ -197,7 +197,7 @@ callback_dict = {
     "history": callbacks.History(),
     "reducelr": callbacks.ReduceLROnPlateau(factor=ARGS.reducelr_factor, patience=ARGS.reducelr_patience,
         min_lr=1e-6, verbose=1),
-    "earlystopping": callbacks.EarlyStopping(verbose=1, patience=int(ARGS.reducelr_patience*2.5)),
+    "earlystopping": callbacks.EarlyStopping(verbose=1, patience=int(ARGS.reducelr_patience*1.5)),
     "modelcheckpoint": MyModelCheckpoint(MODEL_DIR, verbose=1, 
         epoch_per_save=(5 if not ARGS.test else 1), save_best_only=True)
 }
