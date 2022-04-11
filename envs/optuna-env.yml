@@ -5,4 +5,5 @@ dependancies:
  - optuna
  - numpy
  - pandas
+ - plotly
 

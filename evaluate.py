@@ -188,7 +188,7 @@ def pointmatch(all_gts, all_preds, conf_threshold, max_match_dist, prune_unpromi
 
     for i in range(len(all_gts)):
         # pruning early
-        if i == 50 and prune_unpromising:
+        if i == 100 and prune_unpromising:
             if all_tp <= 1:
                 pruned = True
                 break
