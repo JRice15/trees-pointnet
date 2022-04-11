@@ -288,6 +288,7 @@ def run_pointmatching(gts, preds, thresholds):
     """
     results = []
     for thresh in thresholds:      
+        print("    testing threshold:", thresh)
         result = pointmatch(gts, preds, thresh, max_match_dist=MAX_MATCH_DIST)
         results.append(result)
 
