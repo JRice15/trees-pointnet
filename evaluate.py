@@ -30,7 +30,7 @@ from src.tf_utils import MyModelCheckpoint, output_model, load_saved_model
 from src.utils import raster_plot, glob_modeldir, scaled_0_1, gridify_pts
 
 
-MAX_MATCH_DIST = 10
+MAX_MATCH_DIST = 6
 
 def parse_eval_args():
     """
@@ -169,12 +169,13 @@ def find_local_maxima(preds, bounds, min_conf_threshold=None, grid_resolution=64
     return maxima
 
 
-def pointmatch(all_gts, all_preds, conf_threshold, max_match_dist):
+def pointmatch(all_gts, all_preds, conf_threshold, max_match_dist, prune_unpromising=True):
     """
     args:
         all_gts: array of shape (npatches,npoints,3) where channels are (x,y,isvalid)
         all_preds: array of shape (npatches,npoints,3) where channels are (x,y,confidence)
         conf_threshold: list (must be in sorted order, low to high) of confidence thresholds to test
+        prune_unpromising: whether to stop if 1 or fewer true positives are recorded after 50 patches
     returns:
         precisions, recalls, fscores, rmses: each the same length as conf_threshold
     """
@@ -184,8 +185,15 @@ def pointmatch(all_gts, all_preds, conf_threshold, max_match_dist):
     all_fp = 0
     all_fn = 0
     all_tp_dists = []
+    pruned = False
 
     for i in range(len(all_gts)):
+        # pruning early
+        if i == 50 and prune_unpromising:
+            if all_tp <= 1:
+                pruned = True
+                break
+
         gt = all_gts[i]
         pred = all_preds[i]
 
@@ -257,6 +265,7 @@ def pointmatch(all_gts, all_preds, conf_threshold, max_match_dist):
         rmse = -1
     
     results = {
+        'pruned': pruned,
         'tp': int(all_tp),
         'fp': int(all_fp),
         'fn': int(all_fn),
