@@ -72,7 +72,7 @@ def make_objective_func(ARGS, gpu, interrupt_event):
             "eval": ["val", "test"],
         }
         if ARGS.test:
-            constant_params["epochs"] = 1
+            constant_params["epochs"] = 3
         constant_flags = ["noplot"]
 
         # search space params

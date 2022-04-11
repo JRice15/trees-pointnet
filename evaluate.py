@@ -12,21 +12,19 @@ import time
 import matplotlib.pyplot as plt
 import matplotlib
 import numpy as np
+from tqdm import tqdm
 from sklearn.metrics import pairwise_distances
 from scipy.optimize import linear_sum_assignment
 from skimage.feature import peak_local_max
 
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras import Model
 from tensorflow.keras import backend as K
-from tensorflow.keras import callbacks, layers
-from tensorflow.keras.optimizers import Adam
 
 from src import DATA_DIR, REPO_ROOT, ARGS, MODEL_SAVE_FMT, patch_generator
 from src.losses import get_loss
 from src.models import pointnet
-from src.tf_utils import MyModelCheckpoint, output_model, load_saved_model
+from src.tf_utils import load_saved_model
 from src.utils import raster_plot, glob_modeldir, scaled_0_1, gridify_pts
 
 
@@ -39,6 +37,7 @@ def parse_eval_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--name",required=True,help="name of model to run, with possible timestamp in front")
     parser.add_argument("--sets",dest="eval_sets",default=("train","val","test"),nargs="+",help="datasets to evaluate on: train, val, and/or test. test automatically selects val as well")
+    parser.add_argument("--noplot",action="store_true")
     parser.parse_args(namespace=ARGS)
 
 
@@ -287,8 +286,7 @@ def run_pointmatching(gts, preds, thresholds):
         dict of pointmatching stats
     """
     results = []
-    for thresh in thresholds:      
-        print("    testing threshold:", thresh)
+    for thresh in tqdm(thresholds):
         result = pointmatch(gts, preds, thresh, max_match_dist=MAX_MATCH_DIST)
         results.append(result)
 
@@ -380,16 +378,17 @@ def evaluate_model(patchgen, model, model_dir, pointmatch_thresholds):
     """
     data visualizations
     """
-    if ARGS.output_mode in ("seg", "dense"):
-        print("Generating visualizations...")
-        VIS_DIR = outdir.joinpath("visualizations")
-        os.makedirs(VIS_DIR, exist_ok=True)
+    if not ARGS.noplot:
+        if ARGS.output_mode in ("seg", "dense"):
+            print("Generating visualizations...")
+            VIS_DIR = outdir.joinpath("visualizations")
+            os.makedirs(VIS_DIR, exist_ok=True)
 
-        # grab random 10 examples
-        for i in range(0, len(patch_ids), len(patch_ids)//10):
-            naip = patchgen.get_naip(patch_ids[i])
-            plot_one_example(x[i], y[i], patch_ids[i], pred=preds_raw[i], naip=naip, 
-                outdir=VIS_DIR, pred_peaks=pred_peaks[i])
+            # grab random 10 examples
+            for i in range(0, len(patch_ids), len(patch_ids)//10):
+                naip = patchgen.get_naip(patch_ids[i])
+                plot_one_example(x[i], y[i], patch_ids[i], pred=preds_raw[i], naip=naip, 
+                    outdir=VIS_DIR, pred_peaks=pred_peaks[i])
 
     """
     Evaluate Model Metrics
@@ -421,6 +420,7 @@ def main():
         params = json.load(f)
     params.pop("name")
     params.pop("test")
+    params.pop("noplot")
     for k,v in params.items():
         setattr(ARGS, k, v)
     ARGS.test = False
