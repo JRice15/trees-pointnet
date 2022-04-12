@@ -30,11 +30,12 @@ def main():
     # load study
     study = get_study(args.name, assume_exists=True)
 
+    df = study.trials_dataframe(["number", "state", "value", "duration", "params"])
     print("All trials:")
-    print(study.trials_dataframe())
+    print(df)
 
     print("Best trials:")
-    print(study.trials_dataframe().sort_values(by="value", ascending=False).head(15))
+    print(df.sort_values(by="value", ascending=False).head(15))
 
     print("Best trial:")
     print("  Value:", study.best_value)
