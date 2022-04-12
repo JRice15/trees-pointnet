@@ -27,7 +27,7 @@ def pnet1_v1(args, trial):
     if trial.suggest_categorical("no_tnet1", [True, False]):
         flags.append("no-tnet1")
 
-    if trial.suggest_categorical("no_tnet1", [True, False]):
+    if trial.suggest_categorical("no_tnet2", [True, False]):
         flags.append("no-tnet2")
     else:
         params["ortho-weight"] = 10 ** trial.suggest_int("ortho_exp", -5, 3) # 1e-5 to 1000
