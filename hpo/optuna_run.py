@@ -46,7 +46,7 @@ import pandas as pd
 
 from hpo_utils import (ROOT, KilledTrialError, TrialFailedError, MyHpoError,
                        TrialTimeoutError, get_study, ignore_kbint, glob_modeldir)
-from search_spaces import SEARCH_SPACES
+from search_spaces import SEARCH_SPACES, SearchSpaceDefaults
 
 # frequency (seconds) with which workers check their subprocesses
 WORKER_POLL_FREQ = 10
@@ -77,6 +77,8 @@ def make_objective_func(ARGS, gpu, interrupt_event):
 
         # search space params
         params, flags = search_space_func(ARGS, trial)
+
+        print(params)
 
         # combine the two
         params = dict(**params, **constant_params)
@@ -109,13 +111,17 @@ def make_objective_func(ARGS, gpu, interrupt_event):
                 break
             # check if we've timed out
             if (time.perf_counter() - start_time) / 60 > ARGS.timeout_mins:
-                raise TrialTimeoutError()
+                raise optuna.TrialPruned("Timeout")
         
         # try to read results
-        model_dir = glob_modeldir(params["name"])
+        try:
+            model_dir = glob_modeldir(params["name"])
+        except FileNotFoundError:
+            raise optuna.TrialPruned("Model dir does not exist")
         results_file = model_dir + "/results_test/results_pointmatch.json"
         if not os.path.exists(results_file):
-            raise TrialFailedError(f"Results file does not exist:\n{results_file}")
+            raise optuna.TrialPruned(f"Results file does not exist:\n{results_file}")
+
         with open(results_file, "r") as f:
             results = json.load(f)
         
@@ -136,7 +142,10 @@ class NoImprovementStopping:
     
     def __call__(self, study, trial):
         current_trialnum = trial.number
-        best_trialnum = study.best_trial.number
+        try:
+            best_trialnum = study.best_trial.number
+        except ValueError:
+            return # no best trial yet exists
         trials_since_best = current_trialnum - best_trialnum
         if best_trialnum >= self.min_trials and trials_since_best >= self.stopping_trials:
             print("NoImprovementStopping triggered.")
@@ -200,9 +209,6 @@ def main():
         if os.path.exists(dbpath):
             os.remove(dbpath)
 
-    # create the study, or verify existence
-    get_study(ARGS.name, assume_exists=ARGS.resume)
-
     if ARGS.resume:
         if (ARGS.search_space is not None) or (ARGS.dsname is not None):
             raise ValueError("Don't supply --search-space or --dsname when supplying --resume")
@@ -213,12 +219,23 @@ def main():
         ARGS.dsname = params["dsname"]
 
     if ARGS.search_space not in SEARCH_SPACES:
-        raise ValueError("Invalid search space: {}".format(search_space))
+        raise ValueError("Invalid search space: {}".format(ARGS.search_space))
     if ARGS.dsname is None:
         raise ValueError("Dataset name is required")
     # save metadata
     with open(f"{ROOT}/hpo/studies/{ARGS.name}.json", "w") as f:
         json.dump(vars(ARGS), f)
+
+    # create the study, or verify existence
+    study = get_study(ARGS.name, assume_exists=ARGS.resume)
+    # add default trial
+    if len(study.trials) == 0:
+        try:
+            default_params = getattr(SearchSpaceDefaults, ARGS.search_space)
+        except AttributeError:
+            raise ValueError("No default params exist for this study")
+        print("Enqueueing default trial")
+        study.enqueue_trial(default_params)
 
     # flag to signal keyboard interrupt to the workers
     intrpt_event = multiprocessing.Manager().Event()
