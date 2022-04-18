@@ -34,6 +34,9 @@ def main():
     print("All trials:")
     print(df)
 
+    print("Recent Trials:")
+    print(df.tail(30))
+
     print("Best trials:")
     print(df.sort_values(by="value", ascending=False).head(15))
 

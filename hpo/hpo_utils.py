@@ -68,6 +68,10 @@ def get_study(name, assume_exists):
         except optuna.exceptions.DuplicatedStudyError:
             raise ValueError(f"Study named '{name}' already exists. Supply the --resume flag if you want to resume it")
 
+def get_last_trial_status(study):
+    series = study.trials_dataframe(["state"])["state"]
+    series = series[series != "RUNNING"]
+    return series.iloc[-1]
 
 def glob_modeldir(modelname):
     glob_path = f"{ROOT}/models/{modelname}-??????-??????"
