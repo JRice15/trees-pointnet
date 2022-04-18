@@ -78,8 +78,6 @@ def make_objective_func(ARGS, gpu, interrupt_event):
         # search space params
         params, flags = search_space_func(ARGS, trial)
 
-        print(params)
-
         # combine the two
         params = dict(**params, **constant_params)
         flags = flags + constant_flags
@@ -208,6 +206,7 @@ def main():
         dbpath = f"{ROOT}/hpo/studies/{ARGS.name}.db"
         if os.path.exists(dbpath):
             os.remove(dbpath)
+    os.makedirs(f"{ROOT}/hpo/studies/", exist_ok=True)
 
     if ARGS.resume:
         if (ARGS.search_space is not None) or (ARGS.dsname is not None):
