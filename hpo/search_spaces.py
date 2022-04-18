@@ -19,6 +19,8 @@ class SearchSpaceDefaults:
         "gaussian-sigma": 2.5,
         "dense-dropout": 0.0,
         "ortho-weight-exp": -2,
+        "no-tnet1": False,
+        "no-tnet2": False,
     }
 
 def pnet1_v1(args, trial):
