@@ -50,11 +50,17 @@ def get_study(name, assume_exists):
         url=f"sqlite:///{ROOT}/hpo/studies/{name}.db",
         engine_kwargs={"connect_args": {"timeout": 15}}, # longer than usual timeout is ok, because 15s is insignificant compared to the time each trial takes
     )
+    sampler = optuna.samplers.TPESampler(
+        n_startup_trials=25, # number of random sample trials to begin with
+        seed=1,
+    )
+
     if assume_exists:
         try:
             return optuna.load_study(
                 study_name=name,
                 storage=storage,
+                sampler=sampler,
             )
         except Exception as e:
             raise ValueError(f"Error loading study '{name}': {str(e)}")
@@ -64,6 +70,7 @@ def get_study(name, assume_exists):
                 study_name=name,
                 storage=storage,
                 direction="maximize",
+                sampler=sampler,
             )
         except optuna.exceptions.DuplicatedStudyError:
             raise ValueError(f"Study named '{name}' already exists. Supply the --resume flag if you want to resume it")
