@@ -46,7 +46,7 @@ import pandas as pd
 
 from hpo_utils import (ROOT, KilledTrialError, TrialFailedError, MyHpoError,
                        TrialTimeoutError, get_study, ignore_kbint, glob_modeldir)
-from search_spaces import SEARCH_SPACES, SearchSpaceDefaults
+import search_spaces
 
 # frequency (seconds) with which workers check their subprocesses
 WORKER_POLL_FREQ = 10
@@ -59,7 +59,8 @@ valid_losses = ["mmd", "gridmse"]
 
 def make_objective_func(ARGS, gpu, interrupt_event):
     # get search space
-    search_space_func = SEARCH_SPACES[ARGS.search_space]
+    space = getattr(search_spaces, ARGS.search_space)
+    assert isinstance(space, search_spaces.SearchSpace)
 
     def objective(trial):
         """
@@ -76,7 +77,7 @@ def make_objective_func(ARGS, gpu, interrupt_event):
         constant_flags = ["noplot"]
 
         # search space params
-        params, flags = search_space_func(ARGS, trial)
+        params, flags = space.get_params(ARGS, trial)
 
         # combine the two
         params = dict(**params, **constant_params)
@@ -217,7 +218,10 @@ def main():
         ARGS.search_space = params["search_space"]
         ARGS.dsname = params["dsname"]
 
-    if ARGS.search_space not in SEARCH_SPACES:
+    try:
+        space = getattr(search_spaces, ARGS.search_space)
+        assert isinstance(space, search_spaces.SearchSpace)
+    except:
         raise ValueError("Invalid search space: {}".format(ARGS.search_space))
     if ARGS.dsname is None:
         raise ValueError("Dataset name is required")
@@ -230,7 +234,8 @@ def main():
     # add default trial
     if len(study.trials) == 0:
         try:
-            default_params = getattr(SearchSpaceDefaults, ARGS.search_space)
+            space = getattr(search_spaces, ARGS.search_space)
+            default_params = space.defaults
         except AttributeError:
             raise ValueError("No default params exist for this study")
         print("Enqueueing default trial")
