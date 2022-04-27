@@ -1,6 +1,7 @@
 """
-Create a HeightAboveGround (HAG) dimension from the Z component, filter 
-to HAG>=0.0, and optionally subsample (take every nth point)
+- Create a HeightAboveGround (HAG) dimension from the Z component
+# - filter to HAG>=0.0
+- optionally subsample (take every nth point)
 """
 import argparse
 import json
@@ -50,10 +51,10 @@ if ARGS.reproject is not None:
 pipeline.append({
     "type": "filters.hag_nn"
 })
-pipeline.append({
-    "type": "filters.range",
-    "limits": "HeightAboveGround[0.0:]" # hag >=0.0
-})
+# pipeline.append({
+#     "type": "filters.range",
+#     "limits": "HeightAboveGround[0.0:]" # hag >=0.0
+# })
 pipeline.append({
     "type": "writers.las",
     "scale_x": ARGS.scale,

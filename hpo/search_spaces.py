@@ -82,8 +82,8 @@ class pnet2_v1(SearchSpace):
         "gaussian-sigma": 2.5,
         "dense-dropout": 0.0,
         "ortho-weight-exp": -2,
-        "no-tnet1": False,
-        "no-tnet2": False,
+        # "no-tnet1": False,
+        # "no-tnet2": False,
     }
 
     @staticmethod
@@ -110,13 +110,13 @@ class pnet2_v1(SearchSpace):
         else:
             params["dropout"] = trial.suggest_float("seg-dropout", 0.0, 0.6, step=0.05)
 
-        if trial.suggest_categorical("no-tnet1", [True, False]):
-            flags.append("no-tnet1")
+        # if trial.suggest_categorical("no-tnet1", [True, False]):
+        #     flags.append("no-tnet1")
 
-        if trial.suggest_categorical("no-tnet2", [True, False]):
-            flags.append("no-tnet2")
-        else:
-            params["ortho-weight"] = 10 ** trial.suggest_int("ortho-exp", -5, 3) # 1e-5 to 1000
+        # if trial.suggest_categorical("no-tnet2", [True, False]):
+        #     flags.append("no-tnet2")
+        # else:
+        #     params["ortho-weight"] = 10 ** trial.suggest_int("ortho-exp", -5, 3) # 1e-5 to 1000
 
         if trial.suggest_categorical("batchnorm", [True, False]):
             flags.append("batchnorm")
