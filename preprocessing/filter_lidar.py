@@ -18,8 +18,6 @@ parser.add_argument("--outfile",default=None,help="optional outfile name, defaul
 parser.add_argument("--reproject",default=None,help="optional CRS string to reproject to")
 parser.add_argument("--subsample",type=int,default=1,help="optional subsampling factor")
 parser.add_argument("--scale",type=float,default=0.01,help="output scale (precision)")
-parser.add_argument("--max-x",type=float,default=None,help="only keep points to the left of this")
-parser.add_argument("--min-x",type=float,default=None,help="only keep points to the right of this")
 ARGS = parser.parse_args()
 
 if ARGS.outfile is None:
@@ -44,17 +42,6 @@ if ARGS.subsample > 1:
     pipeline.append({
         "type": "filters.decimation",
         "step": ARGS.subsample,
-    })
-
-if ARGS.min_x is not None:
-    pipeline.append({
-        "type": "filters.range",
-        "limits": "X[{}:]".format(ARGS.min_x)
-    })
-if ARGS.max_x is not None:
-    pipeline.append({
-        "type": "filters.range",
-        "limits": "X[:{}]".format(ARGS.max_x)
     })
 
 if ARGS.reproject is not None:

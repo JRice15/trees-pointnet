@@ -6,7 +6,12 @@
         "lidar": "/data2/urban-forest/pointnet_data/longbeach/LongBeach_HAG_epsg26911.laz"
     },
     "riverside": {
-      "lidar": "/data2/urban-forest/pointnet_data/riverside/Riverside_HAG_epsg:26911.laz"
+      "lidar": [
+            "/data2/urban-forest/pointnet_data/riverside/tiled/Riverside_0_HAG_epsg:26911.laz",
+            "/data2/urban-forest/pointnet_data/riverside/tiled/Riverside_1_HAG_epsg:26911.laz",
+            "/data2/urban-forest/pointnet_data/riverside/tiled/Riverside_2_HAG_epsg:26911.laz",
+            "/data2/urban-forest/pointnet_data/riverside/tiled/Riverside_3_HAG_epsg:26911.laz"
+        ]
     },
     "claremont": {
         "lidar": [
