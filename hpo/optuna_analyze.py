@@ -30,19 +30,23 @@ def main():
     # load study
     study = get_study(args.name, assume_exists=True)
 
-    df = study.trials_dataframe(["number", "state", "value", "duration", "params"])
+    df = study.trials_dataframe(["number", "state", "value", "duration", "datetime_start", "datetime_complete"])
     print("All trials:")
     print(df)
 
-    print("Recent Trials:")
-    print(df.tail(30))
+    print("\nRecent Trials:")
+    print(df.tail(20))
 
-    print("Best trials:")
+    print("\nBest trials:")
     print(df.sort_values(by="value", ascending=False).head(15))
 
-    print("Best trial:")
+    print("\nBest trial:")
     print("  Value:", study.best_value)
     print("  Best Params:", study.best_params)
+
+    pdf = study.trials_dataframe(["params"])
+    print("\n10 most recent params:")
+    print(pdf.tail(10).T)
 
     optuna.visualization.plot_optimization_history(study).show()
     optuna.visualization.plot_param_importances(study).show()
