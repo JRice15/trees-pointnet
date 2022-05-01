@@ -324,7 +324,7 @@ def pointnet(inpt_shape, size_multiplier, output_channels):
         # limit location coords to 0-1
         pts = layers.ReLU(max_value=1.0, name="loc-lim")(pts)
         # limit confidence to >= 0
-        confs = layers.Activation("softplus", name="conf-lim")(confs)
+        confs = layers.Activation(ARGS.conf_act, name="conf-lim")(confs)
         output = layers.Concatenate(axis=-1, name="final-concat")([pts, confs])
         
     # if ARGS.loss == "treetop":

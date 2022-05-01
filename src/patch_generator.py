@@ -15,6 +15,8 @@ from tensorflow.keras import Model
 from tensorflow.keras import backend as K
 from tensorflow.keras import layers
 
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from src import ARGS, DATA_DIR, LIDAR_CHANNELS, REPO_ROOT
 from src.utils import (Bounds, get_all_regions, get_naipfile_path, raster_plot,
                        rotate_pts, scaled_0_1)
@@ -22,22 +24,36 @@ from src.utils import (Bounds, get_all_regions, get_naipfile_path, raster_plot,
 VAL_SPLIT = 0.1
 TEST_SPLIT = 0.15
 
+# max height for pts in meters
+Z_MAX_CLIP = 50
+# negative height to remove points below
+Z_MIN_CLIP = -10
+
+# each patch overlaps halfway with the neighbor to its right
+OVERLAP = 2
+
 def subdivide_bounds(bounds_dict, n_subdivide):
+    """
+    given a dict mapping full-size patch ids to bounds, make sliding-window 
+    sub-patches with side length 1/n_subdivide of the original
+    """
     subdiv_bounds = {}
-    if n_subdivide == 1:
-        for (region, patch_num), bounds in bounds_dict.items():
-            subdiv_bounds[(region, patch_num, 0)] = bounds
-    else:
-        for (region, patch_num), bounds in bounds_dict.items():
-            left, right, bottom, top = bounds.xy_fmt()
-            x_width = (right - left) / n_subdivide
-            y_width = (top - bottom) / n_subdivide
-            i = 0
-            for x in np.linspace(left, right, n_subdivide+1)[:-1]:
-                for y in np.linspace(bottom, top, n_subdivide+1)[:-1]:
-                    new_bounds = Bounds.from_minmax([x, y, x+x_width, y+y_width])
-                    subdiv_bounds[(region, patch_num, i)] = new_bounds
-                    i += 1
+    for (region, patch_num), bounds in bounds_dict.items():
+        left, right, bottom, top = bounds.xy_fmt()
+        x_width = (right - left) / n_subdivide
+        y_width = (top - bottom) / n_subdivide
+        i = 0
+        # if left=0, right=100, subdivide=2, and overlap=2, we want: 
+        # left_edges=[0, 25, 50]
+        # this corresponds to the two subdivided patches, from 0 to 50 and 50 to 100, and the
+        # overlap patch between them, 25 to 75
+        left_edges = np.linspace(left, right, (n_subdivide*OVERLAP)+1)[:-OVERLAP]
+        bottom_edges = np.linspace(bottom, top, (n_subdivide*OVERLAP)+1)[:-OVERLAP]
+        for y in bottom_edges:
+            for x in left_edges:
+                new_bounds = Bounds.from_minmax([x, y, x+x_width, y+y_width])
+                subdiv_bounds[(region, patch_num, i)] = new_bounds
+                i += 1
     return subdiv_bounds
 
 
@@ -94,18 +110,29 @@ class LidarPatchGen(keras.utils.Sequence):
             self.y_counts_only = True
         self.nattributes = len(LIDAR_CHANNELS)
         self.npoints = ARGS.npoints
-        self.z_max = 50 # for normalization
         self.batch_time = 0
         self.training = training
 
         # initialize the data
+        print("preparing dataset", self.name, "...")
         self.init_data()
+
+        # sort for reproducibility
+        self.sorted()
+        # set random seed
+        self.init_random()
+        # deterministic random shuffle
+        self.random.shuffle(self.patch_ids)
+
 
     def init_random(self):
         """initialize or reinitialize the random number generatore"""
         self.random = np.random.default_rng(seed=999)
 
     def init_data(self):
+        # set random seed
+        self.init_random()
+
         LIDAR_DIR = DATA_DIR.joinpath("lidar", ARGS.dsname, "regions")
         NAIP_DIR = DATA_DIR.joinpath("NAIP_patches")
         GT_DIR = DATA_DIR.joinpath("ground_truth_csvs")
@@ -155,14 +182,43 @@ class LidarPatchGen(keras.utils.Sequence):
         # free up space
         del orig_lidar
 
-        # filter patches by number of lidar points
-        orig_ids = list(subdiv_lidar.keys())
-        self.patch_ids = [i for i in orig_ids if len(subdiv_lidar[i]) >= self.npoints]
-        self.patch_bounds = {k:v for k,v in subdiv_bounds.items() if k in self.patch_ids}
-        self.patched_lidar = {k:v for k,v in subdiv_lidar.items() if k in self.patch_ids}
+        self.num_small_patches = 0
+        self.num_pts_filled = 0
+        self.max_pts_filled = 0
+        self.patch_ids = []
+        self.patch_bounds = {}
+        self.patched_lidar = {}
+        # clip spurious Z-values, handle small patches
+        for patch_id,pts in subdiv_lidar.items():
+            # remove outlier Z-values
+            pts = pts[ (Z_MIN_CLIP <= pts[:,2]) & (pts[:,2] <= Z_MAX_CLIP) ]
 
+            # handle too-small patches
+            if len(pts) < self.npoints:
+                self.num_small_patches += 1
+                needed = self.npoints - len(pts)
+                if ARGS.handle_small == "drop":
+                    # just skip this patch
+                    continue
+                elif ARGS.handle_small == "fill":
+                    # fill with the rest with -1 pts
+                    filler_pts = np.full((needed, self.nattributes), -1)
+                    pts = np.concatenate([pts, filler_pts], axis=0)
+                elif ARGS.handle_small == "repeat":
+                    # sample points
+                    selected = self.random.choice(pts, needed, axis=0)
+                    pts = np.concatenate([pts, selected], axis=0)
+                else:
+                    raise ValueError("Unknown handle small '{}'".format(ARGS.handle_small))
+                self.num_pts_filled += needed
+                self.max_pts_filled = max(needed, self.max_pts_filled)
+            
+            # add this patch
+            self.patched_lidar[patch_id] = pts
+            self.patch_bounds[patch_id] = subdiv_bounds[patch_id]
+            self.patch_ids.append(patch_id)
+    
         self.num_ids = len(self.patch_ids)
-        self.num_filtered_ids = len(orig_ids) - self.num_ids
         if ARGS.test:
             self.num_ids = 2
 
@@ -181,8 +237,8 @@ class LidarPatchGen(keras.utils.Sequence):
         for patch_key, bound in self.patch_bounds.items():
             left,bott,right,top = bound.minmax_fmt()
             # spatial channels, then spectral channels. Last channel is NDVI
-            min_xyz = [left, bott, 0] + [0, 0, 0, 0, -1]
-            max_xyz = [right, top, self.z_max] + [1, 1, 1, 1, 1]
+            min_xyz = [left, bott, 0]     + [0, 0, 0, 0, -1]
+            max_xyz = [right, top, Z_MAX_CLIP] + [1, 1, 1, 1, 1]
             self.norm_mins[patch_key] = np.array(min_xyz)
             self.norm_maxs[patch_key] = np.array(max_xyz)
 
@@ -201,13 +257,6 @@ class LidarPatchGen(keras.utils.Sequence):
             y_pts = self.patched_gt[patch_id]
             y_pts = (y_pts - mins[:2]) / (maxs[:2] - mins[:2])
             self.patched_gt[patch_id] = y_pts
-
-        # sort for reproducibility
-        self.sorted()
-        # set random seed
-        self.init_random()
-        # deterministic random shuffle
-        self.random.shuffle(self.patch_ids)
 
         # create batch objects
         self.x_batch_shape = (self.batch_size, self.npoints, self.nattributes)
@@ -375,7 +424,15 @@ class LidarPatchGen(keras.utils.Sequence):
     def summary(self):
         print("LidarPatchGen '{}' from dataset '{}' regions:".format(self.name, self.dsname),  ", ".join(self.regions))
         print(" ", self.num_ids, "patches, in", len(self), "batches, batchsize", self.batch_size)
-        print(" ", self.npoints, "points per patch.", self.num_filtered_ids, "patches dropped for having too few lidar points")
+        print(" ", self.npoints, "points per patch.")
+        total_pts = sum([x.shape[0] for x in self.patched_lidar.values()])
+        print(" ", total_pts, "potential input points in dataset (not all get used every epoch)")
+        if ARGS.handle_small == "drop":
+            print(" ", self.num_small_patches, "patches dropped for having too few lidar points")
+        else:
+            print(" ", self.num_small_patches, "patches had too few points, were filled/repeated")
+            print(" ", self.num_pts_filled, "total pts added in patches")
+            print("  max points added:", self.max_pts_filled)
         try:
             print("  xbatch shape:", self.x_batch_shape)
             print("  ybatch shape:", self.y_batch_shape)
@@ -442,11 +499,12 @@ def get_test_gen(dsname, regions):
 
 
 if __name__ == "__main__":
-    ARGS.dsname = "fullchannels"
+    ARGS.dsname = "nohagclip"
+    ARGS.handle_small = "fill"
     ARGS.batchsize = 16
-    ARGS.subdivide = 3
+    ARGS.subdivide = 5
     ARGS.loss = "mmd"
-    ARGS.npoints = 500
+    ARGS.npoints = 800
     ARGS.noise_sigma = 0.0
     ARGS.test = False
 

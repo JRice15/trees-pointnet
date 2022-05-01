@@ -51,6 +51,47 @@ class Bounds:
         return cls(**kwargs)
 
 
+class PatchID:
+
+    def __init__(self, region, patch_num):
+        self.region = region
+        self.patch_num = patch_num
+    
+    def __repr__(self):
+        return f"PatchID({self.region}, {self.patch_num})"
+    
+    def __hash__(self):
+        return hash(self.region, self.patch_num)
+
+    def __eq__(self, other):
+        if other.__class__ != self.__class__:
+            return False
+        return self.region == other.region and self.patch_num == other.patch_num
+
+    def to_subpatch_id(self, x, y):
+        return SubPatchID(self.region, self.patch_num, x, y)
+
+
+class SubPatchID(PatchID):
+
+    def __init__(self, region, patch_num, x, y):
+        super().__init__(region, patch_num)
+        self.x = x
+        self.y = y
+    
+    def __repr__(self):
+        return f"PatchID({self.region}, {self.patch_num}, {self.x} {self.y})"
+
+    def __hash__(self):
+        return hash(self.region, self.patch_num, self.x, self.y)
+
+    def __eq__(self, other):
+        return super().__eq__(other) and self.x == other.x and self.y == other.y
+
+    def get_parent_patch_id(self):
+        return PatchID(self.region, self.patch_num)
+
+
 def gaussian(x, center, sigma=0.02):
     const = (2 * np.pi * sigma) ** -0.5
     exp = np.exp( -np.sum((x - center) ** 2, axis=-1) / (2 * sigma ** 2))

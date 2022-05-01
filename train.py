@@ -61,6 +61,8 @@ datagrp.add_argument("--subdivide",type=int,default=3,help="number of times to s
 datagrp.add_argument("--regions",default="ALL",nargs="+",help="list of region names, defaults to all available")
 datagrp.add_argument("--dsname",help="name of generated dataset to use (required if multiple exist)")
 datagrp.add_argument("--noise-sigma",type=float,default=None,help="add gaussian noise to input points")
+datagrp.add_argument("--handle-small",choices=["drop","fill","repeat"],default="fill",
+    help="how to handle patches with fewer than npoints: drop them, fill with (-1,-1,-1), or double up valid points until it meets the threshold")
 
 # training hyperparameters
 hypergrp = parser.add_argument_group("training hyperparameters")
@@ -80,6 +82,7 @@ modelgrp.add_argument("--size-multiplier",type=float,default=1.0,help="number to
 modelgrp.add_argument("--dropout",dest="dropout_rate",type=float,default=0.0,help="dropout rate")
 modelgrp.add_argument("--no-tnet1",dest="use_tnet_1",action="store_false",help="whether to use input transform TNet")
 modelgrp.add_argument("--no-tnet2",dest="use_tnet_2",action="store_false",help="whether to use feature transform TNet")
+modelgrp.add_argument("--conf-act",default="relu",help="activation to use on output confidences")
 
 modelgrp.add_argument("--pnet2",dest="use_pnet2",action="store_true",help="use pointnet++ (aka pointnet2)")
 modelgrp.add_argument("--batchnorm",dest="use_batchnorm",action="store_true",help="pnet2: whether to use batchnormalization")
@@ -90,6 +93,8 @@ lossgrp.add_argument("--gaussian-sigma", "--sigma",type=float,default=4,
         help="in meters, std dev of gaussian smoothing applied in the loss (mmd and gridmse modes)")
 lossgrp.add_argument("--mmd-kernel",default="gaussian",
         help="mmd loss: type of kernel")
+lossgrp.add_argument("--grid-agg",choices=["max","sum"],default="sum",
+        help="gridmse loss: how to aggregate predicted points gridified")
 # lossgrp.add_argument("--dist-weight",type=float,default=0.9,
 #         help="treetop loss: weight on distance vs count loss")
 lossgrp.add_argument("--ortho-weight",type=float,default=0.001,

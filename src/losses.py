@@ -55,7 +55,6 @@ def tf_gridify_pts(weighted_pts, gaussian_sigma, resolution=50):
     args:
         weighted_pts: (x,y,weight) locations
         guassian_sigma: the stddev of the guassian blur
-        mode: how to aggregate values at each grid location. "max"|"sum"|"second-highest"
     """
     batchsize = tf.shape(weighted_pts)[0]
 
@@ -74,12 +73,12 @@ def tf_gridify_pts(weighted_pts, gaussian_sigma, resolution=50):
     weights = weighted_pts[...,-1]
     gridvals = tf_gaussian(gridcoords, pts, sigma=gaussian_sigma)
     gridvals = gridvals * weights
-    # if mode == "sum":
-    gridvals = tf.reduce_sum(gridvals, axis=-1)
-    # elif mode == "max":
-        # gridvals = tf.reduce_max(gridvals, axis=-1)
-    # else:
-        # raise ValueError("Unknown gridify_pts mode")
+    if ARGS.grid_agg == "sum":
+        gridvals = tf.reduce_sum(gridvals, axis=-1)
+    elif ARGS.grid_agg == "max":
+        gridvals = tf.reduce_max(gridvals, axis=-1)
+    else:
+        raise ValueError("Unknown gridify_pts mode")
     return gridvals
 
 
@@ -145,7 +144,7 @@ def max_mean_discrepancy():
         kernel = laplacian_kernel_func
         kernel_constant = (2 * scaled_sigma) ** -0.5
     else:
-        raise ValueError("Unknown mmd kernel '{}' to mmd loss".format(ARGS.mmd_kernel))
+        raise ValueError("Unknown mmd kernel '{}' to mmd_loss".format(ARGS.mmd_kernel))
 
     @tf.function(experimental_relax_shapes=True)
     def mmd_loss_term(a, b):
