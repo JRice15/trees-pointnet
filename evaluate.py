@@ -38,8 +38,8 @@ GRID_RESOLUTION = 256
 def pointmatch(all_gts, all_preds, conf_threshold, prune_unpromising=True):
     """
     args:
-        all_gts: array of shape (npatches,npoints,3) where channels are (x,y,isvalid)
-        all_preds: array of shape (npatches,npoints,3) where channels are (x,y,confidence)
+        all_gts: dict, mapping patchid to array of shape (ntrees,3) where channels are (x,y,isvalid)
+        all_preds: dict, mappin patchid to array of shape (npatches,npoints,3) where channels are (x,y,confidence)
         conf_threshold: abs confidence threshold that predicted points must meet to be considered a predicted tree
         prune_unpromising: whether to stop if 1 or fewer true positives are recorded after 100 patches
     returns:
@@ -53,28 +53,28 @@ def pointmatch(all_gts, all_preds, conf_threshold, prune_unpromising=True):
     all_tp_dists = []
     pruned = False
 
-    for i in range(len(all_gts)):
-        # pruning early
-        if i == 100 and prune_unpromising:
+
+    for i,patch_id in enumerate(all_gts.keys()):
+        # pruning early if we've gotten only 0 or 1 true positives
+        if i == 50 and prune_unpromising:
             if all_tp <= 1:
                 pruned = True
                 break
 
-        gt = all_gts[i]
-        pred = all_preds[i]
+        gt = all_gts[patch_id]
+        try:
+            pred = all_preds[patch_id]
+        except KeyError:
+            pred = np.empty((0,3))
 
         # filter valid gt trees and preds
         gt = gt[gt[:,2] > 0.5]
         pred = pred[pred[:,2] >= conf_threshold]
 
         if len(gt) == 0:
-            all_tp += 0
             all_fp += len(pred)
-            all_fn += 0
             continue
         elif len(pred) == 0:
-            all_tp += 0
-            all_fp += 0
             all_fn += len(gt)
             continue
 
@@ -94,19 +94,16 @@ def pointmatch(all_gts, all_preds, conf_threshold, prune_unpromising=True):
         
         # associated pred trees = true positives
         tp_inds = np.where(np.any(np.logical_not(np.isinf(dists)),axis=0))[0]
-        tp = len(tp_inds)
+        all_tp += len(tp_inds)
 
         # un-associated pred trees = false positives
         fp_inds = np.where(np.all(np.isinf(dists),axis=0))[0]
-        fp = len(fp_inds)
+        all_fp += len(fp_inds)
 
         # un-associated gt trees = false negatives
         fn_inds = np.where(np.all(np.isinf(dists),axis=1))[0]
-        fn = len(fn_inds)
+        all_fn += len(fn_inds)
         
-        all_tp += tp
-        all_fp += fp
-        all_fn += fn
         if len(tp_inds):
             tp_dists = np.min(dists[:,tp_inds],axis=0)
             all_tp_dists.append(tp_dists)

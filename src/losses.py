@@ -101,7 +101,7 @@ def grid_mse():
         # "squared l2 norm" = mean squared error
         square_error_grid = (pred_grid - gt_grid) ** 2
         err = tf.reduce_mean(square_error_grid, axis=[1, 2])
-        return err / 10 # scaling factor
+        return err
     
     return loss, None
 

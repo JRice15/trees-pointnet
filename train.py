@@ -70,7 +70,7 @@ hypergrp = parser.add_argument_group("training hyperparameters")
 hypergrp.add_argument("--optimizer",choices=list(optimizer_options.keys()),default="adam")
 hypergrp.add_argument("--epochs",type=int,default=500)
 hypergrp.add_argument("--batchsize",type=int,default=16)
-hypergrp.add_argument("--lr",type=float,default=0.001,help="initial learning rate")
+hypergrp.add_argument("--lr",type=float,default=1e-2,help="initial learning rate")
 hypergrp.add_argument("--reducelr-factor",type=float,default=0.2,help="factor to multiply lr by for reducelronplateau")
 hypergrp.add_argument("--reducelr-patience",type=int,default=8,help="number of epochs with no valloss improvement to reduce lr")
 
@@ -90,7 +90,7 @@ modelgrp.add_argument("--batchnorm",dest="use_batchnorm",action="store_true",hel
 
 # loss parameters
 lossgrp = parser.add_argument_group("loss parameters")
-lossgrp.add_argument("--gaussian-sigma", "--sigma",type=float,default=4,
+lossgrp.add_argument("--gaussian-sigma", "--sigma",type=float,default=3,
         help="in meters, std dev of gaussian smoothing applied in the loss (mmd and gridmse modes)")
 lossgrp.add_argument("--mmd-kernel",default="gaussian",
         help="mmd loss: type of kernel")
