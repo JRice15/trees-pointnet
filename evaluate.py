@@ -1,147 +1,38 @@
 
+import argparse
 import contextlib
 import datetime
 import glob
 import json
-import argparse
 import os
-from pprint import pprint
-from pathlib import PurePath
 import time
+from pathlib import PurePath
+from pprint import pprint
 
-import matplotlib.pyplot as plt
 import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
-from tqdm import tqdm
-from sklearn.metrics import pairwise_distances
+import tensorflow as tf
 from scipy.optimize import linear_sum_assignment
 from skimage.feature import peak_local_max
-
-import tensorflow as tf
+from sklearn.metrics import pairwise_distances
 from tensorflow import keras
 from tensorflow.keras import backend as K
+from tqdm import tqdm
 
-from src import DATA_DIR, REPO_ROOT, ARGS, MODEL_SAVE_FMT, patch_generator
+from src import ARGS, DATA_DIR, MODEL_SAVE_FMT, REPO_ROOT
+from src.patch_generator import get_datasets
 from src.losses import get_loss
 from src.models import pointnet
 from src.tf_utils import load_saved_model
-from src.utils import raster_plot, glob_modeldir, scaled_0_1, gridify_pts
+from src.utils import (glob_modeldir, gridify_pts, group_by_composite_key,
+                       plot_one_example, raster_plot, scaled_0_1)
 
 # max dist that two points can be considered matched, in meters
 MAX_MATCH_DIST = 6
+# size of grids to gridify
+GRID_RESOLUTION = 256
 
-def parse_eval_args():
-    """
-    Parse arguments
-    """
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--name",required=True,help="name of model to run, with possible timestamp in front")
-    parser.add_argument("--sets",dest="eval_sets",default=("train","val","test"),nargs="+",help="datasets to evaluate on: train, val, and/or test. test automatically selects val as well")
-    parser.add_argument("--noplot",action="store_true")
-    parser.parse_args(namespace=ARGS)
-
-
-def plot_one_example(X, Y, patch_id, outdir, pred=None, pred_peaks=None, 
-        naip=None, zero_one_bounds=False):
-    """
-    generate raster plots for one example input and output from a dataset
-    args:
-        x: input from patch generator
-        y: targets from patch generator
-        patch_id
-        outdir: pathlib.PurePath
-        pred: raw predictions from network
-        pred_peaks: thresholded peaks from the predictions blurred to grid; ie the true final predictions
-        naip: naip image
-    """
-    if not os.path.exists(outdir):
-        os.makedirs(outdir, exist_ok=True)
-
-    patchname = "_".join([str(i) for i in patch_id])
-    ylocs = Y[Y[...,2] == 1][...,:2]
-
-    gt_ntrees = len(ylocs)
-    x_locs = X[...,:2]
-    x_heights = X[...,2]
-
-    if zero_one_bounds:
-        sigma = scaled_0_1(ARGS.gaussian_sigma)
-    else:
-        sigma = ARGS.gaussian_sigma
-
-    markings = {"gt trees": ylocs}
-    if pred_peaks is not None:
-        markings["predicted trees"] = pred_peaks[...,:2]
-
-    # lidar height (second-highest mode, to avoid noise)
-    raster_plot(x_locs, weights=x_heights, 
-        weight_label="height",
-        abs_sigma=sigma, 
-        mode="second-highest", 
-        filename=outdir.joinpath("{}_lidar_height".format(patchname)), 
-        mark=markings, 
-        zero_one_bounds=zero_one_bounds)
-    
-    # lidar ndvi
-    x_ndvi = X[...,-1]
-    raster_plot(x_locs, weights=x_ndvi, 
-        weight_label="ndvi", 
-        mode="max",
-        abs_sigma=sigma, 
-        filename=outdir.joinpath("{}_lidar_ndvi".format(patchname)),
-        mark=markings, 
-        zero_one_bounds=zero_one_bounds)
-
-    if pred is not None:
-        # prediction confidence raster
-        pred_locs = pred[...,:2]
-        pred_weights = pred[...,2]
-        raster_plot(pred_locs, weights=pred_weights, 
-            weight_label="prediction confidence",
-            abs_sigma=sigma, 
-            filename=outdir.joinpath("{}_pred".format(patchname)),
-            mode="sum", 
-            mark=markings, 
-            zero_one_bounds=zero_one_bounds)
-
-    if naip is not None:
-        plt.imshow(naip[...,:3]) # only use RGB
-        plt.colorbar()
-        plt.tight_layout()
-        plt.savefig(outdir.joinpath(patchname+"_NAIP_RGB.png"))
-        plt.clf()
-        plt.close()
-
-
-def find_local_maxima(preds, bounds, min_conf_threshold=None, grid_resolution=64,
-        gridify_mode="sum"):
-    """
-    args:
-        preds: array of shape (npatches,npoints,3) where channels are (x,y,conf)
-        bounds: list of Bounds
-        conf_threshold
-    """
-    maxima = []
-    for i,pred in tqdm(enumerate(preds), total=len(preds)):
-        # blur preds to grid
-        gridvals, gridcoords = gridify_pts(bounds[i], pred[:,:2], pred[:,2], 
-                    abs_sigma=ARGS.gaussian_sigma, resolution=grid_resolution,
-                    mode=gridify_mode)
-
-        # find local maxima
-        peak_pixel_inds = peak_local_max(gridvals, 
-                                threshold_abs=min_conf_threshold, # must meet the min threshold
-                                min_distance=2) # disallow maxima in adjacent pixels
-        peak_pixel_inds = tuple(peak_pixel_inds.T)
-
-        # get geo coords of the maxima pixels
-        peak_confs = gridvals[peak_pixel_inds]
-        peak_coords = gridcoords[peak_pixel_inds]
-        # convert back to format of input preds
-        peak_pts = np.concatenate((peak_coords, peak_confs[...,np.newaxis]), axis=-1)
-        maxima.append(peak_pts)
-
-    return maxima
 
 
 def pointmatch(all_gts, all_preds, conf_threshold, prune_unpromising=True):
@@ -239,6 +130,7 @@ def pointmatch(all_gts, all_preds, conf_threshold, prune_unpromising=True):
     else:
         rmse = -1
     
+    # calling float/int on a lot of these because json doesn't like numpy floats/ints
     results = {
         'pruned': pruned,
         'tp': int(all_tp),
@@ -248,46 +140,105 @@ def pointmatch(all_gts, all_preds, conf_threshold, prune_unpromising=True):
         'recall': float(recall),
         'fscore': float(fscore),
         'rmse': float(rmse),
+        'threshold': float(conf_threshold),
     }
     return results
 
 
-def run_pointmatching(gts, preds, thresholds):
+
+def find_local_maxima(pred_grids, bounds, min_conf_threshold=None):
     """
     args:
-        gts: array of shape (npatches,npoints,3) where channels are (x,y,isvalid)
-        preds: array of shape (npatches,npoints,3) where channels are (x,y,confidence)
+        pred_grids: outputs of gridify_preds(...)
+        bounds: list of Bounds
+        min_conf_threshold: smallest conf threshold
     returns:
-        dict of pointmatching stats
+        dict: mapping patch id to local peaks, shape (N,3) where channels are x,y,confidence
     """
-    results = []
-    for thresh in tqdm(thresholds):
-        result = pointmatch(gts, preds, thresh)
-        results.append(result)
+    maxima = {}
+    for patch_id,pred_dict in tqdm(pred_grids.items(), total=len(pred_grids)):
+        gridvals = pred_dict["vals"]
+        gridcoords = pred_dict["coords"]
 
-    # find best, by fscore
-    best_idx = np.argmax([x["fscore"] for x in results])
+        # find local maxima
+        peak_pixel_inds = peak_local_max(gridvals, 
+                                threshold_abs=min_conf_threshold, # must meet the min threshold
+                                min_distance=2) # disallow maxima in adjacent pixels
+        peak_pixel_inds = tuple(peak_pixel_inds.T)
 
-    best_stats = {k:results[best_idx][k] for k in results[0].keys()}
-    best_stats["threshold"] = thresholds[best_idx]
+        # get geo coords of the maxima pixels
+        peak_confs = gridvals[peak_pixel_inds]
+        peak_coords = gridcoords[peak_pixel_inds]
+        # convert back to format of input preds
+        peak_pts = np.concatenate((peak_coords, peak_confs[...,np.newaxis]), axis=-1)
+        maxima[patch_id] = peak_pts
 
-    all_stats = {k:[x[k] for x in results] for k in results[0].keys()}
-    all_stats["threshold"] = thresholds
-
-    stats = {
-        "best": best_stats,
-        "all": all_stats,
-    }
-    return stats
-
-
+    return maxima
 
 
-def evaluate_model(patchgen, model, model_dir, pointmatch_thresholds):
+def gridify_preds(preds, bounds):
     """
-    generate predictions, vizualizations, and evaluation metrics from a model 
+    args:
+        preds: dict mapping patch id to pred pts (must be original CRS, not 0-1 scale)
+        bounds: dict mapping patch id to Bounds
+    returns:
+        dict: mapping patch id to another dict, with keys "vals" and "coords"
+    """
+    pred_grids = {}
+    for key, pred in preds.items():
+        vals, coords = gridify_pts(bounds[key], pred[:,:2], pred[:,2], 
+                abs_sigma=ARGS.gaussian_sigma, mode=ARGS.grid_agg) # TODO test both grid-agg modes?
+        pred_grids[key] = {"vals": vals, "coords": coords}
+
+    # pred_grids_grouped = group_by_composite_key(pred_grids, first_n=2)
+    return pred_grids
+
+
+def overlap_by_hard_cutoff(preds_subdiv, bounds_subdiv):
+    """
+    converts overlapping sub-patches back into full patches
+    args:
+        preds_subdiv: dict, mapping subdiv patch id to pts
+        bounds_subdiv: dict, mappng subdiv patch id to bounds
+    returns:
+        dict: mapping full patch id to pts
+    """
+    preds_subdiv_chopped = {}
+    for patch_id, preds in preds_subdiv.items():
+        xmin, ymin, xmax, ymax = bounds_subdiv[patch_id].to_minmax()
+        x_cut = (xmax - xmin) / 4
+        y_cut = (ymax - ymin) / 4
+        region, patchnum, px, py = patch_id
+        # check for neighbor patches
+        if (region, patchnum, px-1, py) in preds_subdiv:
+            xmin += x_cut
+        if (region, patchnum, px+1, py) in preds_subdiv:
+            xmax -= x_cut
+        if (region, patchnum, px, py-1) in preds_subdiv:
+            ymin += y_cut
+        if (region, patchnum, px, py+1) in preds_subdiv:
+            ymax -= y_cut
+        # make relevant chops
+        x = preds[:,0]
+        y = preds[:,1]
+        preds = preds[(x >= xmin) & (x < xmax) & (y >= ymin) & (y < ymax)]
+        preds_subdiv_chopped[patch_id] = preds
+
+    # group by (region, patchnum) and concat
+    preds_combined = group_by_composite_key(preds_subdiv_chopped, first_n=2,
+                        agg_f=lambda x: np.concatenate(list(x.values(), axis=0)))
+
+    return preds_combined
+
+
+
+
+def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
+    """
+    generate predictions, visualizations, and evaluation metrics from a model 
     on a LidarPatchGen dataset
     args:
+        patchgen: dataset, patch generator
         model: Keras Model to predict with
         model_dir: pathlib.PurePath of model's output
         pointmatch_thresholds: list of floats
@@ -300,81 +251,62 @@ def evaluate_model(patchgen, model, model_dir, pointmatch_thresholds):
     """
     print("\nGenerating predictions...")
     assert patchgen.batch_size == 1
-    patchgen.sorted()
-    X, Y = patchgen.load_all()
-    X = np.squeeze(X.numpy())
-    Y = np.squeeze(Y.numpy())
-    preds_raw = np.squeeze(model.predict(X))
-    patch_subdiv_ids = patchgen.patch_ids
-    patch_bounds = [patchgen.get_patch_bounds(i) for i in patch_ids]
+    
+    X_subdiv, _ = patchgen.load_all()
+    X_subdiv = np.squeeze(X_subdiv.numpy())
+    preds_subdiv = np.squeeze(model.predict(X_subdiv))
+
+    # associate each pred set with its patch id
+    preds_subdiv = dict(zip(patchgen.patch_ids, preds_subdiv))
 
     # denormalize data
-    for i in range(len(X)):
-        X[i] = patchgen.denormalize_pts(X[i], patch_id=patch_ids[i])
-        preds_raw[i,:,:2] = patchgen.denormalize_pts(preds_raw[i,:,:2], patch_id=patch_ids[i])
-        Y[i,:,:2] = patchgen.denormalize_pts(Y[i,:,:2], patch_id=patch_ids[i])
+    for patch_id,pts in preds_subdiv.items():
+        pts[:,:2] = patchgen.denormalize_pts(pts[:,:2], patch_id)
+        preds_subdiv[patch_id] = pts
 
-    """
-    Combine subdivided overlapping patches, find local maxima
-    """
-    # ids of whole patches, unsubdivided
-    whole_patch_ids = list(set([(pid[0], pid[1]) for pid in patch_subdiv_ids]))
-    
-    sliding_window_interpolate(patch_subdiv_ids, X)
+    # combine with overlap
+    preds_full = overlap_by_hard_cutoff(preds_subdiv, patchgen.bounds_subdiv)
 
     # find localmax peak predictions
     print("Finding prediction maxima...")
-    pred_peaks = find_local_maxima(preds_raw, patch_bounds, min_conf_threshold=min(pointmatch_thresholds))
-
-    # # save raw sample prediction
-    # print("Saving raw predictions...")
-    # with open(outdir.joinpath("sample_predictions.txt"), "w") as f:
-    #     f.write("First 5 predictions, ground truths:\n")
-    #     for i in range(min(5, len(preds_raw))):
-    #         f.write("pred raw {}:\n".format(i))
-    #         f.write(str(preds_raw[i])+"\n")
-    #         f.write("pred localmax peaks {}:\n".format(i))
-    #         f.write(str(pred_peaks[i])+"\n")
-    #         f.write("gt {}:\n".format(i))
-    #         f.write(str(Y[i])+"\n")
-    #         f.write("first 100 input points {}:\n".format(i))
-    #         f.write(str(X[i,:100])+"\n")
+    pred_peaks = find_local_maxima(preds_full, patchgen.bounds_full, min_conf_threshold=min(pointmatch_thresholds))
 
     """
     Pointmatching
     """
     print("Pointmatching...")
+    # get full ground-truth
+    Y = patchgen.gt_full
 
-    pointmatch_stats = run_pointmatching(Y, pred_peaks, pointmatch_thresholds)
+    results = []
+    for thresh in tqdm(pointmatch_thresholds):
+        result = pointmatch(Y, pred_peaks, thresh)
+        results.append(result)
+
+    # find best, by fscore
+    best_idx = np.argmax([x["fscore"] for x in results])
+
+    best_stats = {k:results[best_idx][k] for k in results[0].keys()}
+    all_stats = {k:[x[k] for x in results] for k in results[0].keys()}
 
     print("results:")
-    pprint(pointmatch_stats["best"])
+    pprint(best_stats)
+
+    pointmatch_stats = {
+        "best": best_stats,
+        "all": all_stats,
+    }
     with open(outdir.joinpath("results_pointmatch.json"), "w") as f:
         json.dump(pointmatch_stats, f, indent=2)
 
-    best_thresh = pointmatch_stats["best"]["threshold"]
+    return pointmatch_stats
 
-    # threshold peaks by best threshold
-    for i in range(len(pred_peaks)):
-        pred_peaks[i] = pred_peaks[i][pred_peaks[i][:,2] >= best_thresh]
 
+def evaluate_loss_metrics(patchgen, model, outdir):
     """
-    data visualizations
-    """
-    if not ARGS.noplot:
-        if ARGS.output_mode in ("seg", "dense"):
-            print("Generating visualizations...")
-            VIS_DIR = outdir.joinpath("visualizations")
-            os.makedirs(VIS_DIR, exist_ok=True)
-
-            # grab random 10 examples
-            for i in range(0, len(patch_ids), len(patch_ids)//10):
-                naip = patchgen.get_naip(patch_ids[i])
-                plot_one_example(X[i], Y[i], patch_ids[i], pred=preds_raw[i], naip=naip, 
-                    outdir=VIS_DIR, pred_peaks=pred_peaks[i])
-
-    """
-    Evaluate Model Metrics
+    Evaluate model's builtin metrics on a dataset
+    args:
+        patchgen
     """
     print("Evaluating model's metrics...")
 
@@ -391,7 +323,7 @@ def evaluate_model(patchgen, model, model_dir, pointmatch_thresholds):
     for k,v in results.items():
         print(k+":", v)
     
-    return pointmatch_stats
+    return results
 
 
 def main():
@@ -416,32 +348,47 @@ def main():
 
     model = load_saved_model(MODEL_DIR)
 
-    train_gen, val_gen = patch_generator.get_train_val_gens(ARGS.dsname, ARGS.regions, train_batchsize=1, val_batchsize=1)
+    datasets = get_datasets(ARGS.dsname, ARGS.regions, ARGS.eval_sets, train_batchsize=1, val_batchsize=1)
+    datasets = dict(zip(ARGS.eval_sets, datasets))
 
     # grid search approximating log-scale
     THRESHOLDS = list(np.arange(0, 0.030, 0.005)) + list(np.arange(0.030, 0.100, 0.010)) + list(np.arange(0.100, 1, 0.025))
+    # GRIDIFY_MODES = ["sum", "max"]
 
     # train set evaluation
     if "train" in ARGS.eval_sets:
+        train_gen = datasets["train"]
         train_gen.training = False
         train_gen.summary()
-        evaluate_model(train_gen, model, MODEL_DIR, THRESHOLDS)
+        evaluate_loss_metrics(train_gen, model, MODEL_DIR)
+        evaluate_pointmatching(train_gen, model, MODEL_DIR, THRESHOLDS)
 
+    # validation set evaluation
     if "val" in ARGS.eval_sets or "test" in ARGS.eval_sets:
-        # validation set evaluation
+        val_gen = datasets["val"]
         val_gen.summary()
-        pointmatch_stats = evaluate_model(val_gen, model, MODEL_DIR, THRESHOLDS)
-        best_thresh = pointmatch_stats["best"]["threshold"]
+        evaluate_loss_metrics(val_gen, model, MODEL_DIR)
+        pointmatch_stats = evaluate_pointmatching(val_gen, model, MODEL_DIR, THRESHOLDS)
+        val_best_thresh = pointmatch_stats["best"]["threshold"]
 
+    # test set evaluation
     if "test" in ARGS.eval_sets:
-        # test set evaluation
-        test_gen = patch_generator.get_test_gen(ARGS.dsname, ARGS.regions)
+        test_gen = datasets["test"]
         test_gen.summary()
-        evaluate_model(test_gen, model, MODEL_DIR, [best_thresh])
+        evaluate_loss_metrics(test_gen, model, MODEL_DIR)
+        evaluate_pointmatching(test_gen, model, MODEL_DIR, [val_best_thresh])
 
 
 
 
 if __name__ == "__main__":
-    parse_eval_args()
+    """
+    Parse arguments
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--name",required=True,help="name of model to run, with possible timestamp in front")
+    parser.add_argument("--sets",dest="eval_sets",default=("train","val","test"),nargs="+",help="datasets to evaluate on: train, val, and/or test. test automatically selects val as well")
+    parser.add_argument("--noplot",action="store_true")
+    parser.parse_args(namespace=ARGS)
+
     main()

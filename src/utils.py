@@ -51,47 +51,6 @@ class Bounds:
         return cls(**kwargs)
 
 
-class PatchID:
-
-    def __init__(self, region, patch_num):
-        self.region = region
-        self.patch_num = patch_num
-    
-    def __repr__(self):
-        return f"PatchID({self.region}, {self.patch_num})"
-    
-    def __hash__(self):
-        return hash(self.region, self.patch_num)
-
-    def __eq__(self, other):
-        if other.__class__ != self.__class__:
-            return False
-        return self.region == other.region and self.patch_num == other.patch_num
-
-    def to_subpatch_id(self, x, y):
-        return SubPatchID(self.region, self.patch_num, x, y)
-
-
-class SubPatchID(PatchID):
-
-    def __init__(self, region, patch_num, x, y):
-        super().__init__(region, patch_num)
-        self.x = x
-        self.y = y
-    
-    def __repr__(self):
-        return f"PatchID({self.region}, {self.patch_num}, {self.x} {self.y})"
-
-    def __hash__(self):
-        return hash(self.region, self.patch_num, self.x, self.y)
-
-    def __eq__(self, other):
-        return super().__eq__(other) and self.x == other.x and self.y == other.y
-
-    def get_parent_patch_id(self):
-        return PatchID(self.region, self.patch_num)
-
-
 def gaussian(x, center, sigma=0.02):
     const = (2 * np.pi * sigma) ** -0.5
     exp = np.exp( -np.sum((x - center) ** 2, axis=-1) / (2 * sigma ** 2))
@@ -196,6 +155,81 @@ def raster_plot(pts, filename, *, rel_sigma=None, abs_sigma=None, weights=None, 
     plt.savefig(filename)
     plt.clf()
     plt.close()
+
+
+
+def plot_one_example(X, Y, patch_id, outdir, pred=None, pred_peaks=None, 
+        naip=None, zero_one_bounds=False):
+    """
+    generate raster plots for one example input and output from a dataset
+    args:
+        x: input from patch generator
+        y: targets from patch generator
+        patch_id
+        outdir: pathlib.PurePath
+        pred: raw predictions from network
+        pred_peaks: thresholded peaks from the predictions blurred to grid; ie the true final predictions
+        naip: naip image
+        zero_one_bounds: whether points are in 0-1 scale (instead of epsg26911)
+    """
+    if not os.path.exists(outdir):
+        os.makedirs(outdir, exist_ok=True)
+
+    patchname = "_".join([str(i) for i in patch_id])
+    ylocs = Y[Y[...,2] == 1][...,:2]
+
+    gt_ntrees = len(ylocs)
+    x_locs = X[...,:2]
+    x_heights = X[...,2]
+
+    if zero_one_bounds:
+        sigma = scaled_0_1(ARGS.gaussian_sigma)
+    else:
+        sigma = ARGS.gaussian_sigma
+
+    markings = {"gt trees": ylocs}
+    if pred_peaks is not None:
+        markings["predicted trees"] = pred_peaks[...,:2]
+
+    # lidar height (second-highest mode, to avoid noise)
+    raster_plot(x_locs, weights=x_heights, 
+        weight_label="height",
+        abs_sigma=sigma,
+        mode="second-highest", 
+        filename=outdir.joinpath("{}_lidar_height".format(patchname)), 
+        mark=markings, 
+        zero_one_bounds=zero_one_bounds)
+    
+    # lidar ndvi
+    x_ndvi = X[...,-1]
+    raster_plot(x_locs, weights=x_ndvi, 
+        weight_label="ndvi", 
+        mode="max",
+        abs_sigma=sigma, 
+        filename=outdir.joinpath("{}_lidar_ndvi".format(patchname)),
+        mark=markings, 
+        zero_one_bounds=zero_one_bounds)
+
+    if pred is not None:
+        # prediction confidence raster
+        pred_locs = pred[...,:2]
+        pred_weights = pred[...,2]
+        raster_plot(pred_locs, weights=pred_weights, 
+            weight_label="prediction confidence",
+            abs_sigma=sigma, 
+            filename=outdir.joinpath("{}_pred".format(patchname)),
+            mode="sum", 
+            mark=markings, 
+            zero_one_bounds=zero_one_bounds)
+
+    if naip is not None:
+        plt.imshow(naip[...,:3]) # only use RGB
+        plt.colorbar()
+        plt.tight_layout()
+        plt.savefig(outdir.joinpath(patchname+"_NAIP_RGB.png"))
+        plt.clf()
+        plt.close()
+
 
 
 def glob_modeldir(modelname):
@@ -323,4 +357,42 @@ def scaled_0_1(distance):
     """
     patch_len_meters = get_avg_patch_size() / ARGS.subdivide
     return distance / patch_len_meters
+
+
+def group_by_composite_key(d, first_n, agg_f=None):
+    """
+    given dict d, with keys that are tuples, group by selecting the first n elements
+    of each key. Example with first_n=2:
+    {
+        ('a', 'b', 'c'): 1
+        ('a', 'b', 'd'): 2
+    } 
+    -> 
+    {
+        ('a', 'b'): {
+            ('c',): 1,
+            ('d',): 2
+        }
+    }
+    args:
+        d: dict
+        first_n: int, number of elements in key to groupby
+        agg_f: None, or function that aggregates each subdict
+    returns:
+        dict of dicts, if agg_f is None
+        dict of Any, if agg_f if function dict->Any
+    """
+    result = {}
+    for key, val in d.items():
+        start_key = key[:first_n]
+        end_key = key[first_n:]
+        if start_key not in result:
+            result[start_key] = {}     
+        result[start_key][end_key] = val
+    if agg_f is not None:
+        for key in list(result.keys()):
+            result[key] = agg_f(result[key])
+    return result
+
+
 

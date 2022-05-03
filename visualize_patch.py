@@ -26,7 +26,7 @@ def viz_pointcloud(xyz):
 def main():
     from src import DATA_DIR, ARGS
     from src.utils import get_default_dsname, get_all_regions
-    from src.patch_generator import get_train_val_gens, get_test_gen, get_tvt_split
+    from src.patch_generator import get_datasets, get_tvt_split
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--dsname",help="dataset name")
@@ -39,8 +39,7 @@ def main():
     if args.dsname is None:
         args.dsname = get_default_dsname()
 
-    # from raw data
-
+    ### sualize pts from raw data
 
     path = DATA_DIR.joinpath("lidar", args.dsname, "regions", args.region, "lidar_patch_{}.npy".format(args.patch))
     xyz = np.load(path.as_posix())[:,:3]
@@ -51,11 +50,11 @@ def main():
     viz_pointcloud(xyz)
 
 
-    # from training dataset loader
+    ### visualize pts from training dataset loader
 
     # set fake dataset params
     ARGS.dsname = args.dsname
-    ARGS.handle_small = "fill"
+    ARGS.handle_small = "drop"
     ARGS.batchsize = 1
     ARGS.subdivide = 5
     ARGS.loss = "mmd"
@@ -69,38 +68,38 @@ def main():
     patch_id = (args.region, int(args.patch))
     train_ids, val_ids, test_ids = get_tvt_split(args.dsname, regions)
     if patch_id in train_ids:
-        ds, _ = get_train_val_gens(args.dsname, regions)
+        kind = "train"
     elif patch_id in val_ids:
-        _, ds = get_train_val_gens(args.dsname, regions)
+        kind = "val"
     elif patch_id in test_ids:
-        ds = get_test_gen(args.dsname, regions)
+        kind = "test"
     else:
         raise ValueError("Bad patch: {}".format(patch_id))
     
+    ds = get_datasets(ARGS.dsname, regions, sets=[kind])
+
     print(ds.summary())
 
     # print(sorted(ds.patch_ids))
 
-    i = 0
     all_xyz = None
-    while True:
-        subpatch_id = (args.region, args.patch, i)
-        try:
-            pts, _, _ = ds.get_patch(*subpatch_id)
-        except ValueError as e:
-            print(e)
-            break
+    for i in range(ARGS.subdivide*2-1):
+        for j in range(ARGS.subdivide*2-1):
+            subpatch_id = (args.region, args.patch, i, j)
+            try:
+                pts, _, _ = ds.get_patch(*subpatch_id)
+            except ValueError as e:
+                print(e)
+                continue
 
-        pts = ds.denormalize_pts(pts, subpatch_id)
-        xyz = pts[:,:3]
-        xyz = xyz[(xyz[:,2] <= args.maxz) & (args.minz <= xyz[:,2])]
+            pts = ds.denormalize_pts(pts, subpatch_id)
+            xyz = pts[:,:3]
+            xyz = xyz[(xyz[:,2] <= args.maxz) & (args.minz <= xyz[:,2])]
 
-        if all_xyz is None:
-            all_xyz = xyz
-        else:
-            all_xyz = np.concatenate([all_xyz, xyz], axis=0)
-        
-        i += 1
+            if all_xyz is None:
+                all_xyz = xyz
+            else:
+                all_xyz = np.concatenate([all_xyz, xyz], axis=0)
 
     viz_pointcloud(all_xyz)
 

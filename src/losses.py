@@ -156,9 +156,12 @@ def max_mean_discrepancy():
         b_locs = b[...,:2]
         b_weights = b[...,2]
 
-        # ground truth difference matrix, (B,MaxNumTrees,MaxNumTrees,3)
-        # get xy-diffs, and 0,1 weights
+        # a shape: (B,1,N_a,3)
+        # b shape: (B,N_b,1,3)
+
+        # ground truth difference matrix, (B,N_b,N_a,3)
         diffs = a_locs - b_locs
+        # 0-1 isvalid indicator weights
         diff_weights = a_weights * b_weights
         # get loss from kernel function
         losses = kernel(diffs)
@@ -170,7 +173,7 @@ def max_mean_discrepancy():
         """
         equation 4.
         y: targets, shape (B,MaxNumTrees,3) where 3 channels are x,y,isvalidbit
-        x: model outputs, shape (B,MaxNumTrees,3) where 3 channels are x,y,weight
+        x: model outputs, shape (B,N,3) where 3 channels are x,y,weight
         """
         y_loss = mmd_loss_term(y, y)
         xy_loss = mmd_loss_term(x, y)

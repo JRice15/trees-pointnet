@@ -19,7 +19,8 @@ from tensorflow.keras import callbacks, layers
 from tensorflow.keras import optimizers
 import matplotlib.pyplot as plt
 
-from src import DATA_DIR, REPO_ROOT, ARGS, MODEL_SAVE_FMT, patch_generator
+from src import DATA_DIR, REPO_ROOT, ARGS, MODEL_SAVE_FMT
+from src.patch_generator import get_datasets
 from src.losses import get_loss
 from src.models import pointnet
 from src.tf_utils import MyModelCheckpoint, output_model, load_saved_model
@@ -94,7 +95,7 @@ lossgrp.add_argument("--gaussian-sigma", "--sigma",type=float,default=4,
 lossgrp.add_argument("--mmd-kernel",default="gaussian",
         help="mmd loss: type of kernel")
 lossgrp.add_argument("--grid-agg",choices=["max","sum"],default="sum",
-        help="gridmse loss: how to aggregate predicted points gridified")
+        help="gridmse loss: how to aggregate predicted points during gridification")
 # lossgrp.add_argument("--dist-weight",type=float,default=0.9,
 #         help="treetop loss: weight on distance vs count loss")
 lossgrp.add_argument("--ortho-weight",type=float,default=0.001,
@@ -139,7 +140,7 @@ with open(MODEL_DIR.joinpath("params.json"), "w") as f:
 load data
 """
 
-train_gen, val_gen = patch_generator.get_train_val_gens(ARGS.dsname, ARGS.regions)
+train_gen, val_gen = get_datasets(ARGS.dsname, ARGS.regions, ("train", "val"))
 train_gen.summary()
 val_gen.summary()
 inpt_shape = train_gen.get_batch_shape()[0][1:]

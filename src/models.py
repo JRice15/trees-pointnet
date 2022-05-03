@@ -345,20 +345,3 @@ def pointnet(inpt_shape, size_multiplier, output_channels):
 
 
 
-if __name__ == "__main__":
-    from src import patch_generator
-
-    model = pointnet(None, 3, 1)
-
-    traingen, _, _ = patch_generator.get_train_val_gen(ARGS.mode, ARGS.batchsize)
-
-    x, y = traingen[3]
-
-    model.compile()
-
-    out = model.predict(x)
-
-    print(out)
-
-
-
