@@ -173,13 +173,13 @@ class LidarPatchGen(keras.utils.Sequence):
         for (region,patch_num) in self.orig_patch_ids:
             naipfile = get_naipfile_path(region, patch_num)
             with rasterio.open(naipfile) as raster:
-                orig_bounds[(region,patch_num)] = Bounds.from_minmax(raster.bounds)
+                self.bounds_full[(region,patch_num)] = Bounds.from_minmax(raster.bounds)
             lidarfile = LIDAR_DIR.joinpath(region, "lidar_patch_{}.npy".format(patch_num)).as_posix()
             pts = np.load(lidarfile)
             # clip spurious Z values
             z = pts[:,2]
             pts = pts[(z > Z_MIN_CLIP) & (z <= Z_MAX_CLIP)]
-            orig_lidar[(region,patch_num)] = pts
+            lidar_full[(region,patch_num)] = pts
 
         # get full gt trees
         self.gt_full = filter_pts(self.bounds_full, orig_gt_trees, keyfunc=lambda x: x[0]) # selected region
