@@ -205,7 +205,7 @@ def overlap_by_hard_cutoff(preds_subdiv, bounds_subdiv):
     """
     preds_subdiv_chopped = {}
     for patch_id, preds in preds_subdiv.items():
-        xmin, ymin, xmax, ymax = bounds_subdiv[patch_id].to_minmax()
+        xmin, ymin, xmax, ymax = bounds_subdiv[patch_id].minmax_fmt()
         x_cut = (xmax - xmin) / 4
         y_cut = (ymax - ymin) / 4
         region, patchnum, px, py = patch_id
@@ -226,7 +226,7 @@ def overlap_by_hard_cutoff(preds_subdiv, bounds_subdiv):
 
     # group by (region, patchnum) and concat
     preds_combined = group_by_composite_key(preds_subdiv_chopped, first_n=2,
-                        agg_f=lambda x: np.concatenate(list(x.values(), axis=0)))
+                        agg_f=lambda x: np.concatenate(list(x.values()), axis=0))
 
     return preds_combined
 
@@ -257,7 +257,7 @@ def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
     preds_subdiv = np.squeeze(model.predict(X_subdiv))
 
     # associate each pred set with its patch id
-    preds_subdiv = dict(zip(patchgen.patch_ids, preds_subdiv))
+    preds_subdiv = dict(zip(patchgen.valid_patch_ids, preds_subdiv))
 
     # denormalize data
     for patch_id,pts in preds_subdiv.items():
@@ -266,10 +266,13 @@ def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
 
     # combine with overlap
     preds_full = overlap_by_hard_cutoff(preds_subdiv, patchgen.bounds_subdiv)
+    
+    # gridify full patches
+    pred_grids = gridify_preds(preds_full, patchgen.bounds_full)
 
     # find localmax peak predictions
     print("Finding prediction maxima...")
-    pred_peaks = find_local_maxima(preds_full, patchgen.bounds_full, min_conf_threshold=min(pointmatch_thresholds))
+    pred_peaks = find_local_maxima(pred_grids, patchgen.bounds_full, min_conf_threshold=min(pointmatch_thresholds))
 
     """
     Pointmatching
@@ -336,6 +339,8 @@ def main():
     params.pop("name")
     params.pop("test")
     params.pop("noplot")
+    if hasattr(ARGS, "eval_sets"):
+        params.pop("eval_sets")
     for k,v in params.items():
         setattr(ARGS, k, v)
     ARGS.test = False
