@@ -38,7 +38,7 @@ GRID_RESOLUTION = 256
 def pointmatch(all_gts, all_preds, conf_threshold, prune_unpromising=True):
     """
     args:
-        all_gts: dict, mapping patchid to array of shape (ntrees,3) where channels are (x,y,isvalid)
+        all_gts: dict, mapping patchid to array of shape (ntrees,2) where channels are (x,y)
         all_preds: dict, mappin patchid to array of shape (npatches,npoints,3) where channels are (x,y,confidence)
         conf_threshold: abs confidence threshold that predicted points must meet to be considered a predicted tree
         prune_unpromising: whether to stop if 1 or fewer true positives are recorded after 100 patches
@@ -62,13 +62,13 @@ def pointmatch(all_gts, all_preds, conf_threshold, prune_unpromising=True):
                 break
 
         gt = all_gts[patch_id]
+        # get pred, or empty array if missing from dict
         try:
             pred = all_preds[patch_id]
         except KeyError:
             pred = np.empty((0,3))
 
-        # filter valid gt trees and preds
-        gt = gt[gt[:,2] > 0.5]
+        # filter valid preds
         pred = pred[pred[:,2] >= conf_threshold]
 
         if len(gt) == 0:
