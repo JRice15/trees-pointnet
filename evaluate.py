@@ -26,7 +26,7 @@ from src.losses import get_loss
 from src.models import pointnet
 from src.tf_utils import load_saved_model
 from src.utils import (glob_modeldir, gridify_pts, group_by_composite_key,
-                       plot_one_example, raster_plot, scaled_0_1)
+                       plot_one_example, rasterize_and_plot, scaled_0_1, load_params_into_ARGS)
 
 # max dist that two points can be considered matched, in meters
 MAX_MATCH_DIST = 6
@@ -191,6 +191,21 @@ def gridify_preds(preds, bounds):
     return pred_grids
 
 
+def drop_overlaps(X):
+    """
+    args:
+        X: some dict, mapping patch subdiv id to pts
+    returns:    
+        X, with overlap patches dropped, grouped and concatenated by full patch id
+    """
+    # drop overlap patches
+    X = {key: pts for key, pts in X.items() if key[-2] % 2 == 0 and key[-1] % 2 == 0}
+    # group and concat
+    return group_by_composite_key(X, first_n=2,
+            agg_f=lambda x: np.concatenate(list(x.values()), axis=0)
+        )
+
+
 def overlap_by_hard_cutoff(preds_subdiv, bounds_subdiv):
     """
     converts overlapping sub-patches back into full patches
@@ -228,6 +243,67 @@ def overlap_by_hard_cutoff(preds_subdiv, bounds_subdiv):
     return preds_combined
 
 
+
+def viz_predictions(patchgen, outdir, *, X_subdiv, Y_full, Y_subdiv, 
+        preds_subdiv, preds_full, pred_grids, pred_peaks):
+    """
+    data visualizations
+    """
+    print("Generating visualizations...")
+    os.makedirs(outdir, exist_ok=True)
+
+    patch_ids = sorted(preds_full.keys())
+    n_ids = len(patch_ids)
+    subpatch_ids = sorted(preds_subdiv.keys())
+
+    # grab random 10ish examples
+    for p_id in patch_ids[::n_ids//10]:
+        patch_name = "_".join(p_id)
+        patch_dir = outdir.joinpath(patch_name)
+        # first three subpatch ids
+        these_subpatch_ids = [key for key in subpatch_ids if key[:2] == p_id]
+        for subp_id in these_subpatch_ids[:3]:
+            subpatch_dir = patch_dir.joinpath("subpatches")
+
+            bounds = patchgen.get_patch_bounds(subp_id)
+            plot_one_example(
+                X_subdiv[subp_id], 
+                Y_subdiv[subp_id], 
+                patch_id=subp_id, 
+                pred=preds_subdiv[subp_id],
+                pred_peaks=bounds.filter_pts(pred_peaks), # peaks within this subpatch
+                naip=patchgen.get_naip(subp_id),
+                outdir=subpatch_dir,
+            )
+
+        # TODO mode?
+        # plot full-patch data
+        naip = patchgen.get_naip(patch_ids[i])
+        plot_one_example(
+            X_full[p_id], 
+            Y_full[p_id], 
+            patch_id=p_id, 
+            pred=preds_raw[p_id], 
+            pred_overlap_gridded=pred_grids[p_id],
+            pred_peaks=pred_peaks[p_id],
+            naip=patchgen.get_naip(p_id), 
+            outdir=patch_dir,
+        )
+
+
+    # # save raw sample prediction
+    # print("Saving raw predictions...")
+    # with open(outdir.joinpath("sample_predictions.txt"), "w") as f:
+    #     f.write("First 5 predictions, ground truths:\n")
+    #     for i in range(min(5, len(preds_raw))):
+    #         f.write("pred raw {}:\n".format(i))
+    #         f.write(str(preds_raw[i])+"\n")
+    #         f.write("pred localmax peaks {}:\n".format(i))
+    #         f.write(str(pred_peaks[i])+"\n")
+    #         f.write("gt {}:\n".format(i))
+    #         f.write(str(Y[i])+"\n")
+    #         f.write("first 100 input points {}:\n".format(i))
+    #         f.write(str(X[i,:100])+"\n")
 
 
 def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
@@ -271,16 +347,31 @@ def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
     print("Finding prediction maxima...")
     pred_peaks = find_local_maxima(pred_grids, patchgen.bounds_full, min_conf_threshold=min(pointmatch_thresholds))
 
+    # get full ground-truth
+    Y_full = patchgen.gt_full
+
+    if not ARGS.no_plot:
+        print("Generating plots...")
+        # denormalize X
+        for patch_id,pts in X_subdiv.items():
+            X_subdiv[patch_id] = patchgen.denormalize_pts(pts, patch_id)
+
+        # drop overlapping subpatches, combine into full patches
+        X_full = drop_overlaps(X_subdiv)
+
+        viz_predictions(patchgen, outdir, X_full=X_full, Y_full=Y_full,
+            Y_subdiv=patchgen.gt_subdiv, preds_full=preds_full,
+            preds_subdiv=preds_subdiv, pred_grids=pred_grids, pred_peaks=pred_peaks)
+
+
     """
     Pointmatching
     """
     print("Pointmatching...")
-    # get full ground-truth
-    Y = patchgen.gt_full
 
     results = []
     for thresh in tqdm(pointmatch_thresholds):
-        result = pointmatch(Y, pred_peaks, thresh)
+        result = pointmatch(Y_full, pred_peaks, thresh)
         results.append(result)
 
     # find best, by fscore
@@ -328,20 +419,7 @@ def evaluate_loss_metrics(patchgen, model, outdir):
 
 def main():
     MODEL_DIR = glob_modeldir(ARGS.name)
-
-    # load original params into ARGS object
-    params_file = MODEL_DIR.joinpath("params.json")
-    with open(params_file, "r") as f:
-        params = json.load(f)
-    params.pop("name")
-    params.pop("test")
-    params.pop("noplot")
-    if hasattr(ARGS, "eval_sets"):
-        params.pop("eval_sets")
-    for k,v in params.items():
-        setattr(ARGS, k, v)
-    ARGS.test = False
-
+    load_params_into_ARGS(MODEL_DIR, ARGS, false_params=["test", "noplot"])
     pprint(vars(ARGS))
 
     """
@@ -389,8 +467,7 @@ if __name__ == "__main__":
     """
     parser = argparse.ArgumentParser()
     parser.add_argument("--name",required=True,help="name of model to run, with possible timestamp in front")
-    parser.add_argument("--sets",dest="eval_sets",default=("train","val","test"),nargs="+",help="datasets to evaluate on: train, val, and/or test. test automatically selects val as well")
-    parser.add_argument("--noplot",action="store_true")
+    parser.add_argument("--sets",dest="eval_sets",default=("val","test"),nargs="+",help="datasets to evaluate on: train, val, and/or test. test automatically selects val as well")
     parser.parse_args(namespace=ARGS)
 
     main()

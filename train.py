@@ -62,7 +62,7 @@ datagrp.add_argument("--subdivide",type=int,default=3,help="number of times to s
 datagrp.add_argument("--regions",default="ALL",nargs="+",help="list of region names, defaults to all available")
 datagrp.add_argument("--dsname",help="name of generated dataset to use (required if multiple exist)")
 datagrp.add_argument("--noise-sigma",type=float,default=None,help="add gaussian noise to input points")
-datagrp.add_argument("--handle-small",choices=["drop","fill","repeat"],default="fill",
+datagrp.add_argument("--handle-small",choices=["drop","fill","repeat"],default="drop",
     help="how to handle patches with fewer than npoints: drop them, fill with (-1,-1,-1), or double up valid points until it meets the threshold")
 
 # training hyperparameters
@@ -72,7 +72,7 @@ hypergrp.add_argument("--epochs",type=int,default=500)
 hypergrp.add_argument("--batchsize",type=int,default=16)
 hypergrp.add_argument("--lr",type=float,default=1e-2,help="initial learning rate")
 hypergrp.add_argument("--reducelr-factor",type=float,default=0.2,help="factor to multiply lr by for reducelronplateau")
-hypergrp.add_argument("--reducelr-patience",type=int,default=8,help="number of epochs with no valloss improvement to reduce lr")
+hypergrp.add_argument("--reducelr-patience",type=int,default=5,help="number of epochs with no valloss improvement to reduce lr")
 
 # model parameters
 modelgrp = parser.add_argument_group("model parameters")
@@ -151,7 +151,7 @@ if not ARGS.noplot:
     train_viz_dir = MODEL_DIR.joinpath("training/example_batch_viz/")
     train_gen.__getitem__(0) # generate and throw away one batch, to make sure we don't have errors that dont appear the first time around
     X,Y,ids = train_gen.__getitem__(1, return_ids=True, no_rotate=True)
-    print("Example batches:")
+    print("For example batch:")
     print("X max:", tf.reduce_max(X, axis=[0,1]))
     print("X min:", tf.reduce_min(X, axis=[0,1]))
     print("Y max:", tf.reduce_max(Y, axis=[0,1]))
@@ -205,7 +205,7 @@ callback_dict = {
         min_lr=1e-6, verbose=1),
     "earlystopping": callbacks.EarlyStopping(verbose=1, patience=int(ARGS.reducelr_patience*1.5)),
     "modelcheckpoint": MyModelCheckpoint(MODEL_DIR, verbose=1, 
-        epoch_per_save=(5 if not ARGS.test else 1), save_best_only=True)
+        epoch_per_save=1, save_best_only=True)
 }
 
 """

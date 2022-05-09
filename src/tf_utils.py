@@ -13,7 +13,7 @@ from tensorflow.keras import layers
 from tensorflow.keras.optimizers import Adam
 
 from src import ARGS, DATA_DIR, REPO_ROOT, MODEL_SAVE_FMT, CUSTOM_LAYERS
-from src.utils import raster_plot
+from src.utils import rasterize_and_plot
 from src.losses import get_loss
 
 

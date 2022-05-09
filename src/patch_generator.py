@@ -18,7 +18,7 @@ from tensorflow.keras import layers
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src import ARGS, DATA_DIR, LIDAR_CHANNELS, REPO_ROOT
-from src.utils import (Bounds, get_all_regions, get_naipfile_path, raster_plot,
+from src.utils import (Bounds, get_all_regions, get_naipfile_path, rasterize_and_plot,
                        rotate_pts, scaled_0_1, group_by_composite_key)
 
 VAL_SPLIT = 0.10
@@ -64,16 +64,10 @@ def filter_pts(bounds_dict, points_dict, keyfunc):
         keyfunc: translates the keys of bounds_dict to the keys of points_dict
     """
     out = {}
-    for key, bound in bounds_dict.items():
-        left,bott,right,top = bound.minmax_fmt()
+    for key, bounds in bounds_dict.items():
         pts_key = keyfunc(key)
         pts = points_dict[pts_key]
-        x = pts[:,0]
-        y = pts[:,1]
-        filtered = pts[
-                (x >= left) & (x < right) & (y <= top) & (y > bott)
-            ]
-        out[key] = filtered
+        out[key] = bounds.filter_pts(pts)
     return out
 
 
@@ -360,7 +354,7 @@ class LidarPatchGen(keras.utils.Sequence):
 
     def get_patch(self, region, patch_num, subdiv_x, subdiv_y):
         """
-        get the full i'th patch of the entire sorted dataset, or from a specific region
+        get the subdivided patch id in the dataseteeeeee
         args:
             region: str, region name
             patch_num: int
@@ -390,9 +384,9 @@ class LidarPatchGen(keras.utils.Sequence):
         """
         get naip image. Channels: R-G-B-NIR
         args:
-            patch_id: tuple: (region, patch_num, ...)
+            patch_id: id for subdiv or full patch. tuple: (region, patch_num, ...)
         """
-        bounds = self.bounds_subdiv[patch_id]
+        bounds = self.get_patch_bounds(patch_id)
         # load naip file
         region, patch_num = patch_id[:2]
         naipfile = get_naipfile_path(region, patch_num)
@@ -408,9 +402,12 @@ class LidarPatchGen(keras.utils.Sequence):
     def get_patch_bounds(self, patch_id):
         """
         args:
-            patch_id: tuple: (region, patch_num, subdiv_x, subdiv_y)
+            patch_id: tuple: (region, patch_num[, ...])
         """
-        return self.bounds_subdiv[patch_id]
+        try:
+            return self.bounds_subdiv[patch_id]
+        except KeyError:
+            return self.bounds_full[patch_id]
 
     def get_batch_shape(self):
         """
