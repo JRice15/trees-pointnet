@@ -233,16 +233,7 @@ class LidarPatchGen(keras.utils.Sequence):
         if ARGS.test:
             self.num_ids = 2
 
-        # get normalization data
-        self.norm_mins = {}
-        self.norm_maxs = {}
-        for patch_key, bound in self.bounds_subdiv.items():
-            left,bott,right,top = bound.minmax_fmt()
-            # spatial channels, then spectral channels. Last channel is NDVI
-            min_xyz = [left, bott, 0]     + [0, 0, 0, 0, -1]
-            max_xyz = [right, top, Z_MAX_CLIP] + [1, 1, 1, 1, 1]
-            self.norm_mins[patch_key] = np.array(min_xyz)
-            self.norm_maxs[patch_key] = np.array(max_xyz)
+
 
         # normalize lidar
         for patch_id,pts in self.lidar_subdiv.items():
@@ -251,14 +242,12 @@ class LidarPatchGen(keras.utils.Sequence):
             spectral[spectral < -1] = -1.0
             pts[:,3:] = spectral
             # normalize
-            mins = self.norm_mins[patch_id]
-            maxs = self.norm_maxs[patch_id]
+            mins, maxs = self.get_norm_data(patch_id)
             pts = (pts - mins) / (maxs - mins)
             self.lidar_subdiv[patch_id] = pts
         # normalize gt
         for patch_id,y_pts in self.gt_subdiv.items():
-            mins = self.norm_mins[patch_id]
-            maxs = self.norm_maxs[patch_id]
+            mins, maxs = self.get_norm_data(patch_id)
             y_pts = (y_pts - mins[:2]) / (maxs[:2] - mins[:2])
             self.gt_subdiv[patch_id] = y_pts
 
@@ -422,12 +411,28 @@ class LidarPatchGen(keras.utils.Sequence):
         reverse the normalization of a set of points; ie, it goes from 0-1 scaled 
         back to georeferenced coordinates.
         """
-        min_xyz = self.norm_mins[patch_id]
-        max_xyz = self.norm_maxs[patch_id]
+        min_xyz, max_xyz = self.get_norm_data(patch_id)
         n_channels = pts.shape[-1]
         min_xyz = min_xyz[:n_channels]
         max_xyz = max_xyz[:n_channels]
         return (pts * (max_xyz - min_xyz)) + min_xyz
+
+    def get_norm_data(self, patch_id):
+        """
+        get the data to transform georeferenced points to 0-1 scale, or vice versa
+        returns:
+            norm_mins: min values for each channel (x, y, z, R, G, B, NIR, NDVI)
+            norm_maxs: max values
+        """
+        bound = self.get_patch_bounds(patch_id)
+        min_x,min_y,max_x,max_y = bound.minmax_fmt()
+
+        # spatial channels, then spectral channels. Last channel is NDVI
+        mins = [min_x, min_y, 0]     + [0, 0, 0, 0, -1]
+        maxs = [max_x, max_y, Z_MAX_CLIP] + [1, 1, 1, 1, 1]
+
+        return np.array(mins), np.array(maxs)
+
 
     def summary(self):
         print("LidarPatchGen '{}' from dataset '{}' regions:".format(self.name, self.dsname),  ", ".join(self.regions))

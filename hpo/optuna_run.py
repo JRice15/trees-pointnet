@@ -68,7 +68,7 @@ def make_objective_func(ARGS, gpu, interrupt_event):
         """
         # constants/meta params
         constant_params = {
-            "name": "hpo/study-{name}/{name}-trial{number}".format(name=ARGS.name, number=trial.number),
+            "name": "hpo/study_{name}/{name}_trial{number}".format(name=ARGS.name, number=trial.number),
             "dsname": ARGS.dsname,
             "eval": ["val", "test"],
         }
@@ -201,6 +201,9 @@ def main():
 
     parser.add_argument("--test",action="store_true",help="just run one-epoch trials")
     ARGS = parser.parse_args()
+
+    if "-" in ARGS.name:
+        raise ValueError("Use underscores for name instead of dashes")
 
     assert not (ARGS.overwrite and ARGS.resume), "Cannot both overwrite and resume!"
     if ARGS.overwrite:
