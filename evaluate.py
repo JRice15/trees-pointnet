@@ -249,7 +249,7 @@ def viz_predictions(patchgen, outdir, *, X_subdiv, Y_full, Y_subdiv,
     """
     data visualizations
     """
-    print("Generating visualizations...")
+    # print("Generating visualizations...")
     os.makedirs(outdir, exist_ok=True)
 
     patch_ids = sorted(preds_full.keys())
@@ -267,9 +267,9 @@ def viz_predictions(patchgen, outdir, *, X_subdiv, Y_full, Y_subdiv,
 
             bounds = patchgen.get_patch_bounds(subp_id)
             plot_one_example(
-                X_subdiv[subp_id], 
-                Y_subdiv[subp_id], 
-                patch_id=subp_id, 
+                X_subdiv[subp_id],
+                Y_subdiv[subp_id],
+                patch_id=subp_id,
                 pred=preds_subdiv[subp_id],
                 pred_peaks=bounds.filter_pts(pred_peaks), # peaks within this subpatch
                 naip=patchgen.get_naip(subp_id),
@@ -352,16 +352,17 @@ def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
 
     if not ARGS.no_plot:
         print("Generating plots...")
-        # denormalize X
-        for patch_id,pts in X_subdiv.items():
-            X_subdiv[patch_id] = patchgen.denormalize_pts(pts, patch_id)
-
         # drop overlapping subpatches, combine into full patches
         X_full = drop_overlaps(X_subdiv)
 
-        viz_predictions(patchgen, outdir, X_full=X_full, Y_full=Y_full,
-            Y_subdiv=patchgen.gt_subdiv, preds_full=preds_full,
-            preds_subdiv=preds_subdiv, pred_grids=pred_grids, pred_peaks=pred_peaks)
+        # denormalize X
+        for patch_id,pts in X_full.items():
+            X_full[patch_id] = patchgen.denormalize_pts(pts, patch_id)
+
+        viz_predictions(patchgen, outdir.joinpath("visualizations"), 
+            X_full=X_full, Y_full=Y_full, Y_subdiv=patchgen.gt_subdiv, 
+            preds_full=preds_full, preds_subdiv=preds_subdiv, 
+            pred_grids=pred_grids, pred_peaks=pred_peaks)
 
 
     """

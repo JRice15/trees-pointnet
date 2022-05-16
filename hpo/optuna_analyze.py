@@ -23,8 +23,7 @@ from hpo_utils import get_study
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--name",required=True,help="subdirectory inside models/ to save these trials under")
-
+    parser.add_argument("--name",required=True,help="name of study to analyze")
     args = parser.parse_args()
 
     # load study
