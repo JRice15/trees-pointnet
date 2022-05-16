@@ -244,12 +244,11 @@ def overlap_by_hard_cutoff(preds_subdiv, bounds_subdiv):
 
 
 
-def viz_predictions(patchgen, outdir, *, X_subdiv, Y_full, Y_subdiv, 
+def viz_predictions(patchgen, outdir, *, X_subdiv, X_full, Y_full, Y_subdiv, 
         preds_subdiv, preds_full, pred_grids, pred_peaks):
     """
     data visualizations
     """
-    print("Generating visualizations...")
     os.makedirs(outdir, exist_ok=True)
 
     patch_ids = sorted(preds_full.keys())
@@ -258,7 +257,7 @@ def viz_predictions(patchgen, outdir, *, X_subdiv, Y_full, Y_subdiv,
 
     # grab random 10ish examples
     for p_id in patch_ids[::n_ids//10]:
-        patch_name = "_".join(p_id)
+        patch_name = "_".join([str(x) for x in p_id])
         patch_dir = outdir.joinpath(patch_name)
         # first three subpatch ids
         these_subpatch_ids = [key for key in subpatch_ids if key[:2] == p_id]
@@ -271,19 +270,19 @@ def viz_predictions(patchgen, outdir, *, X_subdiv, Y_full, Y_subdiv,
                 Y_subdiv[subp_id], 
                 patch_id=subp_id, 
                 pred=preds_subdiv[subp_id],
-                pred_peaks=bounds.filter_pts(pred_peaks), # peaks within this subpatch
+                pred_peaks=bounds.filter_pts(pred_peaks[p_id]), # peaks within this subpatch
                 naip=patchgen.get_naip(subp_id),
                 outdir=subpatch_dir,
             )
 
         # TODO mode?
         # plot full-patch data
-        naip = patchgen.get_naip(patch_ids[i])
+        naip = patchgen.get_naip(p_id)
         plot_one_example(
             X_full[p_id], 
             Y_full[p_id], 
             patch_id=p_id, 
-            pred=preds_raw[p_id], 
+            pred=preds_full[p_id], 
             pred_overlap_gridded=pred_grids[p_id],
             pred_peaks=pred_peaks[p_id],
             naip=patchgen.get_naip(p_id), 
@@ -331,6 +330,7 @@ def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
 
     # associate each pred set with its patch id
     preds_subdiv = dict(zip(patchgen.valid_patch_ids, preds_subdiv))
+    X_subdiv = dict(zip(patchgen.valid_patch_ids, X_subdiv))
 
     # denormalize data
     for patch_id,pts in preds_subdiv.items():
@@ -350,7 +350,7 @@ def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
     # get full ground-truth
     Y_full = patchgen.gt_full
 
-    if not ARGS.no_plot:
+    if not ARGS.noplot:
         print("Generating plots...")
         # denormalize X
         for patch_id,pts in X_subdiv.items():
@@ -359,8 +359,8 @@ def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
         # drop overlapping subpatches, combine into full patches
         X_full = drop_overlaps(X_subdiv)
 
-        viz_predictions(patchgen, outdir, X_full=X_full, Y_full=Y_full,
-            Y_subdiv=patchgen.gt_subdiv, preds_full=preds_full,
+        viz_predictions(patchgen, outdir, X_subdiv=X_subdiv, X_full=X_full, 
+            Y_full=Y_full, Y_subdiv=patchgen.gt_subdiv, preds_full=preds_full,
             preds_subdiv=preds_subdiv, pred_grids=pred_grids, pred_peaks=pred_peaks)
 
 
@@ -468,6 +468,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--name",required=True,help="name of model to run, with possible timestamp in front")
     parser.add_argument("--sets",dest="eval_sets",default=("val","test"),nargs="+",help="datasets to evaluate on: train, val, and/or test. test automatically selects val as well")
+    parser.add_argument("--noplot",action="store_true")
     parser.parse_args(namespace=ARGS)
 
     main()

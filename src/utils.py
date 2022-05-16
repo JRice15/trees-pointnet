@@ -133,8 +133,8 @@ def plot_raster(gridvals, gridcoords, filename, *, colorbar_label=None,
         colorbar_label: label on colorbar
         mark: dict mapping names to points to mark with an x, array shape (n,2)
     """
-    x = gridpts[...,0]
-    y = gridpts[...,1]
+    x = gridcoords[...,0]
+    y = gridcoords[...,1]
     plt.pcolormesh(x,y,gridvals, shading="auto")
     plt.colorbar(label=colorbar_label)
 
@@ -177,7 +177,7 @@ def rasterize_and_plot(pts, filename, *, rel_sigma=None, abs_sigma=None, weights
             pts[:,1].min(), pts[:,1].max()
         ])
 
-    gridvals, gridpts = gridify_pts(bounds, pts, weights, rel_sigma=rel_sigma, 
+    gridvals, gridcoords = gridify_pts(bounds, pts, weights, rel_sigma=rel_sigma, 
                             abs_sigma=abs_sigma, mode=mode)
 
     if sqrt_scale:
@@ -212,7 +212,11 @@ def plot_one_example(X, Y, patch_id, outdir, pred=None, pred_peaks=None,
         os.makedirs(outdir, exist_ok=True)
 
     patchname = "_".join([str(i) for i in patch_id])
-    ylocs = Y[Y[...,2] == 1][...,:2]
+
+    if Y.shape[-1] > 2:
+        ylocs = Y[Y[...,2] > 0.5][...,:2]
+    else:
+        ylocs = Y
 
     gt_ntrees = len(ylocs)
     x_locs = X[...,:2]
