@@ -93,7 +93,8 @@ def pointmatch(all_gts, all_preds, conf_threshold, prune_unpromising=True):
         dists[dists>=COST_MATRIX_MAXVAL] = np.inf
         
         # associated pred trees = true positives
-        tp_inds = np.where(np.any(np.logical_not(np.isinf(dists)),axis=0))[0]
+        # tp_inds = np.where(np.any(np.logical_not(np.isinf(dists)),axis=0))[0]
+        tp_inds = np.where(~np.isinf(dists))[1]
         all_tp += len(tp_inds)
 
         # un-associated pred trees = false positives
