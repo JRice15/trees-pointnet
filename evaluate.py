@@ -328,7 +328,7 @@ def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
     assert patchgen.batch_size == 1
     
     X_subdiv_normed, _ = patchgen.load_all()
-    X_subdiv_normed = np.squeeze(X_subdiv.numpy())
+    X_subdiv_normed = np.squeeze(X_subdiv_normed.numpy())
     preds_subdiv_normed = np.squeeze(model.predict(X_subdiv_normed))
 
     # associate each pred set with its patch id
