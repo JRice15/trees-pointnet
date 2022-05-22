@@ -233,8 +233,6 @@ class LidarPatchGen(keras.utils.Sequence):
         if ARGS.test:
             self.num_ids = 2
 
-
-
         # normalize lidar
         for patch_id,pts in self.lidar_subdiv.items():
             # handle no-data values in spectral data

@@ -274,6 +274,7 @@ def viz_predictions(patchgen, outdir, *, X_subdiv, X_full, Y_full, Y_subdiv,
                 pred_peaks=bounds.filter_pts(pred_peaks[p_id]), # peaks within this subpatch
                 naip=patchgen.get_naip(subp_id),
                 outdir=subpatch_dir,
+                grid_resolution=GRID_RESOLUTION//ARGS.subdivide
             )
 
         # TODO mode?
@@ -288,6 +289,7 @@ def viz_predictions(patchgen, outdir, *, X_subdiv, X_full, Y_full, Y_subdiv,
             pred_peaks=pred_peaks[p_id],
             naip=patchgen.get_naip(p_id), 
             outdir=patch_dir,
+            grid_size=GRID_RESOLUTION,
         )
 
 
@@ -325,46 +327,50 @@ def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
     print("\nGenerating predictions...")
     assert patchgen.batch_size == 1
     
-    X_subdiv, _ = patchgen.load_all()
-    X_subdiv = np.squeeze(X_subdiv.numpy())
-    preds_subdiv = np.squeeze(model.predict(X_subdiv))
+    X_subdiv_normed, _ = patchgen.load_all()
+    X_subdiv_normed = np.squeeze(X_subdiv.numpy())
+    preds_subdiv_normed = np.squeeze(model.predict(X_subdiv_normed))
 
     # associate each pred set with its patch id
-    preds_subdiv = dict(zip(patchgen.valid_patch_ids, preds_subdiv))
-    X_subdiv = dict(zip(patchgen.valid_patch_ids, X_subdiv))
+    preds_subdiv_normed = dict(zip(patchgen.valid_patch_ids, preds_subdiv_normed))
+    X_subdiv_normed = dict(zip(patchgen.valid_patch_ids, X_subdiv_normed))
 
     # denormalize data
-    for patch_id,pts in preds_subdiv.items():
+    preds_subdiv_unnormed = {}
+    for patch_id,pts in preds_subdiv_normed.items():
         pts[:,:2] = patchgen.denormalize_pts(pts[:,:2], patch_id)
-        preds_subdiv[patch_id] = pts
+        preds_subdiv_unnormed[patch_id] = pts
 
     # combine with overlap
-    preds_full = overlap_by_hard_cutoff(preds_subdiv, patchgen.bounds_subdiv)
+    preds_full_unnormed = overlap_by_hard_cutoff(preds_subdiv_unnormed, patchgen.bounds_subdiv)
     
     # gridify full patches
-    pred_grids = gridify_preds(preds_full, patchgen.bounds_full)
+    pred_grids_unnormed = gridify_preds(preds_full_unnormed, patchgen.bounds_full)
 
     # find localmax peak predictions
     print("Finding prediction maxima...")
-    pred_peaks = find_local_maxima(pred_grids, patchgen.bounds_full, min_conf_threshold=min(pointmatch_thresholds))
+    pred_peaks_unnormed = find_local_maxima(pred_grids_unnormed, patchgen.bounds_full, min_conf_threshold=min(pointmatch_thresholds))
 
     # get full ground-truth
-    Y_full = patchgen.gt_full
+    Y_full_unnormed = patchgen.gt_full
 
     if not ARGS.noplot:
         print("Generating plots...")
         # drop overlapping subpatches, combine into full patches
-        X_full = drop_overlaps(X_subdiv)
+        X_full_normed = drop_overlaps(X_subdiv_normed)
 
         # denormalize X
-        for patch_id,pts in X_full.items():
-            X_full[patch_id] = patchgen.denormalize_pts(pts, patch_id)
+        X_full_unnormed = {}
+        for patch_id,pts in X_full_normed.items():
+            X_full_unnormed[patch_id] = patchgen.denormalize_pts(pts, patch_id)
 
+        Y_subdiv_normed = patchgen.gt_subdiv
         viz_predictions(patchgen, outdir.joinpath("visualizations"), 
-            X_subdiv=X_subdiv, X_full=X_full, 
-            Y_full=Y_full, Y_subdiv=patchgen.gt_subdiv, 
-            preds_full=preds_full, preds_subdiv=preds_subdiv, 
-            pred_grids=pred_grids, pred_peaks=pred_peaks)
+            # use normed for subdiv data
+            X_subdiv=X_subdiv_normed, Y_subdiv=Y_subdiv_normed, preds_subdiv=preds_subdiv_normed, 
+            # use unnormed for full data
+            X_full=X_full_unnormed, Y_full=Y_full_unnormed, preds_full=preds_full_unnormed, 
+            pred_grids=pred_grids_unnormed, pred_peaks=pred_peaks_unnormed)
 
 
     """
@@ -374,7 +380,7 @@ def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
 
     results = []
     for thresh in tqdm(pointmatch_thresholds):
-        result = pointmatch(Y_full, pred_peaks, thresh)
+        result = pointmatch(Y_full_unnormed, pred_peaks_unnormed, thresh)
         results.append(result)
 
     # find best, by fscore

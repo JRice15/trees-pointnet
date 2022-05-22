@@ -74,7 +74,7 @@ def gaussian(x, center, sigma=0.02):
     return const * exp
 
 def gridify_pts(bounds, pts, weights, abs_sigma=None, rel_sigma=None, mode="sum", 
-        resolution=64):
+        resolution=None):
     """
     rasterize weighted points to a grid
     args:
@@ -87,6 +87,9 @@ def gridify_pts(bounds, pts, weights, abs_sigma=None, rel_sigma=None, mode="sum"
         gridvals: N x M grid of weighted values
         gridpts: N x M x 2 grid, representing the x,y coordinates of each pixel
     """
+    if resolution is None:
+        resolution = 64
+
     xmin, xmax, ymin, ymax = bounds.xy_fmt()
     # get gaussian kernel std.dev.
     assert (rel_sigma is None) != (abs_sigma is None) # only one can and must be true
@@ -125,7 +128,7 @@ def gridify_pts(bounds, pts, weights, abs_sigma=None, rel_sigma=None, mode="sum"
 
 
 def plot_raster(gridvals, gridcoords, filename, *, colorbar_label=None, 
-        mark=None, title=None):
+        mark=None, title=None, grid_resolution=None):
     """
     create plot of a raster
     args:
@@ -159,7 +162,7 @@ def plot_raster(gridvals, gridcoords, filename, *, colorbar_label=None,
 
 def rasterize_and_plot(pts, filename, *, rel_sigma=None, abs_sigma=None, weights=None, 
         title=None, clip=None, sqrt_scale=False, mode="sum", mark=None, 
-        zero_one_bounds=False, weight_label=None):
+        zero_one_bounds=False, weight_label=None, grid_resolution=None):
     """
     create raster plot of points, with optional weights
     args:
@@ -178,7 +181,7 @@ def rasterize_and_plot(pts, filename, *, rel_sigma=None, abs_sigma=None, weights
         ])
 
     gridvals, gridcoords = gridify_pts(bounds, pts, weights, rel_sigma=rel_sigma, 
-                            abs_sigma=abs_sigma, mode=mode)
+                            abs_sigma=abs_sigma, mode=mode, resolution=grid_resolution)
 
     if sqrt_scale:
         gridvals = np.sqrt(gridvals)
@@ -194,7 +197,8 @@ def rasterize_and_plot(pts, filename, *, rel_sigma=None, abs_sigma=None, weights
 
 
 def plot_one_example(X, Y, patch_id, outdir, pred=None, pred_peaks=None, 
-        pred_overlap_gridded=None, naip=None, zero_one_bounds=False):
+        pred_overlap_gridded=None, naip=None, zero_one_bounds=False,
+        grid_resolution=None):
     """
     generate raster plots for one example input and output from a dataset
     args:
@@ -240,7 +244,8 @@ def plot_one_example(X, Y, patch_id, outdir, pred=None, pred_peaks=None,
         mode="second-highest", 
         filename=outdir.joinpath("{}_lidar_height".format(patchname)), 
         mark=markings, 
-        zero_one_bounds=zero_one_bounds)
+        zero_one_bounds=zero_one_bounds,
+        grid_resolution=grid_resolution)
     
     # lidar ndvi
     x_ndvi = X[...,-1]
@@ -252,7 +257,8 @@ def plot_one_example(X, Y, patch_id, outdir, pred=None, pred_peaks=None,
         abs_sigma=sigma, 
         filename=outdir.joinpath("{}_lidar_ndvi".format(patchname)),
         mark=markings, 
-        zero_one_bounds=zero_one_bounds)
+        zero_one_bounds=zero_one_bounds,
+        grid_resolution=grid_resolution)
 
     # raw predictions
     if pred is not None:
@@ -267,7 +273,8 @@ def plot_one_example(X, Y, patch_id, outdir, pred=None, pred_peaks=None,
             filename=outdir.joinpath("{}_pred_raw".format(patchname)),
             mode="sum", 
             mark=markings, 
-            zero_one_bounds=zero_one_bounds)
+            zero_one_bounds=zero_one_bounds,
+            grid_resolution=grid_resolution)
 
     # overlap gridded predictions
     if pred_overlap_gridded is not None:
