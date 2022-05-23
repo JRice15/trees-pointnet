@@ -122,10 +122,13 @@ def gridify_pts(bounds, pts, weights, abs_sigma=None, rel_sigma=None, mode="sum"
     y = np.linspace(ymin, ymax, resolution)
     x, y = np.meshgrid(x, y)
     gridpts = np.stack([x,y], axis=-1)
-    if mode == "second-highest":
+
+    # initialize grid for aggregation methods
+    if mode == "second-highest" or mode == "median":
         gridvals = np.zeros(x.shape + (2,), dtype=x.dtype)
     else:
         gridvals = np.zeros_like(x)
+
     for i,p in enumerate(pts):
         new_vals = gaussian(gridpts, p, sigma=gaussian_sigma)
         if weights is not None:
