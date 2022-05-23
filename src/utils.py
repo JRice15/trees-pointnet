@@ -15,7 +15,7 @@ from src import ARGS, DATA_DIR, REPO_ROOT, MODEL_SAVE_FMT
 class MyTimer:
 
     def __init__(self, msg_indent=2, decimals=4):
-        self.msg_indent = 2
+        self.msg_indent = msg_indent
         self.decimals = decimals
         self.start()
     

@@ -189,7 +189,7 @@ def gridify_preds(preds, bounds, is_subdiv=False):
     else:
         resolution = GRID_RESOLUTION
     pred_grids = {}
-    for key, pred in preds.items():
+    for key, pred in tqdm(preds.items(), total=len(preds)):
         vals, coords = gridify_pts(bounds[key], pred[:,:2], pred[:,2], 
                 abs_sigma=ARGS.gaussian_sigma, mode=ARGS.grid_agg, # TODO test both grid-agg modes?
                 resolution=resolution)
@@ -299,20 +299,6 @@ def viz_predictions(patchgen, outdir, *, X_subdiv, X_full, Y_full, Y_subdiv,
             grid_resolution=GRID_RESOLUTION,
         )
 
-
-    # # save raw sample prediction
-    # print("Saving raw predictions...")
-    # with open(outdir.joinpath("sample_predictions.txt"), "w") as f:
-    #     f.write("First 5 predictions, ground truths:\n")
-    #     for i in range(min(5, len(preds_raw))):
-    #         f.write("pred raw {}:\n".format(i))
-    #         f.write(str(preds_raw[i])+"\n")
-    #         f.write("pred localmax peaks {}:\n".format(i))
-    #         f.write(str(pred_peaks[i])+"\n")
-    #         f.write("gt {}:\n".format(i))
-    #         f.write(str(Y[i])+"\n")
-    #         f.write("first 100 input points {}:\n".format(i))
-    #         f.write(str(X[i,:100])+"\n")
 
 
 def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
