@@ -27,11 +27,12 @@ from src.models import pointnet
 from src.tf_utils import load_saved_model
 from src.utils import (glob_modeldir, gridify_pts, group_by_composite_key,
                        plot_one_example, rasterize_and_plot, scaled_0_1, load_params_into_ARGS)
+from src.utils import MyTimer
 
 # max dist that two points can be considered matched, in meters
 MAX_MATCH_DIST = 6
 # size of grids to gridify
-GRID_RESOLUTION = 256
+GRID_RESOLUTION = 128
 
 
 
@@ -174,18 +175,24 @@ def find_local_maxima(pred_grids, bounds, min_conf_threshold=None):
     return maxima
 
 
-def gridify_preds(preds, bounds):
+def gridify_preds(preds, bounds, is_subdiv=False):
     """
     args:
         preds: dict mapping patch id to pred pts (must be original CRS, not 0-1 scale)
         bounds: dict mapping patch id to Bounds
+        is_subdiv: bool, whether patches are subdiv or full-sized
     returns:
         dict: mapping patch id to another dict, with keys "vals" and "coords"
     """
+    if is_subdiv:
+        resolution = GRID_RESOLUTION // ARGS.subdivide
+    else:
+        resolution = GRID_RESOLUTION
     pred_grids = {}
     for key, pred in preds.items():
         vals, coords = gridify_pts(bounds[key], pred[:,:2], pred[:,2], 
-                abs_sigma=ARGS.gaussian_sigma, mode=ARGS.grid_agg) # TODO test both grid-agg modes?
+                abs_sigma=ARGS.gaussian_sigma, mode=ARGS.grid_agg, # TODO test both grid-agg modes?
+                resolution=resolution)
         pred_grids[key] = {"vals": vals, "coords": coords}
 
     # pred_grids_grouped = group_by_composite_key(pred_grids, first_n=2)
@@ -271,7 +278,7 @@ def viz_predictions(patchgen, outdir, *, X_subdiv, X_full, Y_full, Y_subdiv,
                 Y_subdiv[subp_id],
                 patch_id=subp_id,
                 pred=preds_subdiv[subp_id],
-                pred_peaks=bounds.filter_pts(pred_peaks[p_id]), # peaks within this subpatch
+                # pred_peaks=bounds.filter_pts(pred_peaks[p_id]), # peaks within this subpatch
                 naip=patchgen.get_naip(subp_id),
                 outdir=subpatch_dir,
                 grid_resolution=GRID_RESOLUTION//ARGS.subdivide
@@ -321,6 +328,7 @@ def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
     outdir = model_dir.joinpath("results_"+patchgen.name)
     os.makedirs(outdir, exist_ok=True)
 
+    timer = MyTimer()
     """
     generate predictions
     """
@@ -334,34 +342,41 @@ def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
     # associate each pred set with its patch id
     preds_subdiv_normed = dict(zip(patchgen.valid_patch_ids, preds_subdiv_normed))
     X_subdiv_normed = dict(zip(patchgen.valid_patch_ids, X_subdiv_normed))
+    timer.measure()
 
     # denormalize data
-    print("Denormalizing...")
+    print("Denormalizing preds...")
     preds_subdiv_unnormed = {p_id: patchgen.denormalize_pts(pts, p_id) for p_id,pts in preds_subdiv_normed.items()}
+    timer.measure()
 
     # combine with overlap
-    print("Overlapping...")
+    print("Overlapping preds...")
     preds_full_unnormed = overlap_by_hard_cutoff(preds_subdiv_unnormed, patchgen.bounds_subdiv)
+    timer.measure()
     
     # gridify full patches
-    print("Gridifying...")
+    print("Gridifying preds...")
     pred_grids_unnormed = gridify_preds(preds_full_unnormed, patchgen.bounds_full)
+    timer.measure()
 
     # find localmax peak predictions
     print("Finding prediction maxima...")
     pred_peaks_unnormed = find_local_maxima(pred_grids_unnormed, patchgen.bounds_full, min_conf_threshold=min(pointmatch_thresholds))
+    timer.measure()
 
     # get full ground-truth
     Y_full_unnormed = patchgen.gt_full
 
     if not ARGS.noplot:
-        print("Generating plots...")
+        print("Overlapping/denormalizing X...")
         # drop overlapping subpatches, combine into full patches
         X_full_normed = drop_overlaps(X_subdiv_normed)
 
         # denormalize X
         X_full_unnormed = {p_id: patchgen.denormalize_pts(pts, p_id) for p_id,pts in X_full_normed.items()}
+        timer.measure()
 
+        print("Generating plots...")
         Y_subdiv_normed = patchgen.gt_subdiv
         viz_predictions(patchgen, outdir.joinpath("visualizations"), 
             # use normed for subdiv data
@@ -369,17 +384,18 @@ def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
             # use unnormed for full data
             X_full=X_full_unnormed, Y_full=Y_full_unnormed, preds_full=preds_full_unnormed, 
             pred_grids=pred_grids_unnormed, pred_peaks=pred_peaks_unnormed)
+        timer.measure()
 
 
     """
     Pointmatching
     """
     print("Pointmatching...")
-
     results = []
     for thresh in tqdm(pointmatch_thresholds):
         result = pointmatch(Y_full_unnormed, pred_peaks_unnormed, thresh)
         results.append(result)
+    timer.measure()
 
     # find best, by fscore
     best_idx = np.argmax([x["fscore"] for x in results])

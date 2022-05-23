@@ -12,6 +12,25 @@ import rasterio
 
 from src import ARGS, DATA_DIR, REPO_ROOT, MODEL_SAVE_FMT
 
+class MyTimer:
+
+    def __init__(self, msg_indent=2, decimals=4):
+        self.msg_indent = 2
+        self.decimals = decimals
+        self.start()
+    
+    def start(self):
+        self._start_time = time.perf_counter()
+    
+    def measure(self, name=None):
+        elapsed = time.perf_counter() - self._start_time
+        elapsed = round(elapsed, self.decimals)
+        prefix = " " * self.msg_indent
+        if name is not None:
+            prefix += str(name) + ": "
+        print(f"{prefix}{elapsed} sec")
+        self.start()
+
 
 class Bounds:
     """
@@ -73,6 +92,7 @@ def gaussian(x, center, sigma=0.02):
     exp = np.exp( -np.sum((x - center) ** 2, axis=-1) / (2 * sigma ** 2))
     return const * exp
 
+
 def gridify_pts(bounds, pts, weights, abs_sigma=None, rel_sigma=None, mode="sum", 
         resolution=None):
     """
@@ -82,7 +102,7 @@ def gridify_pts(bounds, pts, weights, abs_sigma=None, rel_sigma=None, mode="sum"
         pts: (x,y) locations within the bounds
         weights: corresponding weights, (negative weights will be set to zero)
         {rel|abs}_sigma: specify relative (fraction of side length) or absolute distance sigma of gaussian smoothing kernel
-        mode: how to aggregate values at each grid location. "max"|"sum"|"second-highest"
+        mode: how to aggregate values at each grid location. options: max, sum, second-highest, median
     returns:
         gridvals: N x M grid of weighted values
         gridpts: N x M x 2 grid, representing the x,y coordinates of each pixel
@@ -114,21 +134,25 @@ def gridify_pts(bounds, pts, weights, abs_sigma=None, rel_sigma=None, mode="sum"
             gridvals += new_vals
         elif mode == "max":
             gridvals = np.maximum(gridvals, new_vals)
-        elif mode == "second-highest":
-            # stack along 'channels' to make 3 channels
+        elif mode == "median" or mode == "second-highest":
+            # stack along 'channels'
             gridvals = np.concatenate((gridvals, new_vals[..., None]), axis=-1)
-            # get largest two from each 3-item channel
-            gridvals = np.sort(gridvals, axis=-1)[..., -2:]
         else:
             raise ValueError("Unknown gridify_pts mode")
+    
     if mode == "second-highest":
-        return gridvals[...,-2], gridpts
+        # get second largest along channels dim
+        gridvals = np.sort(gridvals, axis=-1)[..., -2]
+    elif mode == "median":
+        # get median along channels dim 
+        gridvals = np.median(gridvals, axis=-1)
+
     return gridvals, gridpts
 
 
 
 def plot_raster(gridvals, gridcoords, filename, *, colorbar_label=None, 
-        mark=None, title=None, grid_resolution=None):
+        mark=None, title=None, grid_resolution=None, ticks=False, colorbar=True):
     """
     create plot of a raster
     args:
@@ -139,7 +163,8 @@ def plot_raster(gridvals, gridcoords, filename, *, colorbar_label=None,
     x = gridcoords[...,0]
     y = gridcoords[...,1]
     plt.pcolormesh(x,y,gridvals, shading="auto")
-    plt.colorbar(label=colorbar_label)
+    if colorbar:
+        plt.colorbar(label=colorbar_label)
 
     if mark is not None:
         if isinstance(mark, dict):
@@ -154,6 +179,9 @@ def plot_raster(gridvals, gridcoords, filename, *, colorbar_label=None,
 
     if title is not None:
         plt.title(title)
+    if not ticks:
+        plt.xticks([])
+        plt.yticks([])
     plt.tight_layout()
     plt.savefig(filename)
     plt.clf()
@@ -162,7 +190,8 @@ def plot_raster(gridvals, gridcoords, filename, *, colorbar_label=None,
 
 def rasterize_and_plot(pts, filename, *, rel_sigma=None, abs_sigma=None, weights=None, 
         title=None, clip=None, sqrt_scale=False, mode="sum", mark=None, 
-        zero_one_bounds=False, weight_label=None, grid_resolution=None):
+        zero_one_bounds=False, weight_label=None, grid_resolution=None,
+        colorbar=True, ticks=False):
     """
     create raster plot of points, with optional weights
     args:
@@ -191,7 +220,9 @@ def rasterize_and_plot(pts, filename, *, rel_sigma=None, abs_sigma=None, weights
     plot_raster(gridvals, gridcoords, filename, 
         colorbar_label=weight_label,
         mark=mark,
-        title=None)
+        title=None,
+        colorbar=colorbar,
+        ticks=ticks)
 
 
 
@@ -235,13 +266,13 @@ def plot_one_example(X, Y, patch_id, outdir, pred=None, pred_peaks=None,
     if pred_peaks is not None:
         markings["predicted trees"] = pred_peaks[...,:2]
 
-    # lidar height (second-highest mode, to avoid noise)
+    # lidar height (median mode, to avoid noise)
     rasterize_and_plot(
         x_locs, 
         weights=x_heights, 
         weight_label="height",
         abs_sigma=sigma,
-        mode="second-highest", 
+        mode="median", 
         filename=outdir.joinpath("{}_lidar_height".format(patchname)), 
         mark=markings, 
         zero_one_bounds=zero_one_bounds,
@@ -253,7 +284,7 @@ def plot_one_example(X, Y, patch_id, outdir, pred=None, pred_peaks=None,
         x_locs, 
         weights=x_ndvi, 
         weight_label="ndvi", 
-        mode="max",
+        mode="median",
         abs_sigma=sigma, 
         filename=outdir.joinpath("{}_lidar_ndvi".format(patchname)),
         mark=markings, 
@@ -281,12 +312,16 @@ def plot_one_example(X, Y, patch_id, outdir, pred=None, pred_peaks=None,
         plot_raster(
             pred_overlap_gridded["vals"], 
             pred_overlap_gridded["coords"], 
+            colorbar_label="prediction confidence",
+            mark=markings,
             filename=outdir.joinpath("{}_pred_overlapped".format(patchname))
         )
 
     if naip is not None:
         plt.imshow(naip[...,:3]) # only use RGB
-        plt.colorbar()
+        # plt.colorbar()
+        plt.xticks([])
+        plt.yticks([])
         plt.tight_layout()
         plt.savefig(outdir.joinpath(patchname+"_NAIP_RGB.png"))
         plt.clf()
