@@ -289,7 +289,7 @@ def viz_predictions(patchgen, outdir, *, X_subdiv, X_full, Y_full, Y_subdiv,
             pred_peaks=pred_peaks[p_id],
             naip=patchgen.get_naip(p_id), 
             outdir=patch_dir,
-            grid_size=GRID_RESOLUTION,
+            grid_resolution=GRID_RESOLUTION,
         )
 
 
@@ -336,15 +336,15 @@ def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
     X_subdiv_normed = dict(zip(patchgen.valid_patch_ids, X_subdiv_normed))
 
     # denormalize data
-    preds_subdiv_unnormed = {}
-    for patch_id,pts in preds_subdiv_normed.items():
-        pts[:,:2] = patchgen.denormalize_pts(pts[:,:2], patch_id)
-        preds_subdiv_unnormed[patch_id] = pts
+    print("Denormalizing...")
+    preds_subdiv_unnormed = {p_id: patchgen.denormalize_pts(pts, p_id) for p_id,pts in preds_subdiv_normed.items()}
 
     # combine with overlap
+    print("Overlapping...")
     preds_full_unnormed = overlap_by_hard_cutoff(preds_subdiv_unnormed, patchgen.bounds_subdiv)
     
     # gridify full patches
+    print("Gridifying...")
     pred_grids_unnormed = gridify_preds(preds_full_unnormed, patchgen.bounds_full)
 
     # find localmax peak predictions
@@ -360,9 +360,7 @@ def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
         X_full_normed = drop_overlaps(X_subdiv_normed)
 
         # denormalize X
-        X_full_unnormed = {}
-        for patch_id,pts in X_full_normed.items():
-            X_full_unnormed[patch_id] = patchgen.denormalize_pts(pts, patch_id)
+        X_full_unnormed = {p_id: patchgen.denormalize_pts(pts, p_id) for p_id,pts in X_full_normed.items()}
 
         Y_subdiv_normed = patchgen.gt_subdiv
         viz_predictions(patchgen, outdir.joinpath("visualizations"), 
@@ -402,13 +400,15 @@ def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
     return pointmatch_stats
 
 
-def evaluate_loss_metrics(patchgen, model, outdir):
+def evaluate_loss_metrics(patchgen, model, model_dir):
     """
     Evaluate model's builtin metrics on a dataset
     args:
         patchgen
     """
     print("Evaluating model's metrics...")
+    outdir = model_dir.joinpath("results_"+patchgen.name)
+    os.makedirs(outdir, exist_ok=True)
 
     metric_vals = model.evaluate(patchgen)
     if not isinstance(metric_vals, list):

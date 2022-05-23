@@ -148,7 +148,7 @@ def plot_raster(gridvals, gridcoords, filename, *, colorbar_label=None,
             markers = ["x", "o", "^", "s"]
             for i,m in enumerate(mark.values()):
                 plt.scatter(m[:,0], m[:,1], c=colors[i], marker=markers[i])
-            plt.legend(mark.keys())
+            plt.legend(mark.keys(), loc="upper left")
         else:
             plt.scatter(mark[:,0], mark[:,1], c="white", marker="x")
 
