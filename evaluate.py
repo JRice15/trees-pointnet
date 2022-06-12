@@ -274,28 +274,29 @@ def viz_predictions(patchgen, outdir, *, X_subdiv, X_full, Y_full, Y_subdiv,
 
             bounds = patchgen.get_patch_bounds(subp_id)
             plot_one_example(
-                X_subdiv[subp_id],
-                Y_subdiv[subp_id],
+                outdir=subpatch_dir,
                 patch_id=subp_id,
+                X=X_subdiv[subp_id],
+                Y=Y_subdiv[subp_id],
                 pred=preds_subdiv[subp_id],
                 # pred_peaks=bounds.filter_pts(pred_peaks[p_id]), # peaks within this subpatch
                 naip=patchgen.get_naip(subp_id),
-                outdir=subpatch_dir,
-                grid_resolution=GRID_RESOLUTION//ARGS.subdivide
+                grid_resolution=GRID_RESOLUTION//ARGS.subdivide,
+                zero_one_bounds=True
             )
 
         # TODO mode?
         # plot full-patch data
         naip = patchgen.get_naip(p_id)
         plot_one_example(
-            X_full[p_id], 
-            Y_full[p_id], 
+            outdir=patch_dir,
             patch_id=p_id, 
+            # X_full[p_id], 
+            Y=Y_full[p_id], 
             pred=preds_full[p_id], 
             pred_overlap_gridded=pred_grids[p_id],
             pred_peaks=pred_peaks[p_id],
             naip=patchgen.get_naip(p_id), 
-            outdir=patch_dir,
             grid_resolution=GRID_RESOLUTION,
         )
 
@@ -451,14 +452,16 @@ def main():
         train_gen = datasets["train"]
         train_gen.training = False
         train_gen.summary()
-        evaluate_loss_metrics(train_gen, model, MODEL_DIR)
+        if not ARGS.nolosses:
+            evaluate_loss_metrics(train_gen, model, MODEL_DIR)
         evaluate_pointmatching(train_gen, model, MODEL_DIR, THRESHOLDS)
 
     # validation set evaluation
     if "val" in ARGS.eval_sets or "test" in ARGS.eval_sets:
         val_gen = datasets["val"]
         val_gen.summary()
-        evaluate_loss_metrics(val_gen, model, MODEL_DIR)
+        if not ARGS.nolosses:
+            evaluate_loss_metrics(val_gen, model, MODEL_DIR)
         pointmatch_stats = evaluate_pointmatching(val_gen, model, MODEL_DIR, THRESHOLDS)
         val_best_thresh = pointmatch_stats["best"]["threshold"]
 
@@ -466,7 +469,8 @@ def main():
     if "test" in ARGS.eval_sets:
         test_gen = datasets["test"]
         test_gen.summary()
-        evaluate_loss_metrics(test_gen, model, MODEL_DIR)
+        if not ARGS.nolosses:
+            evaluate_loss_metrics(test_gen, model, MODEL_DIR)
         evaluate_pointmatching(test_gen, model, MODEL_DIR, [val_best_thresh])
 
 
@@ -479,7 +483,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--name",required=True,help="name of model to run, with possible timestamp in front")
     parser.add_argument("--sets",dest="eval_sets",default=("val","test"),nargs="+",help="datasets to evaluate on: train, val, and/or test. test automatically selects val as well")
-    parser.add_argument("--noplot",action="store_true")
+    parser.add_argument("--noplot",action="store_true",help="don't make plots (significantly improves speed)")
+    parser.add_argument("--nolosses",action="store_true")
     parser.parse_args(namespace=ARGS)
 
     main()

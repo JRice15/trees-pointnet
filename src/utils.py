@@ -230,7 +230,7 @@ def rasterize_and_plot(pts, filename, *, rel_sigma=None, abs_sigma=None, weights
 
 
 
-def plot_one_example(X, Y, patch_id, outdir, pred=None, pred_peaks=None, 
+def plot_one_example(outdir, patch_id, *, Y, X=None, pred=None, pred_peaks=None, 
         pred_overlap_gridded=None, naip=None, zero_one_bounds=False,
         grid_resolution=None):
     """

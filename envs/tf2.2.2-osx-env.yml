@@ -1,0 +1,18 @@
+channels:
+  - defaults
+dependencies:
+  - python==3.7
+  - numpy==1.18.5
+  - pandas
+  - matplotlib
+  - pip
+  - rasterio
+  - hyperopt
+  - scikit-learn
+  - scikit-image
+  - tqdm
+  - pydot
+  - graphviz
+  - pip:
+    - tensorflow==2.2.2
+    - protobuf==3.20
