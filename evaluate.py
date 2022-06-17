@@ -35,6 +35,9 @@ MAX_MATCH_DIST = 6
 GRID_RESOLUTION = 128
 
 
+"""
+PointMatching & PM utils
+"""
 
 def pointmatch(all_gts, all_preds, conf_threshold, prune_unpromising=True):
     """
@@ -199,7 +202,11 @@ def gridify_preds(preds, bounds, is_subdiv=False):
     return pred_grids
 
 
-def drop_overlaps(X):
+"""
+Overlap methods
+"""
+
+def drop_overlaps(X, bounds_subdiv):
     """
     args:
         X: some dict, mapping patch subdiv id to pts
@@ -251,6 +258,15 @@ def overlap_by_hard_cutoff(preds_subdiv, bounds_subdiv):
     return preds_combined
 
 
+OVERLAP_METHODS = {
+    "drop": drop_overlaps,
+    "cut": overlap_by_hard_cutoff,
+}
+
+
+"""
+Visualization
+"""
 
 def viz_predictions(patchgen, outdir, *, X_subdiv, X_full, Y_full, Y_subdiv, 
         preds_subdiv, preds_full, pred_grids, pred_peaks):
@@ -338,7 +354,8 @@ def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
 
     # combine with overlap
     print("Overlapping preds...")
-    preds_full_unnormed = overlap_by_hard_cutoff(preds_subdiv_unnormed, patchgen.bounds_subdiv)
+    overlap_fn = OVERLAP_METHODS[ARGS.overlap_method]
+    preds_full_unnormed = overlap_fn(preds_subdiv_unnormed, patchgen.bounds_subdiv)
     timer.measure()
     
     # gridify full patches
@@ -397,8 +414,19 @@ def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
         "best": best_stats,
         "all": all_stats,
     }
-    with open(outdir.joinpath("results_pointmatch.json"), "w") as f:
-        json.dump(pointmatch_stats, f, indent=2)
+
+    # get or initialize stats for all overlap modes
+    results_file = outdir.joinpath("results_pointmatch.json").as_posix()
+    if os.path.exists(results_file):
+        with open(results_file, "r") as f:
+            all_modes_results = json.load(f)
+    else:
+        all_modes_results = {}
+    # update with new stats
+    all_modes_results[ARGS.overlap_mode] = pointmatch_stats
+    # save
+    with open(results_file, "w") as f:
+        json.dump(all_modes_results, f, indent=2)
 
     return pointmatch_stats
 
@@ -484,7 +512,9 @@ if __name__ == "__main__":
     parser.add_argument("--name",required=True,help="name of model to run, with possible timestamp in front")
     parser.add_argument("--sets",dest="eval_sets",default=("val","test"),nargs="+",help="datasets to evaluate on: train, val, and/or test. test automatically selects val as well")
     parser.add_argument("--noplot",action="store_true",help="don't make plots (significantly improves speed)")
-    parser.add_argument("--nolosses",action="store_true")
+    parser.add_argument("--nolosses",action="store_true",help="do not compute loss metrics")
+    parser.add_argument("--overlap-mode",default="drop",choices=list(OVERLAP_METHODS.keys()),
+        help="method by which to combine overlapping tiles")
     parser.parse_args(namespace=ARGS)
 
     main()

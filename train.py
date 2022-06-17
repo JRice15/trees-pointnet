@@ -52,7 +52,9 @@ requiredgrp.add_argument("--loss",required=True,help="loss mode to use (must be 
 
 # main optional
 optionalgrp = parser.add_argument_group("optional")
-optionalgrp.add_argument("--eval",dest="eval_sets",nargs="+",help="specify one or more of 'train', 'val', 'test' to evaluate ('test' automatically selects 'val' as well)")
+optionalgrp.add_argument("--eval",dest="eval_sets",nargs="+",choices=("train", "val", "test"),
+    help="specify one or more of 'train', 'val', 'test' to evaluate ('test' automatically selects 'val' as well)")
+optionalgrp.add_argument("--overlap-mode",default="drop",help="(when --eval supplied): overlap mode during evaluation")
 optionalgrp.add_argument("-h", "--help", action="help", help="show this message and exit")
 
 # dataset
