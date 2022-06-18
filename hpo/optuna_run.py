@@ -62,7 +62,7 @@ valid_losses = ["mmd", "gridmse"]
 def make_objective_func(ARGS, gpu, interrupt_event):
     # get search space
     space = getattr(search_spaces, ARGS.search_space)
-    assert isinstance(space, search_spaces.SearchSpace)
+    assert issubclass(space, search_spaces.SearchSpace)
 
     def objective(trial):
         """
@@ -230,9 +230,8 @@ def main():
         ARGS.dsname = params["dsname"]
 
     space = getattr(search_spaces, ARGS.search_space)
-    if not isinstance(space, search_spaces.SearchSpace):
-        print("space object:", space)
-        raise ValueError("Invalid search space: '{}', type {}".format(ARGS.search_space, type(space)))
+    if not issubclass(space, search_spaces.SearchSpace):
+        raise ValueError("Invalid search space: '{}', type {}".format(ARGS.search_space, space))
     if ARGS.dsname is None:
         raise ValueError("Dataset name is required")
     # save metadata
@@ -244,7 +243,6 @@ def main():
     # add default trial
     if len(study.trials) == 0:
         try:
-            space = getattr(search_spaces, ARGS.search_space)
             default_params = space.defaults
         except AttributeError:
             raise ValueError("No default params exist for this study")
