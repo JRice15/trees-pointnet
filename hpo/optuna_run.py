@@ -190,19 +190,23 @@ def main():
     """
     parser = argparse.ArgumentParser()
     parser.add_argument("--name",required=True,help="study name: subdirectory inside models/ to save these trials under")
+
+    # resources
+    parser.add_argument("--gpus",required=True,type=int,nargs="+",help="GPU IDs to use")
+    parser.add_argument("--per-gpu",type=int,default=1,help="number of concurrent models to train on each GPU")
+
+    # overwrite/resume
     parser.add_argument("--resume",action="store_true",help="resume the study of the given name, otherwise will raise an error if this study already exists")
     parser.add_argument("--overwrite",action="store_true",help="overwrite study of the given name if it exists")
 
+    # searching params
     parser.add_argument("--search-space",help="(if not resuming:) name of the search space function (defined in search_spaces.py) to use")
     parser.add_argument("--dsname",help="(if not resuming:) name of dataset to use ")
     parser.add_argument("--earlystop",type=int,default=50,help="number of trials with no improvement when earlystopping occurs")
     parser.add_argument("--mintrials",type=int,default=200,help="number of trials for which earlystopping is not allowed to occur")
     parser.add_argument("--timeout-mins",type=float,default=(60*4),help="timeout for individual trials, in minutes (default 4 hours)")
 
-    # resources
-    parser.add_argument("--gpus",required=True,type=int,nargs="+",help="GPU IDs to use")
-    parser.add_argument("--per-gpu",type=int,default=1,help="number of concurrent models to train on each GPU")
-
+    # misc
     parser.add_argument("--test",action="store_true",help="just run one-epoch trials")
     ARGS = parser.parse_args()
 
