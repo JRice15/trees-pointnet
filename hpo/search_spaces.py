@@ -80,7 +80,7 @@ class pnet1_v1(SearchSpace):
 
 class pnet2_v1(SearchSpace):
 
-    default_params = {
+    defaults = {
         # main
         "pnet2": True,
         "output-mode": "seg",
