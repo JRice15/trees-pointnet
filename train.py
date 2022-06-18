@@ -107,6 +107,7 @@ lossgrp.add_argument("--ortho-weight",type=float,default=0.001,
 miscgrp = parser.add_argument_group("misc")
 miscgrp.add_argument("--test",action="store_true",help="run minimal batches and epochs to test functionality")
 miscgrp.add_argument("--noplot",action="store_true",help="no batch plots")
+miscgrp.add_argument("--nolosses",action="store_true",help="eval only: do not compute losses")
 miscgrp.add_argument("--show-summary",action="store_true",help="show model summary")
 
 
