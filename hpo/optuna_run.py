@@ -229,11 +229,10 @@ def main():
         ARGS.search_space = params["search_space"]
         ARGS.dsname = params["dsname"]
 
-    try:
-        space = getattr(search_spaces, ARGS.search_space)
-        assert isinstance(space, search_spaces.SearchSpace)
-    except:
-        raise ValueError("Invalid search space: {}".format(ARGS.search_space))
+    space = getattr(search_spaces, ARGS.search_space)
+    if not isinstance(space, search_spaces.SearchSpace):
+        print("space object:", space)
+        raise ValueError("Invalid search space: '{}', type {}".format(ARGS.search_space, type(space)))
     if ARGS.dsname is None:
         raise ValueError("Dataset name is required")
     # save metadata
