@@ -354,7 +354,7 @@ def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
 
     # combine with overlap
     print("Overlapping preds...")
-    overlap_fn = OVERLAP_METHODS[ARGS.overlap_method]
+    overlap_fn = OVERLAP_METHODS[ARGS.overlap_mode]
     preds_full_unnormed = overlap_fn(preds_subdiv_unnormed, patchgen.bounds_subdiv)
     timer.measure()
     
@@ -468,6 +468,8 @@ def main():
 
     model = load_saved_model(MODEL_DIR)
 
+    if "test" in ARGS.eval_sets and "val" not in ARGS.eval_sets:
+        ARGS.eval_sets += ("val",)
     datasets = get_datasets(ARGS.dsname, ARGS.regions, ARGS.eval_sets, train_batchsize=1, val_batchsize=1)
     datasets = dict(zip(ARGS.eval_sets, datasets))
 
