@@ -76,7 +76,7 @@ def make_objective_func(ARGS, gpu, interrupt_event):
             "overlap-mode": OVERLAP_MODE,
         }
         if ARGS.test:
-            constant_params["epochs"] = 3
+            constant_params["epochs"] = 1
         constant_flags = ["noplot"]
 
         # search space params

@@ -104,7 +104,9 @@ class pnet2_v1(SearchSpace):
 
     @staticmethod
     def get_params(args, trial):
-        flags = []
+        flags = [
+            "pnet2",
+        ]
         params = {
             # main
             "output-mode": trial.suggest_categorical("output-mode", ["dense", "seg"]),
