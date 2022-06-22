@@ -19,7 +19,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src import ARGS, DATA_DIR, LIDAR_CHANNELS, REPO_ROOT
 from src.utils import (Bounds, get_all_regions, get_naipfile_path, rasterize_and_plot,
-                       rotate_pts, scaled_0_1, group_by_composite_key)
+                       rotate_pts, scaled_0_1, group_by_composite_key, MyTimer)
 
 VAL_SPLIT = 0.10
 TEST_SPLIT = 0.10
@@ -500,6 +500,7 @@ def get_datasets(dsname, regions, sets=("train", "val", "test"),
     returns:
         list of LidarPatchGen
     """
+    timer = MyTimer()
     train, val, test = get_tvt_split(dsname, regions)
 
     result = []
@@ -516,6 +517,8 @@ def get_datasets(dsname, regions, sets=("train", "val", "test"),
         else:
             raise ValueError("Unknown ds set '{}'".format(name))
     
+    time.measure("dataset generation")
+
     return result
 
 

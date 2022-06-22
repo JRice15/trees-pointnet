@@ -206,7 +206,7 @@ def gridify_preds(preds, bounds, is_subdiv=False):
 Overlap methods
 """
 
-def drop_overlaps(X, bounds_subdiv):
+def drop_overlaps(X, bounds_subdiv=None):
     """
     args:
         X: some dict, mapping patch subdiv id to pts
@@ -280,7 +280,8 @@ def viz_predictions(patchgen, outdir, *, X_subdiv, X_full, Y_full, Y_subdiv,
     subpatch_ids = sorted(preds_subdiv.keys())
 
     # grab random 10ish examples
-    for p_id in patch_ids[::n_ids//10]:
+    step_size = max(1, n_ids//10)
+    for p_id in patch_ids[::step_size]:
         patch_name = "_".join([str(x) for x in p_id])
         patch_dir = outdir.joinpath(patch_name)
         # first three subpatch ids
