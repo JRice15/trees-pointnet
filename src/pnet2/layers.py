@@ -15,10 +15,10 @@ class Pointnet_SA(Layer):
 
         super(Pointnet_SA, self).__init__(**kwargs)
 
-        self.npoint = npoint
-        self.radius = radius
-        self.nsample = nsample
-        self.mlp = mlp
+        self.npoint = int(npoint)
+        self.radius = np.array(radius).astype(int)
+        self.nsample = np.array(nsample).astype(int)
+        self.mlp = np.array(mlp).astype(int)
         self.group_all = group_all
         self.knn = False
         self.use_xyz = use_xyz
@@ -93,10 +93,10 @@ class Pointnet_SA_MSG(Layer):
     ):
         super(Pointnet_SA_MSG, self).__init__(**kwargs)
 
-        self.npoint = npoint
-        self.radius_list = radius_list
-        self.nsample_list = nsample_list
-        self.mlp = mlp
+        self.npoint = int(npoint)
+        self.radius_list = np.array(radius_list).astype(int)
+        self.nsample_list = np.array(nsample_list).astype(int)
+        self.mlp = np.array(mlp).astype(int)
         self.use_xyz = use_xyz
         self.bn = bn
 
@@ -174,7 +174,7 @@ class Pointnet_FP(Layer):
 
         super(Pointnet_FP, self).__init__(**kwargs)
 
-        self.mlp = mlp
+        self.mlp = np.array(mlp).astype(int)
         self.bn = bn
 
         self.mlp_list = []

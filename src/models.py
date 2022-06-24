@@ -272,7 +272,7 @@ def pointnet_2(inputs, npoints, size_multiplier):
     xyz, local_features = layer1(xyz, input_features)
 
     layer2 = Pointnet_SA_MSG(
-        npoint=int(512 * ARGS.size_multiplier),
+        npoint=512 * ARGS.size_multiplier,
         radius_list=[0.2,0.4,0.8],
         nsample_list=2*sample_sizes,
         mlp=2*mlp_sizes,
