@@ -182,10 +182,10 @@ def pointnet_1(x, size_multiplier):
     """
     original pointnet
     args:
-        x: input tensor, shape (B,N,1,K)
+        x: input tensor, shape (B,N,K)
     returns:
-        local features tensor
-        global feature tensor
+        local features tensor (B,N,1,K)
+        global feature tensor (B,K)
         dict mapping loss names to losses
     """
     output_losses = {}
@@ -237,9 +237,11 @@ def pointnet_2(inputs, npoints, size_multiplier):
     adapted from:
     https://github.com/dgriffiths3/pointnet2-tensorflow2
 
+    args:
+        inputs: input tensor (B,N,channels)
     returns:
-        local features tensor
-        global feature tensor
+        local features tensor (B,N,1,channels)
+        global feature tensor (B,channels)
         (always empty) loss dict
     """
     from src.pnet2.layers import Pointnet_SA_MSG, Pointnet_SA
@@ -253,20 +255,27 @@ def pointnet_2(inputs, npoints, size_multiplier):
 
     # TODO size multiplier
 
+    # base sizes
+    sample_sizes = np.array([16, 32, 64]) * ARGS.size_multiplier
+    mlp_sizes = np.array([
+        [32, 32, 64], [64, 64, 128], [64, 96, 128]
+    ]) * ARGS.size_multiplier
+
+
     layer1 = Pointnet_SA_MSG(
         npoint=npoints,
-        radius_list=[0.1,0.2,0.4],
-        nsample_list=[16,32,128],
-        mlp=[[32,32,64], [64,64,128], [64,96,128]],
+        radius_list=[0.1, 0.2, 0.4],
+        nsample_list=sample_sizes,
+        mlp=mlp_sizes,
         bn=ARGS.use_batchnorm,
     )
     xyz, local_features = layer1(xyz, input_features)
 
     layer2 = Pointnet_SA_MSG(
-        npoint=512,
+        npoint=int(512 * ARGS.size_multiplier),
         radius_list=[0.2,0.4,0.8],
-        nsample_list=[32,64,128],
-        mlp=[[64,64,128], [128,128,256], [128,128,256]],
+        nsample_list=2*sample_sizes,
+        mlp=2*mlp_sizes,
         bn=ARGS.use_batchnorm
     )
     xyz, intermediate_features = layer2(xyz, local_features)
@@ -275,11 +284,13 @@ def pointnet_2(inputs, npoints, size_multiplier):
         npoint=None,
         radius=None,
         nsample=None,
-        mlp=[256, 512, 1024],
+        mlp=np.array([256, 512, 1024]) * ARGS.size_multiplier,
         group_all=True,
         bn=ARGS.use_batchnorm,
     )
     xyz, global_feature = layer3(xyz, intermediate_features)
+
+    local_features = customlayers.ExpandDims(axis=2)(local_features) # (B,N,1,K)
 
     return local_features, global_feature, {}
 
