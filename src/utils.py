@@ -24,11 +24,16 @@ class MyTimer:
     
     def measure(self, name=None):
         elapsed = time.perf_counter() - self._start_time
-        elapsed = round(elapsed, self.decimals)
         prefix = " " * self.msg_indent
         if name is not None:
             prefix += str(name) + ": "
-        print(f"{prefix}{elapsed} sec")
+        if elapsed > 60:
+            elapsed /= 60
+            unit = "min"
+        else:
+            unit = "sec"
+        elapsed = round(elapsed, self.decimals)
+        print(f"{prefix}{elapsed} {unit}")
         self.start()
 
 

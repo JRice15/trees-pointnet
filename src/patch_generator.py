@@ -517,7 +517,7 @@ def get_datasets(dsname, regions, sets=("train", "val", "test"),
         else:
             raise ValueError("Unknown ds set '{}'".format(name))
     
-    time.measure("dataset generation")
+    timer.measure("dataset generation")
 
     return result
 

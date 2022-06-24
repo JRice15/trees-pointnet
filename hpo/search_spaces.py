@@ -54,7 +54,7 @@ class pnet1_v1(SearchSpace):
             "npoints": 100 * 2 ** trial.suggest_int("npoints-exp", 1, 4), # 200 to 3200
             "size-multiplier": 2 ** trial.suggest_int("sm-exp", -1, 3), # 0.5 to 8
             # loss
-            "gaussian-sigma": trial.suggest_float("guassian-sigma", 1, 8, step=0.5) # in meters
+            "gaussian-sigma": trial.suggest_float("gaussian-sigma", 1, 8, step=0.5) # in meters
         }
         if params["loss"] == "mmd":
             params["mmd-kernel"] = "gaussian"
@@ -122,7 +122,7 @@ class pnet2_v1(SearchSpace):
             "npoints": 100 * 2 ** trial.suggest_int("npoints-exp", 1, 4), # 200 to 3200
             "size-multiplier": 2 ** trial.suggest_int("sm-exp", -1, 3), # 0.5 to 8
             # loss
-            "gaussian-sigma": trial.suggest_float("guassian-sigma", 1, 8, step=0.5) # in meters
+            "gaussian-sigma": trial.suggest_float("gaussian-sigma", 1, 8, step=0.5) # in meters
         }
         if params["loss"] == "mmd":
             params["mmd-kernel"] = "gaussian"
