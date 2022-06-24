@@ -62,7 +62,7 @@ class pnet1_v1(SearchSpace):
             params["grid-agg"] = trial.suggest_categorical("grid-agg", ["sum", "max"])
         
         if params["output-mode"] == "dense":
-            params["out-npoints"] = 2 ** trial.suggest_int("out-npoints-exp", 7, 10), # 128 to 2048
+            params["out-npoints"] = 2 ** trial.suggest_int("out-npoints-exp", 7, 10) # 128 to 2048
             params["dropout"] = trial.suggest_float("dense-dropout", 0.0, 0.7, step=0.05)
         elif params["output-mode"] == "seg":
             params["dropout"] = trial.suggest_float("seg-dropout", 0.0, 0.7, step=0.05)
@@ -130,7 +130,7 @@ class pnet2_v1(SearchSpace):
             params["grid-agg"] = trial.suggest_categorical("grid-agg", ["sum", "max"])
         
         if params["output-mode"] == "dense":
-            params["out-npoints"] = 2 ** trial.suggest_int("out-npoints-exp", 7, 10), # 128 to 2048
+            params["out-npoints"] = 2 ** trial.suggest_int("out-npoints-exp", 7, 10) # 128 to 2048
             params["dropout"] = trial.suggest_float("dense-dropout", 0.0, 0.7, step=0.05)
         elif params["output-mode"] == "seg":
             params["dropout"] = trial.suggest_float("seg-dropout", 0.0, 0.7, step=0.05)
