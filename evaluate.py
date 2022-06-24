@@ -442,7 +442,8 @@ def evaluate_loss_metrics(patchgen, model, model_dir):
     outdir = model_dir.joinpath("results_"+patchgen.name)
     os.makedirs(outdir, exist_ok=True)
 
-    metric_vals = model.evaluate(patchgen)
+    metric_vals = model.evaluate(patchgen, batch_size=ARGS.batchsize)
+    
     if not isinstance(metric_vals, list):
         results = {"loss": metric_vals}
     else:

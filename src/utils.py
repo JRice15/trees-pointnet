@@ -9,6 +9,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import rasterio
+# import numba
 
 from src import ARGS, DATA_DIR, REPO_ROOT, MODEL_SAVE_FMT
 
@@ -91,11 +92,35 @@ class Bounds:
         kwargs = dict(zip(keys, bounds))
         return cls(**kwargs)
 
-
+# @numba.njit
 def gaussian(x, center, sigma=0.02):
+    """
+    args:
+        x: locations to evaluate gassian curve at
+        center: peak of gaussian
+    """
     const = (2 * np.pi * sigma) ** -0.5
     exp = np.exp( -np.sum((x - center) ** 2, axis=-1) / (2 * sigma ** 2))
     return const * exp
+
+# @numba.njit
+# def _gridify_loop(gridvals, gridpts, pts, weights, gaussian_sigma, mode):
+#     for i,p in enumerate(pts):
+#         if weights[i] > 0:
+#             new_vals = gaussian(gridpts, p, sigma=gaussian_sigma)
+#             new_vals *= weights[i]
+
+#             if mode == "sum":
+#                 gridvals += new_vals
+#             elif mode == "max":
+#                 gridvals = np.maximum(gridvals, new_vals)
+#             elif mode == "median" or mode == "second-highest":
+#                 # stack along 'channels'
+#                 gridvals = np.concatenate((gridvals, new_vals[..., None]), axis=-1)
+#             else:
+#                 raise ValueError("Unknown gridify_pts mode")
+
+#     return gridvals
 
 
 def gridify_pts(bounds, pts, weights, abs_sigma=None, rel_sigma=None, mode="sum", 
@@ -128,32 +153,37 @@ def gridify_pts(bounds, pts, weights, abs_sigma=None, rel_sigma=None, mode="sum"
     x, y = np.meshgrid(x, y)
     gridpts = np.stack([x,y], axis=-1)
 
-    # initialize grid for aggregation methods
-    if mode == "second-highest" or mode == "median":
-        gridvals = np.zeros(x.shape + (2,), dtype=x.dtype)
-    else:
-        gridvals = np.zeros_like(x)
+    # # initialize grid for aggregation methods
+    # if mode == "second-highest" or mode == "median":
+    #     gridvals = np.zeros(x.shape + (2,), dtype=x.dtype)
+    # else:
+    #     gridvals = np.zeros_like(x)
 
-    for i,p in enumerate(pts):
-        new_vals = gaussian(gridpts, p, sigma=gaussian_sigma)
-        if weights is not None:
-            new_vals *= max(weights[i], 0)
-        if mode == "sum":
-            gridvals += new_vals
-        elif mode == "max":
-            gridvals = np.maximum(gridvals, new_vals)
-        elif mode == "median" or mode == "second-highest":
-            # stack along 'channels'
-            gridvals = np.concatenate((gridvals, new_vals[..., None]), axis=-1)
-        else:
-            raise ValueError("Unknown gridify_pts mode")
-    
-    if mode == "second-highest":
+    # filter zero or near-zero weights
+    EPSILON = 1e-5
+    mask = (weights > EPSILON)
+    pts = pts[mask]
+    weights = weights[mask]
+
+    gridpts = gridpts[None,...] # (1,resolution,resolution,2)
+    pts = pts[:,None,None,:] # (npoints,1,1,2)
+    weights = weights[:,None,None] # (npoints,1,1)
+
+    gridvals = gaussian(gridpts, pts, sigma=gaussian_sigma)
+    gridvals *= weights
+
+    if mode == "sum":
+        gridvals = gridvals.sum(axis=0)
+    elif mode == "max":
+        gridvals = gridvals.max(axis=0)
+    elif mode == "second-highest":
         # get second largest along channels dim
-        gridvals = np.sort(gridvals, axis=-1)[..., -2]
+        gridvals = np.sort(gridvals, axis=0)[-2]
     elif mode == "median":
         # get median along channels dim 
-        gridvals = np.median(gridvals, axis=-1)
+        gridvals = np.median(gridvals, axis=0)
+    else:
+        raise ValueError(f"Unknown gridify mode '{mode}'")
 
     return gridvals, gridpts
 

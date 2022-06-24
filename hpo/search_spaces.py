@@ -80,6 +80,7 @@ class pnet1_v1(SearchSpace):
 
 class pnet2_v1(SearchSpace):
 
+    # defaults are fed in as trial params to the get params function on the 1st trial
     defaults = {
         # main
         "pnet2": True,
@@ -94,7 +95,7 @@ class pnet2_v1(SearchSpace):
         "lr-exp": -1.5,
         # model arch
         "npoints-exp": 3,
-        "sm-exp": 0,
+        "size-multiplier": 1.0,
         "seg-dropout": 0.2,
         "batchnorm": False,
         # loss
@@ -118,9 +119,10 @@ class pnet2_v1(SearchSpace):
             "optimizer": trial.suggest_categorical("optimizer", ["adam", "adadelta", "nadam", "adamax"]),
             "batchsize": 2 ** trial.suggest_int("batchsize-exp", 2, 7), # 4 to 128
             "lr": 10 ** trial.suggest_float("lr-exp", -5, -1, step=0.5), # 1e-1 to 1e-5
+            "reducelr-patience": 3,
             # model arch
             "npoints": 100 * 2 ** trial.suggest_int("npoints-exp", 1, 4), # 200 to 3200
-            "size-multiplier": 2 ** trial.suggest_int("sm-exp", -1, 3), # 0.5 to 8
+            "size-multiplier": trial.suggest_float("size-multiplier", 0.25, 2, step=0.25),
             # loss
             "gaussian-sigma": trial.suggest_float("gaussian-sigma", 1, 8, step=0.5) # in meters
         }
