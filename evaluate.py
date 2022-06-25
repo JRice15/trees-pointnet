@@ -273,6 +273,7 @@ def viz_predictions(patchgen, outdir, *, X_subdiv, X_full, Y_full, Y_subdiv,
     """
     data visualizations
     """
+    print("Generating visualizations...")
     os.makedirs(outdir, exist_ok=True)
 
     patch_ids = sorted(preds_full.keys())
@@ -281,7 +282,7 @@ def viz_predictions(patchgen, outdir, *, X_subdiv, X_full, Y_full, Y_subdiv,
 
     # grab random 10ish examples
     step_size = max(1, n_ids//10)
-    for p_id in patch_ids[::step_size]:
+    for p_id in tqdm(patch_ids[::step_size]):
         patch_name = "_".join([str(x) for x in p_id])
         patch_dir = outdir.joinpath(patch_name)
         # first three subpatch ids
@@ -381,7 +382,6 @@ def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
         X_full_unnormed = {p_id: patchgen.denormalize_pts(pts, p_id) for p_id,pts in X_full_normed.items()}
         timer.measure()
 
-        print("Generating plots...")
         Y_subdiv_normed = patchgen.gt_subdiv
         viz_predictions(patchgen, outdir.joinpath("visualizations"), 
             # use normed for subdiv data
