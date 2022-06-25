@@ -153,37 +153,40 @@ def gridify_pts(bounds, pts, weights, abs_sigma=None, rel_sigma=None, mode="sum"
     x, y = np.meshgrid(x, y)
     gridpts = np.stack([x,y], axis=-1)
 
-    # # initialize grid for aggregation methods
-    # if mode == "second-highest" or mode == "median":
-    #     gridvals = np.zeros(x.shape + (2,), dtype=x.dtype)
-    # else:
-    #     gridvals = np.zeros_like(x)
+    # initialize grid for aggregation methods
+    if mode == "second-highest" or mode == "median":
+        gridvals_list = []
+    else:
+        gridvals = np.zeros_like(x)
 
-    # filter zero or near-zero weights
-    EPSILON = 1e-5
-    mask = (weights > EPSILON)
+    # filter out small weights: 
+    # 1/100th of max weight or 1e-3, whichever is smaller
+    min_weight = min(0.01 * max(weights), 1e-3)
+    mask = (weights > min_weight)
     pts = pts[mask]
     weights = weights[mask]
 
-    gridpts = gridpts[None,...] # (1,resolution,resolution,2)
-    pts = pts[:,None,None,:] # (npoints,1,1,2)
-    weights = weights[:,None,None] # (npoints,1,1)
+    for point,weight in zip(pts, weights):
+        new_vals = weight * gaussian(gridpts, point, sigma=gaussian_sigma)
 
-    gridvals = gaussian(gridpts, pts, sigma=gaussian_sigma)
-    gridvals *= weights
-
-    if mode == "sum":
-        gridvals = gridvals.sum(axis=0)
-    elif mode == "max":
-        gridvals = gridvals.max(axis=0)
-    elif mode == "second-highest":
+        if mode == "sum":
+            gridvals += new_vals
+        elif mode == "max":
+            gridvals = np.maximum(gridvals, new_vals)
+        elif mode == "median" or mode == "second-highest":
+            # collect all values
+            gridvals_list.append(new_vals)
+        else:
+            raise ValueError("Unknown gridify_pts mode")
+    
+    if mode == "second-highest":
+        gridvals = np.stack(gridvals_list, axis=0)
         # get second largest along channels dim
         gridvals = np.sort(gridvals, axis=0)[-2]
     elif mode == "median":
+        gridvals = np.stack(gridvals_list, axis=0)
         # get median along channels dim 
-        gridvals = np.median(gridvals, axis=0)
-    else:
-        raise ValueError(f"Unknown gridify mode '{mode}'")
+        gridvals = np.median(gridvals, axis=-0)
 
     return gridvals, gridpts
 
