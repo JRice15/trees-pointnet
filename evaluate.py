@@ -12,6 +12,7 @@ from pprint import pprint
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+import ray
 import tensorflow as tf
 from scipy.optimize import linear_sum_assignment
 from skimage.feature import peak_local_max
@@ -177,6 +178,12 @@ def find_local_maxima(pred_grids, bounds, min_conf_threshold=None):
 
     return maxima
 
+@ray.remote
+def _ray_gridify(*args, **kwargs):
+    """
+    distribute gridification using Ray
+    """
+    return gridify_pts(*args, **kwargs)
 
 def gridify_preds(preds, bounds, is_subdiv=False):
     """
@@ -192,10 +199,16 @@ def gridify_preds(preds, bounds, is_subdiv=False):
     else:
         resolution = GRID_RESOLUTION
     pred_grids = {}
-    for key, pred in tqdm(preds.items(), total=len(preds)):
-        vals, coords = gridify_pts(bounds[key], pred[:,:2], pred[:,2], 
+    futures = []
+    for key, pred in preds.items():
+        future = _ray_gridify(
+                bounds[key], pred[:,:2], pred[:,2], 
                 abs_sigma=ARGS.gaussian_sigma, mode=ARGS.grid_agg, # TODO test both grid-agg modes?
                 resolution=resolution)
+        futures.append(future)
+    
+    results = ray.get(futures)
+    for vals, coords in results:
         pred_grids[key] = {"vals": vals, "coords": coords}
 
     # pred_grids_grouped = group_by_composite_key(pred_grids, first_n=2)
