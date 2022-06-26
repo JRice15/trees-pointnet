@@ -424,7 +424,7 @@ class LidarPatchGen(keras.utils.Sequence):
         min_x,min_y,max_x,max_y = bound.minmax_fmt()
 
         # spatial channels, then spectral channels. Last channel is NDVI
-        mins = [min_x, min_y, 0]     + [0, 0, 0, 0, -1]
+        mins = [min_x, min_y, 0]          + [0, 0, 0, 0, -1]
         maxs = [max_x, max_y, Z_MAX_CLIP] + [1, 1, 1, 1, 1]
 
         return np.array(mins), np.array(maxs)

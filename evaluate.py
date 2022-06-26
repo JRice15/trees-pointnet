@@ -396,12 +396,12 @@ def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
     Y_full_unnormed = patchgen.gt_full
 
     if not ARGS.noplot:
-        print("Overlapping/denormalizing X...")
-        # drop overlapping subpatches, combine into full patches
-        X_full_normed = drop_overlaps(X_subdiv_normed)
-
+        print("Denormalizing & Overlapping X...")
         # denormalize X
-        X_full_unnormed = {p_id: patchgen.denormalize_pts(pts, p_id) for p_id,pts in X_full_normed.items()}
+        X_subdiv_unnormed = {p_id: patchgen.denormalize_pts(pts, p_id) for p_id,pts in X_subdiv_normed.items()}
+
+        # drop overlapping subpatches, combine into full patches
+        X_full_unnormed = drop_overlaps(X_subdiv_unnormed)
         timer.measure()
 
         Y_subdiv_normed = patchgen.gt_subdiv
