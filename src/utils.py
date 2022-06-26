@@ -360,13 +360,13 @@ def plot_one_example(outdir, patch_id, *, Y, X=None, pred=None, pred_peaks=None,
     if pred_peaks is not None:
         markings["predicted trees"] = pred_peaks[...,:2]
 
-    # lidar height (median mode, to avoid noise)
+    # lidar height (second-highest mode, to reduce noise)
     rasterize_and_plot(
         x_locs, 
         weights=x_heights, 
         weight_label="height",
-        abs_sigma=sigma,
-        mode="median", 
+        gaussian_blur=False,
+        mode="second-highest", 
         filename=outdir.joinpath("{}_lidar_height".format(patchname)), 
         mark=markings, 
         zero_one_bounds=zero_one_bounds,
@@ -378,8 +378,8 @@ def plot_one_example(outdir, patch_id, *, Y, X=None, pred=None, pred_peaks=None,
         x_locs, 
         weights=x_ndvi, 
         weight_label="ndvi", 
-        mode="median",
-        abs_sigma=sigma, 
+        mode="max",
+        gaussian_blur=False,
         filename=outdir.joinpath("{}_lidar_ndvi".format(patchname)),
         mark=markings, 
         zero_one_bounds=zero_one_bounds,
@@ -396,7 +396,7 @@ def plot_one_example(outdir, patch_id, *, Y, X=None, pred=None, pred_peaks=None,
             weight_label="prediction confidence",
             abs_sigma=sigma, 
             filename=outdir.joinpath("{}_pred_raw".format(patchname)),
-            mode="sum", 
+            mode=ARGS.grid_agg, 
             mark=markings, 
             zero_one_bounds=zero_one_bounds,
             grid_resolution=grid_resolution)
@@ -534,6 +534,15 @@ def get_naipfile_path(region, patch_num):
         raise ValueError("{} matching NAIP files found for '{} {}'. Expected exactly 1".format(len(found), region, patch_num))
     return found[0]
 
+def load_naip(region, patch_num):
+    naipfile = get_naipfile_path(region, patch_num)
+    with rasterio.open(naipfile) as raster:
+        im = raster.read()
+    # channels last format
+    im = np.moveaxis(im, 0, -1) / 255.0
+    # sometimes it selects a row of pixels outside of the image, which results in spurious very large negative numbers
+    im = np.clip(im, 0, 1)
+    return im
 
 def get_avg_patch_size():
     """
