@@ -295,8 +295,6 @@ def plot_one_example(outdir, patch_id, *, Y, X=None, pred=None, pred_peaks=None,
         ylocs = Y
 
     gt_ntrees = len(ylocs)
-    x_locs = X[...,:2]
-    x_heights = X[...,2]
 
     if zero_one_bounds:
         sigma = scaled_0_1(ARGS.gaussian_sigma)
@@ -307,30 +305,34 @@ def plot_one_example(outdir, patch_id, *, Y, X=None, pred=None, pred_peaks=None,
     if pred_peaks is not None:
         markings["predicted trees"] = pred_peaks[...,:2]
 
-    # lidar height (median mode, to avoid noise)
-    rasterize_and_plot(
-        x_locs, 
-        weights=x_heights, 
-        weight_label="height",
-        abs_sigma=sigma,
-        mode="median", 
-        filename=outdir.joinpath("{}_lidar_height".format(patchname)), 
-        mark=markings, 
-        zero_one_bounds=zero_one_bounds,
-        grid_resolution=grid_resolution)
-    
-    # lidar ndvi
-    x_ndvi = X[...,-1]
-    rasterize_and_plot(
-        x_locs, 
-        weights=x_ndvi, 
-        weight_label="ndvi", 
-        mode="median",
-        abs_sigma=sigma, 
-        filename=outdir.joinpath("{}_lidar_ndvi".format(patchname)),
-        mark=markings, 
-        zero_one_bounds=zero_one_bounds,
-        grid_resolution=grid_resolution)
+    if X is not None:
+        x_locs = X[...,:2]
+
+        # lidar height (median mode, to avoid noise)
+        x_heights = X[...,2]
+        rasterize_and_plot(
+            x_locs, 
+            weights=x_heights, 
+            weight_label="height",
+            abs_sigma=sigma,
+            mode="median", 
+            filename=outdir.joinpath("{}_lidar_height".format(patchname)), 
+            mark=markings, 
+            zero_one_bounds=zero_one_bounds,
+            grid_resolution=grid_resolution)
+        
+        # lidar ndvi
+        x_ndvi = X[...,-1]
+        rasterize_and_plot(
+            x_locs, 
+            weights=x_ndvi, 
+            weight_label="ndvi", 
+            mode="median",
+            abs_sigma=sigma, 
+            filename=outdir.joinpath("{}_lidar_ndvi".format(patchname)),
+            mark=markings, 
+            zero_one_bounds=zero_one_bounds,
+            grid_resolution=grid_resolution)
 
     # raw predictions
     if pred is not None:

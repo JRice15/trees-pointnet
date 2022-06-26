@@ -1,4 +1,4 @@
-
+import logging
 import argparse
 import contextlib
 import datetime
@@ -178,6 +178,10 @@ def find_local_maxima(pred_grids, bounds, min_conf_threshold=None):
 
     return maxima
 
+ray.init(
+    #log_to_driver=False
+)
+
 @ray.remote
 def _ray_gridify(*args, **kwargs):
     """
@@ -198,17 +202,19 @@ def gridify_preds(preds, bounds, is_subdiv=False):
         resolution = GRID_RESOLUTION // ARGS.subdivide
     else:
         resolution = GRID_RESOLUTION
-    pred_grids = {}
     futures = []
+    keys = []
     for key, pred in preds.items():
-        future = _ray_gridify(
+        future = _ray_gridify.remote(
                 bounds[key], pred[:,:2], pred[:,2], 
                 abs_sigma=ARGS.gaussian_sigma, mode=ARGS.grid_agg, # TODO test both grid-agg modes?
                 resolution=resolution)
         futures.append(future)
+        keys.append(key)
     
     results = ray.get(futures)
-    for vals, coords in results:
+    pred_grids = {}
+    for key, (vals, coords) in zip(keys, results):
         pred_grids[key] = {"vals": vals, "coords": coords}
 
     # pred_grids_grouped = group_by_composite_key(pred_grids, first_n=2)
@@ -292,6 +298,11 @@ def viz_predictions(patchgen, outdir, *, X_subdiv, X_full, Y_full, Y_subdiv,
     patch_ids = sorted(preds_full.keys())
     n_ids = len(patch_ids)
     subpatch_ids = sorted(preds_subdiv.keys())
+
+    print("x", len(X_subdiv.keys()), len(X_full.keys()))
+    print("y", len(Y_subdiv.keys()), len(Y_full.keys()))
+    print("preds", len(preds_subdiv.keys()), len(preds_full.keys()))
+    print("grid,peaks", len(pred_grids.keys()), len(pred_peaks.keys()))
 
     # grab random 10ish examples
     step_size = max(1, n_ids//10)

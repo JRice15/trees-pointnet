@@ -47,11 +47,9 @@ except ModuleNotFoundError:
 
 
 if has_tf:
+    tf.get_logger().setLevel('ERROR')
+
     from tensorflow import keras
-    from tensorflow.keras import Model
-    from tensorflow.keras import backend as K
-    from tensorflow.keras import layers
-    from tensorflow.keras.optimizers import Adam
 
     tf.random.set_seed(999)
     tf.compat.v1.set_random_seed(999)
@@ -63,4 +61,5 @@ if has_tf:
         except Exception as e:
             print("! Cannot set memory growth on device", gpu)
             print(e)
+
 
