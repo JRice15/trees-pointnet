@@ -1,4 +1,4 @@
-
+import logging
 import argparse
 import contextlib
 import datetime
@@ -178,6 +178,7 @@ def find_local_maxima(pred_grids, bounds, min_conf_threshold=None):
 
     return maxima
 
+
 @ray.remote
 def _ray_rasterize_pts_blur(*args, **kwargs):
     """
@@ -198,17 +199,25 @@ def rasterize_preds(preds, bounds, is_subdiv=False):
         resolution = GRID_RESOLUTION // ARGS.subdivide
     else:
         resolution = GRID_RESOLUTION
-    pred_grids = {}
+
+    # initialize ray, silence output
+    ray.init(
+        log_to_driver=False
+    )
+
     futures = []
+    keys = []
     for key, pred in preds.items():
-        future = _ray_rasterize_pts_blur(
+        future = _ray_rasterize_pts_blur.remote(
                 bounds[key], pred[:,:2], pred[:,2], 
-                abs_sigma=ARGS.gaussian_sigma, mode=ARGS.grid_agg, # TODO test both grid-agg modes?
+                abs_sigma=ARGS.gaussian_sigma, mode=ARGS.grid_agg,
                 resolution=resolution)
         futures.append(future)
+        keys.append(key)
     
     results = ray.get(futures)
-    for vals, coords in results:
+    pred_grids = {}
+    for key, (vals, coords) in zip(keys, results):
         pred_grids[key] = {"vals": vals, "coords": coords}
 
     # pred_grids_grouped = group_by_composite_key(pred_grids, first_n=2)
@@ -293,6 +302,11 @@ def viz_predictions(patchgen, outdir, *, X_subdiv, X_full, Y_full, Y_subdiv,
     n_ids = len(patch_ids)
     subpatch_ids = sorted(preds_subdiv.keys())
 
+    print("x", len(X_subdiv.keys()), len(X_full.keys()))
+    print("y", len(Y_subdiv.keys()), len(Y_full.keys()))
+    print("preds", len(preds_subdiv.keys()), len(preds_full.keys()))
+    print("grid,peaks", len(pred_grids.keys()), len(pred_peaks.keys()))
+
     # grab random 10ish examples
     step_size = max(1, n_ids//10)
     for p_id in tqdm(patch_ids[::step_size]):
@@ -316,7 +330,6 @@ def viz_predictions(patchgen, outdir, *, X_subdiv, X_full, Y_full, Y_subdiv,
                 zero_one_bounds=True
             )
 
-        # TODO mode?
         # plot full-patch data
         naip = patchgen.get_naip(p_id)
         plot_one_example(
