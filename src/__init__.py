@@ -54,7 +54,7 @@ if has_tf:
     tf.random.set_seed(999)
     tf.compat.v1.set_random_seed(999)
     gpus = tf.config.list_physical_devices('GPU')
-    print("GPUs:", gpus)
+    print("GPUs:", len(gpus))
     for gpu in gpus:
         try:
             tf.config.experimental.set_memory_growth(gpu, True)

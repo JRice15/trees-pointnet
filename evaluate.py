@@ -26,13 +26,13 @@ from src.patch_generator import get_datasets
 from src.losses import get_loss
 from src.models import pointnet
 from src.tf_utils import load_saved_model
-from src.utils import (glob_modeldir, gridify_pts, group_by_composite_key,
+from src.utils import (glob_modeldir, rasterize_pts_gaussian_blur, group_by_composite_key,
                        plot_one_example, rasterize_and_plot, scaled_0_1, load_params_into_ARGS)
 from src.utils import MyTimer
 
 # max dist that two points can be considered matched, in meters
 MAX_MATCH_DIST = 6
-# size of grids to gridify
+# size of grids to rasterize
 GRID_RESOLUTION = 128
 
 
@@ -152,7 +152,7 @@ def pointmatch(all_gts, all_preds, conf_threshold, prune_unpromising=True):
 def find_local_maxima(pred_grids, bounds, min_conf_threshold=None):
     """
     args:
-        pred_grids: outputs of gridify_preds(...)
+        pred_grids: outputs of rasterize_preds(...)
         bounds: list of Bounds
         min_conf_threshold: smallest conf threshold
     returns:
@@ -178,18 +178,15 @@ def find_local_maxima(pred_grids, bounds, min_conf_threshold=None):
 
     return maxima
 
-ray.init(
-    #log_to_driver=False
-)
 
 @ray.remote
-def _ray_gridify(*args, **kwargs):
+def _ray_rasterize_pts_blur(*args, **kwargs):
     """
-    distribute gridification using Ray
+    distribute rasterization using Ray
     """
-    return gridify_pts(*args, **kwargs)
+    return rasterize_pts_gaussian_blur(*args, **kwargs)
 
-def gridify_preds(preds, bounds, is_subdiv=False):
+def rasterize_preds(preds, bounds, is_subdiv=False):
     """
     args:
         preds: dict mapping patch id to pred pts (must be original CRS, not 0-1 scale)
@@ -202,12 +199,18 @@ def gridify_preds(preds, bounds, is_subdiv=False):
         resolution = GRID_RESOLUTION // ARGS.subdivide
     else:
         resolution = GRID_RESOLUTION
+
+    # initialize ray, silence output
+    ray.init(
+        log_to_driver=False
+    )
+
     futures = []
     keys = []
     for key, pred in preds.items():
-        future = _ray_gridify.remote(
+        future = _ray_rasterize_pts_blur.remote(
                 bounds[key], pred[:,:2], pred[:,2], 
-                abs_sigma=ARGS.gaussian_sigma, mode=ARGS.grid_agg, # TODO test both grid-agg modes?
+                abs_sigma=ARGS.gaussian_sigma, mode=ARGS.grid_agg,
                 resolution=resolution)
         futures.append(future)
         keys.append(key)
@@ -327,7 +330,6 @@ def viz_predictions(patchgen, outdir, *, X_subdiv, X_full, Y_full, Y_subdiv,
                 zero_one_bounds=True
             )
 
-        # TODO mode?
         # plot full-patch data
         naip = patchgen.get_naip(p_id)
         plot_one_example(
@@ -384,9 +386,9 @@ def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
     preds_full_unnormed = overlap_fn(preds_subdiv_unnormed, patchgen.bounds_subdiv)
     timer.measure()
     
-    # gridify full patches
-    print("Gridifying preds...")
-    pred_grids_unnormed = gridify_preds(preds_full_unnormed, patchgen.bounds_full)
+    # rasterize full patches
+    print("Rasterizing preds...")
+    pred_grids_unnormed = rasterize_preds(preds_full_unnormed, patchgen.bounds_full)
     timer.measure()
 
     # find localmax peak predictions
@@ -501,7 +503,7 @@ def main():
 
     # grid search approximating log-scale
     THRESHOLDS = list(np.arange(0, 0.030, 0.005)) + list(np.arange(0.030, 0.100, 0.010)) + list(np.arange(0.100, 1, 0.025))
-    # GRIDIFY_MODES = ["sum", "max"]
+    # RASTERIZE_MODES = ["sum", "max"]
 
     # train set evaluation
     if "train" in ARGS.eval_sets:

@@ -97,7 +97,7 @@ lossgrp.add_argument("--gaussian-sigma", "--sigma",type=float,default=3,
 lossgrp.add_argument("--mmd-kernel",default="gaussian",
         help="mmd loss: type of kernel")
 lossgrp.add_argument("--grid-agg",choices=["max","sum"],default="sum",
-        help="gridmse loss: how to aggregate predicted points during gridification")
+        help="gridmse loss: how to aggregate predicted points during rasterization")
 # lossgrp.add_argument("--dist-weight",type=float,default=0.9,
 #         help="treetop loss: weight on distance vs count loss")
 lossgrp.add_argument("--ortho-weight",type=float,default=0.001,
