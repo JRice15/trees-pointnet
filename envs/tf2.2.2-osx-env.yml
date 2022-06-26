@@ -13,6 +13,7 @@ dependencies:
   - tqdm
   - pydot
   - graphviz
+  - ray
   - pip:
     - tensorflow==2.2.2
     - protobuf==3.20

@@ -201,9 +201,10 @@ def rasterize_preds(preds, bounds, is_subdiv=False):
         resolution = GRID_RESOLUTION
 
     # initialize ray, silence output
-    ray.init(
-        log_to_driver=False
-    )
+    if not ray.is_initialized():
+        ray.init(
+            log_to_driver=False
+        )
 
     futures = []
     keys = []
@@ -302,11 +303,6 @@ def viz_predictions(patchgen, outdir, *, X_subdiv, X_full, Y_full, Y_subdiv,
     n_ids = len(patch_ids)
     subpatch_ids = sorted(preds_subdiv.keys())
 
-    print("x", len(X_subdiv.keys()), len(X_full.keys()))
-    print("y", len(Y_subdiv.keys()), len(Y_full.keys()))
-    print("preds", len(preds_subdiv.keys()), len(preds_full.keys()))
-    print("grid,peaks", len(pred_grids.keys()), len(pred_peaks.keys()))
-
     # grab random 10ish examples
     step_size = max(1, n_ids//10)
     for p_id in tqdm(patch_ids[::step_size]):
@@ -335,7 +331,7 @@ def viz_predictions(patchgen, outdir, *, X_subdiv, X_full, Y_full, Y_subdiv,
         plot_one_example(
             outdir=patch_dir,
             patch_id=p_id, 
-            # X_full[p_id], 
+            X=X_full[p_id], 
             Y=Y_full[p_id], 
             pred=preds_full[p_id], 
             pred_overlap_gridded=pred_grids[p_id],
