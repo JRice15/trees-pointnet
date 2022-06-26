@@ -39,16 +39,18 @@ def get_loss():
     raise ValueError("No loss for mode '{}'".format(ARGS.loss))
 
 @tf.function
-def tf_gaussian(x, center, sigma=0.02):
+def tf_height_1_gaussian(x, center, sigma):
     """
-    evaluate a gaussian centered at `center` for point(s) `x`
+    evaluate a scaled gaussian centered at `center` for point(s) `x`
+    see function `height_1_gaussian` in src/utils.py
     """
-    const = (2 * np.pi * sigma) ** -0.5
-    exp = tf.exp( -tf.reduce_sum((x - center) ** 2, axis=-1) / (2 * sigma ** 2))
-    return const * exp
+    squared_dists = tf.reduce_sum((x - center) ** 2, axis=-1)
+    exp_factor = -1 / (2 * sigma ** 2)
+    exp = tf.exp( exp_factor * squared_dists)
+    return exp
 
 @tf.function
-def tf_gridify_pts(weighted_pts, gaussian_sigma, resolution=50):
+def tf_rasterize_pts_gaussian_blur(weighted_pts, gaussian_sigma, resolution=50):
     """
     rasterize weighted points to a grid, with a gaussian blur
     works for batched input only, ie weighted_pts has shape (batchsize, npoints, channels)
@@ -71,14 +73,14 @@ def tf_gridify_pts(weighted_pts, gaussian_sigma, resolution=50):
     weighted_pts = tf.expand_dims(weighted_pts, axis=-3)
     pts = weighted_pts[...,:2]
     weights = weighted_pts[...,-1]
-    gridvals = tf_gaussian(gridcoords, pts, sigma=gaussian_sigma)
+    gridvals = tf_height_1_gaussian(gridcoords, pts, sigma=gaussian_sigma)
     gridvals = gridvals * weights
     if ARGS.grid_agg == "sum":
         gridvals = tf.reduce_sum(gridvals, axis=-1)
     elif ARGS.grid_agg == "max":
         gridvals = tf.reduce_max(gridvals, axis=-1)
     else:
-        raise ValueError("Unknown gridify_pts mode")
+        raise ValueError("Unknown rasterize_pts mode")
     return gridvals
 
 
@@ -95,8 +97,8 @@ def grid_mse():
 
     @tf.function
     def loss(gt, pred):
-        pred_grid = tf_gridify_pts(pred, scaled_sigma, resolution=resolution)
-        gt_grid = tf_gridify_pts(gt, scaled_sigma, resolution=resolution)
+        pred_grid = tf_rasterize_pts_gaussian_blur(pred, scaled_sigma, resolution=resolution)
+        gt_grid = tf_rasterize_pts_gaussian_blur(gt, scaled_sigma, resolution=resolution)
 
         # "squared l2 norm" = mean squared error
         square_error_grid = (pred_grid - gt_grid) ** 2

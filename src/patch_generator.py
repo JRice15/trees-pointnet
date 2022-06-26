@@ -11,9 +11,7 @@ import pandas as pd
 import rasterio
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras import Model
 from tensorflow.keras import backend as K
-from tensorflow.keras import layers
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 

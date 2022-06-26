@@ -76,7 +76,7 @@ def main():
     else:
         raise ValueError("Bad patch: {}".format(patch_id))
     
-    ds = get_datasets(ARGS.dsname, regions, sets=[kind])
+    (ds,) = get_datasets(ARGS.dsname, regions, sets=[kind])
 
     print(ds.summary())
 

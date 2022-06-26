@@ -92,55 +92,47 @@ class Bounds:
         kwargs = dict(zip(keys, bounds))
         return cls(**kwargs)
 
-# @numba.njit
-def gaussian(x, center, sigma=0.02):
+
+def height_1_gaussian(x, center, sigma):
     """
+    gaussian scaled to always have a height of 1
+    see for height of gaussian https://stats.stackexchange.com/questions/143631/height-of-a-normal-distribution-curve
     args:
-        x: locations to evaluate gassian curve at
+        x: locations to evaluate gassian curve at, shape (X,Y,ncoords)
         center: peak of gaussian
+        sigma: std.dev of gaussian kernel
+    returns:
+        grid, shape (X,Y)
     """
-    const = (2 * np.pi * sigma) ** -0.5
-    exp = np.exp( -np.sum((x - center) ** 2, axis=-1) / (2 * sigma ** 2))
-    return const * exp
+    # constant scalings
+    ### these are the real values, but when multiplied together cancels out
+    ### height_scale = sigma * np.sqrt(2 * np.pi)
+    ### prefix = 1 / (sigma * np.sqrt(2 * np.pi))
 
-# @numba.njit
-# def _gridify_loop(gridvals, gridpts, pts, weights, gaussian_sigma, mode):
-#     for i,p in enumerate(pts):
-#         if weights[i] > 0:
-#             new_vals = gaussian(gridpts, p, sigma=gaussian_sigma)
-#             new_vals *= weights[i]
-
-#             if mode == "sum":
-#                 gridvals += new_vals
-#             elif mode == "max":
-#                 gridvals = np.maximum(gridvals, new_vals)
-#             elif mode == "median" or mode == "second-highest":
-#                 # stack along 'channels'
-#                 gridvals = np.concatenate((gridvals, new_vals[..., None]), axis=-1)
-#             else:
-#                 raise ValueError("Unknown gridify_pts mode")
-
-#     return gridvals
+    # distances for each point in x
+    squared_dist = np.sum((x - center) ** 2, axis=-1)
+    # gaussian formula
+    exp_factor = -1 / (2 * sigma ** 2)
+    return np.exp( exp_factor * squared_dist )
 
 
-def gridify_pts(bounds, pts, weights, abs_sigma=None, rel_sigma=None, mode="sum", 
-        resolution=None):
+def rasterize_pts_gaussian_blur(bounds, pts, weights, abs_sigma=None, rel_sigma=None, 
+        mode="sum", resolution=64):
     """
-    rasterize weighted points to a grid
+    rasterize weighted points to a grid by gaussian blurring
     args:
         bounds: Bounds object
         pts: (x,y) locations within the bounds
         weights: corresponding weights, (negative weights will be set to zero)
         {rel|abs}_sigma: specify relative (fraction of side length) or absolute distance sigma of gaussian smoothing kernel
-        mode: how to aggregate values at each grid location. options: max, sum, second-highest, median
+        mode: how to aggregate values at each grid location. options: max, sum, second-highest
+        resolution: size length of grid
     returns:
         gridvals: N x M grid of weighted values
         gridpts: N x M x 2 grid, representing the x,y coordinates of each pixel
     """
-    if resolution is None:
-        resolution = 64
-
     xmin, xmax, ymin, ymax = bounds.xy_fmt()
+
     # get gaussian kernel std.dev.
     assert (rel_sigma is None) != (abs_sigma is None) # only one can and must be true
     if rel_sigma is not None:
@@ -148,13 +140,14 @@ def gridify_pts(bounds, pts, weights, abs_sigma=None, rel_sigma=None, mode="sum"
         gaussian_sigma = rel_sigma * size_factor
     else:
         gaussian_sigma = abs_sigma
+
     x = np.linspace(xmin, xmax, resolution)
     y = np.linspace(ymin, ymax, resolution)
     x, y = np.meshgrid(x, y)
     gridpts = np.stack([x,y], axis=-1)
 
     # initialize grid for aggregation methods
-    if mode == "second-highest" or mode == "median":
+    if mode == "second-highest":
         gridvals_list = []
     else:
         gridvals = np.zeros_like(x)
@@ -167,26 +160,80 @@ def gridify_pts(bounds, pts, weights, abs_sigma=None, rel_sigma=None, mode="sum"
     weights = weights[mask]
 
     for point,weight in zip(pts, weights):
-        new_vals = weight * gaussian(gridpts, point, sigma=gaussian_sigma)
+        new_vals = weight * height_1_gaussian(gridpts, point, sigma=gaussian_sigma)
 
         if mode == "sum":
             gridvals += new_vals
         elif mode == "max":
             gridvals = np.maximum(gridvals, new_vals)
-        elif mode == "median" or mode == "second-highest":
+        elif mode == "second-highest":
             # collect all values
             gridvals_list.append(new_vals)
         else:
-            raise ValueError("Unknown gridify_pts mode")
+            raise ValueError("Unknown rasterize_pts mode")
     
     if mode == "second-highest":
         gridvals = np.stack(gridvals_list, axis=0)
         # get second largest along channels dim
         gridvals = np.sort(gridvals, axis=0)[-2]
-    elif mode == "median":
-        gridvals = np.stack(gridvals_list, axis=0)
-        # get median along channels dim 
-        gridvals = np.median(gridvals, axis=-0)
+
+    return gridvals, gridpts
+
+
+
+def rasterize_pts_pixelwise(bounds, pts, weights, mode="sum", resolution=64):
+    """
+    rasterize weighted points to a grid based on which pixel they fall in (no blurring/smoothing)
+    args:
+        bounds: Bounds object
+        pts: (x,y) locations within the bounds
+        weights: corresponding weights, (negative weights will be set to zero)
+        mode: how to aggregate values at each grid location. options: max, sum, second-highest
+        resolution: side length of grid
+    returns:
+        gridvals: N x M grid of weighted values
+        gridpts: N x M x 2 grid, representing the x,y coordinates of each pixel
+    """
+    xmin, xmax, ymin, ymax = bounds.xy_fmt()
+
+    x_ticks = np.linspace(xmin, xmax, resolution)
+    y_ticks = np.linspace(ymin, ymax, resolution)
+    x_grid, y_grid = np.meshgrid(x_ticks, y_ticks)
+    gridpts = np.stack([x_grid, y_grid], axis=-1)
+
+    # get stepsizes
+    x_step = np.mean(np.diff(x_ticks))
+    y_step = np.mean(np.diff(y_ticks))
+
+    # initialize grid for aggregation methods
+    if mode == "second-highest":
+        gridvals_highest = np.zeros_like(x_grid)
+        gridvals_secondhighest = np.zeros_like(x_grid)
+    else:
+        gridvals = np.zeros_like(x_grid)
+
+    x_locs = pts[:,0]
+    y_locs = pts[:,1]
+    x_pixels = ((x_locs - xmin) // x_step).astype(int)
+    y_pixels = ((y_locs - ymin) // y_step).astype(int)
+
+    for x,y,weight in zip(x_pixels, y_pixels, weights):
+        if mode == "sum":
+            gridvals[y,x] += weight
+        elif mode == "max":
+            gridvals[y,x] = max(gridvals[y,x], weight)
+        elif mode == "second-highest":
+            # collect all values
+            if weight > gridvals_highest[y,x]:
+                gridvals_secondhighest[y,x] = gridvals_highest[y,x]
+                gridvals_highest[y,x] = weight
+            elif weight > gridvals_secondhighest[y,x]:
+                gridvals_secondhighest[y,x] = weight
+        else:
+            raise ValueError("Unknown rasterize_pts mode")
+    
+    if mode == "second-highest":
+        gridvals = gridvals_highest
 
     return gridvals, gridpts
 
@@ -229,13 +276,14 @@ def plot_raster(gridvals, gridcoords, filename, *, colorbar_label=None,
     plt.close()
 
 
-def rasterize_and_plot(pts, filename, *, rel_sigma=None, abs_sigma=None, weights=None, 
+def rasterize_and_plot(pts, filename, *, gaussian_blur=True, rel_sigma=None, abs_sigma=None, weights=None, 
         title=None, clip=None, sqrt_scale=False, mode="sum", mark=None, 
         zero_one_bounds=False, weight_label=None, grid_resolution=None,
         colorbar=True, ticks=False):
     """
     create raster plot of points, with optional weights
     args:
+        gaussian_blur: whether to rasterize with gaussian blur, or directly pixelwise
         guassian_sigma: stddev of kernel to use when raster smoothing, where 1 is the width of the plot
         clip: None, or max value for output
         mode: max, or sum. method of generating y values in raster
@@ -250,8 +298,13 @@ def rasterize_and_plot(pts, filename, *, rel_sigma=None, abs_sigma=None, weights
             pts[:,1].min(), pts[:,1].max()
         ])
 
-    gridvals, gridcoords = gridify_pts(bounds, pts, weights, rel_sigma=rel_sigma, 
-                            abs_sigma=abs_sigma, mode=mode, resolution=grid_resolution)
+    if gaussian_blur:
+        gridvals, gridcoords = rasterize_pts_gaussian_blur(bounds, pts, weights, 
+                                rel_sigma=rel_sigma, abs_sigma=abs_sigma, 
+                                mode=mode, resolution=grid_resolution)
+    else:
+        gridvals, gridcoords = rasterize_pts_pixelwise(bounds, pts, weights, 
+                                mode=mode, resolution=grid_resolution)
 
     if sqrt_scale:
         gridvals = np.sqrt(gridvals)
@@ -261,7 +314,7 @@ def rasterize_and_plot(pts, filename, *, rel_sigma=None, abs_sigma=None, weights
     plot_raster(gridvals, gridcoords, filename, 
         colorbar_label=weight_label,
         mark=mark,
-        title=None,
+        title=title,
         colorbar=colorbar,
         ticks=ticks)
 
@@ -279,7 +332,7 @@ def plot_one_example(outdir, patch_id, *, Y, X=None, pred=None, pred_peaks=None,
         patch_id
         outdir: pathlib.PurePath
         pred: raw predictions from network
-        pred_overlap_gridded: pre-gridded predictions, generated by the overlap method. Expects same output from gridify_preds()
+        pred_overlap_gridded: pre-gridded predictions, generated by the overlap method. Expects same output from rasterize_preds(...)
         pred_peaks: thresholded peaks from the predictions blurred to grid; ie the true final predictions
         naip: naip image
         zero_one_bounds: whether points are in 0-1 scale (instead of epsg26911)
