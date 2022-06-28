@@ -275,4 +275,5 @@ if ARGS.eval_sets:
 
     # add qualified name with timestamp as name, so it is unambigous in case of multiple models with same name
     ARGS.name = modelname
+    ARGS.save_preds = False
     evaluate.main()

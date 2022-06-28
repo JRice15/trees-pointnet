@@ -58,7 +58,6 @@ def pointmatch(all_gts, all_preds, conf_threshold, prune_unpromising=True):
     all_tp_dists = []
     pruned = False
 
-
     for i,patch_id in enumerate(all_gts.keys()):
         # pruning early if we've gotten only 0 or 1 true positives
         if i == 50 and prune_unpromising:
@@ -113,7 +112,6 @@ def pointmatch(all_gts, all_preds, conf_threshold, prune_unpromising=True):
         if len(tp_inds):
             tp_dists = np.min(dists[:,tp_inds],axis=0)
             all_tp_dists.append(tp_dists)
-
 
     if all_tp + all_fp > 0:
         precision = all_tp/(all_tp+all_fp)
@@ -244,7 +242,7 @@ def drop_overlaps(X, bounds_subdiv=None):
         )
 
 
-def overlap_by_hard_cutoff(preds_subdiv, bounds_subdiv):
+def overlap_by_mid_cutoff(preds_subdiv, bounds_subdiv):
     """
     converts overlapping sub-patches back into full patches
     args:
@@ -283,7 +281,7 @@ def overlap_by_hard_cutoff(preds_subdiv, bounds_subdiv):
 
 OVERLAP_METHODS = {
     "drop": drop_overlaps,
-    "cut": overlap_by_hard_cutoff,
+    "cut": overlap_by_mid_cutoff,
 }
 
 
@@ -382,6 +380,15 @@ def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
     preds_full_unnormed = overlap_fn(preds_subdiv_unnormed, patchgen.bounds_subdiv)
     timer.measure()
     
+    # save predictions
+    if ARGS.save_preds:
+        preds_string_keys = {
+            "_".join(map(str, p_id)): pts for p_id, pts in preds_full_unnormed.items()
+        }
+        outfile = outdir.joinpath("raw_preds.npz")
+        np.savez_compressed(outfile.as_posix(), **preds_string_keys)
+        del preds_string_keys
+
     # rasterize full patches
     print("Rasterizing preds...")
     pred_grids_unnormed = rasterize_preds(preds_full_unnormed, patchgen.bounds_full)
@@ -396,7 +403,7 @@ def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
     Y_full_unnormed = patchgen.gt_full
 
     if not ARGS.noplot:
-        print("Denormalizing & Overlapping X...")
+        print("Denormalizing & overlapping X...")
         # denormalize X
         X_subdiv_unnormed = {p_id: patchgen.denormalize_pts(pts, p_id) for p_id,pts in X_subdiv_normed.items()}
 
@@ -541,6 +548,7 @@ if __name__ == "__main__":
     parser.add_argument("--nolosses",action="store_true",help="do not compute loss metrics")
     parser.add_argument("--overlap-mode",default="drop",choices=list(OVERLAP_METHODS.keys()),
         help="method by which to combine overlapping tiles")
+    parser.add_argument("--save-preds",action="store_true",help="save raw predictions as npy files")
     parser.parse_args(namespace=ARGS)
 
     main()
