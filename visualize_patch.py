@@ -2,11 +2,14 @@ import argparse
 import os, sys
 
 import open3d
+
 import numpy as np
 
-def viz_pointcloud(xyz):
+def viz_pointcloud(xyz, point_size=5, colors=None):
     pcd = open3d.geometry.PointCloud()
     pcd.points = open3d.utility.Vector3dVector(xyz)
+    if colors is not None:
+        pcd.colors = open3d.utility.Vector3dVector(colors[:, :3])
 
     bbox = open3d.geometry.AxisAlignedBoundingBox.create_from_points(pcd.points)
     print(bbox)
@@ -15,45 +18,26 @@ def viz_pointcloud(xyz):
     viewer.create_window()
     viewer.add_geometry(pcd)
 
-    # opt = viewer.get_render_option()
-    #opt.show_coordinate_frame = True
-    #opt.background_color = np.asarray([0.5, 0.5, 0.5])
+    opt = viewer.get_render_option()
+    opt.point_size = point_size
 
     viewer.run()
     viewer.destroy_window()
 
 
-def main():
+
+def viz_from_ds(args):
     from src import DATA_DIR, ARGS
     from src.utils import get_default_dsname, get_all_regions
     from src.patch_generator import get_datasets, get_tvt_split
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--dsname",help="dataset name")
-    parser.add_argument("--region","-r",required=True)
-    parser.add_argument("--patch","-p","-n",type=int,required=True,help="patch number")
-    parser.add_argument("--minz",type=int,default=-10)
-    parser.add_argument("--maxz",type=int,default=50)
-    args = parser.parse_args()
-
-    if args.dsname is None:
-        args.dsname = get_default_dsname()
-
-    ### sualize pts from raw data
-
-    path = DATA_DIR.joinpath("lidar", args.dsname, "regions", args.region, "lidar_patch_{}.npy".format(args.patch))
-    xyz = np.load(path.as_posix())[:,:3]
-    xyz = xyz[(xyz[:,2] <= args.maxz) & (args.minz <= xyz[:,2])]
-
-    print(xyz.shape)
-
-    viz_pointcloud(xyz)
-
+    if args.name is None:
+        args.name = get_default_dsname()
 
     ### visualize pts from training dataset loader
 
     # set fake dataset params
-    ARGS.dsname = args.dsname
+    ARGS.dsname = args.name
     ARGS.handle_small = "drop"
     ARGS.batchsize = 1
     ARGS.subdivide = 5
@@ -62,11 +46,14 @@ def main():
     ARGS.noise_sigma = 0
     ARGS.test = False
 
-    # all_regions = get_all_regions(args.dsname)
-    regions = [args.region]
+    region, patch = args.pid
+    path
 
-    patch_id = (args.region, int(args.patch))
-    train_ids, val_ids, test_ids = get_tvt_split(args.dsname, regions)
+    # all_regions = get_all_regions(args.dsname)
+    regions = [region]
+
+    patch_id = (region, int(patch))
+    train_ids, val_ids, test_ids = get_tvt_split(args.name, regions)
     if patch_id in train_ids:
         kind = "train"
     elif patch_id in val_ids:
@@ -85,7 +72,7 @@ def main():
     all_xyz = None
     for i in range(ARGS.subdivide*2-1):
         for j in range(ARGS.subdivide*2-1):
-            subpatch_id = (args.region, args.patch, i, j)
+            subpatch_id = patch_id + (i, j)
             try:
                 pts, _, _ = ds.get_patch(*subpatch_id)
             except ValueError as e:
@@ -102,6 +89,60 @@ def main():
                 all_xyz = np.concatenate([all_xyz, xyz], axis=0)
 
     viz_pointcloud(all_xyz)
+
+
+def viz_from_raw_ds(args):
+    from src import DATA_DIR
+    from src.utils import get_default_dsname, get_all_regions
+
+    if args.name is None:
+        args.name = get_default_dsname()
+
+    ### visualize pts from raw data
+    region, patch = args.pid
+
+    path = DATA_DIR.joinpath("lidar", args.name, "regions", region, "lidar_patch_{}.npy".format(patch))
+    xyz = np.load(path.as_posix())[:,:3]
+    xyz = xyz[(xyz[:,2] <= args.maxz) & (args.minz <= xyz[:,2])]
+
+    print(xyz.shape)
+
+    viz_pointcloud(xyz)
+
+
+def viz_from_preds(args):
+    from src.utils import glob_modeldir
+
+    path = glob_modeldir(args.name).joinpath("results_test", "raw_preds.npz")
+    npz = np.load(path.as_posix())
+
+    xyz = npz["_".join(args.pid)]
+    xyz = xyz[(xyz[:,2] <= args.maxz) & (args.minz <= xyz[:,2])]
+
+    # scale for better visibility
+    xyz[:,2] = xyz[:,2] * 10
+
+    viz_pointcloud(xyz)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--source",choices=("raw", "ds", "preds"),help="source of pts to load from")
+    parser.add_argument("--name",help="name of particular source; dsname for `raw` and `ds`, or model name for `preds`")
+    parser.add_argument("--pid","-p",nargs=2,required=True)
+    parser.add_argument("--minz",type=float,default=-10)
+    parser.add_argument("--maxz",type=float,default=50)
+    args = parser.parse_args()
+
+    if args.source == "raw":
+        viz_from_raw_ds(args)
+    elif args.source == "ds":
+        viz_from_ds(args)
+    elif args.source == "preds":
+        viz_from_preds(args)
+    else:
+        raise ValueError()
+
 
     
 if __name__ == "__main__":

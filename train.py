@@ -93,15 +93,21 @@ modelgrp.add_argument("--batchnorm",dest="use_batchnorm",action="store_true",hel
 # loss parameters
 lossgrp = parser.add_argument_group("loss parameters")
 lossgrp.add_argument("--gaussian-sigma", "--sigma",type=float,default=3,
-        help="in meters, std dev of gaussian smoothing applied in the loss (mmd and gridmse modes)")
+        help="mmd/gridmse: in meters, std dev of gaussian smoothing applied in the loss")
 lossgrp.add_argument("--mmd-kernel",default="gaussian",
-        help="mmd loss: type of kernel")
+        help="mmd: type of kernel")
 lossgrp.add_argument("--grid-agg",choices=["max","sum"],default="sum",
-        help="gridmse loss: how to aggregate predicted points during rasterization")
-# lossgrp.add_argument("--dist-weight",type=float,default=0.9,
-#         help="treetop loss: weight on distance vs count loss")
+        help="gridmse: how to aggregate predicted points during rasterization")
+
+lossgrp.add_argument("--p2p-conf-weight",type=float,default=1.0, #TODO p2p defaults
+        help="p2p: weight for confidence relative to distance in matching")
+lossgrp.add_argument("--p2p-unmatched-weight",type=float,default=0.5, #TODO
+        help="p2p: weight for loss on unmatched predictions (relative to matched) inside the classification loss")
+lossgrp.add_argument("--p2p-loc-weight",type=float,default=1.0, #TODO
+        help="p2p: weight for location (regression) loss, relative to classification loss")
+
 lossgrp.add_argument("--ortho-weight",type=float,default=0.001,
-        help="orthogonality regularization loss weight, when using TNet2")
+        help="tnet2: orthogonality regularization loss weight, when using TNet2")
 
 # misc
 miscgrp = parser.add_argument_group("misc")

@@ -16,8 +16,9 @@ from tensorflow.keras import backend as K
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src import ARGS, DATA_DIR, LIDAR_CHANNELS, REPO_ROOT
-from src.utils import (Bounds, get_all_regions, get_naipfile_path, rasterize_and_plot,
-                       rotate_pts, scaled_0_1, group_by_composite_key, MyTimer)
+from src.utils import (Bounds, MyTimer, get_all_regions, get_naipfile_path,
+                       group_by_composite_key, load_naip, rasterize_and_plot,
+                       rotate_pts, scaled_0_1, load_gt_trees)
 
 VAL_SPLIT = 0.10
 TEST_SPLIT = 0.10
@@ -131,33 +132,11 @@ class LidarPatchGen(keras.utils.Sequence):
 
         LIDAR_DIR = DATA_DIR.joinpath("lidar", ARGS.dsname, "regions")
         NAIP_DIR = DATA_DIR.joinpath("NAIP_patches")
-        GT_DIR = DATA_DIR.joinpath("ground_truth_csvs")
-
-        x_column_options = ("long_nad83", "long_utm11", "point_x", "x")
-        y_column_options = ("lat_nad83", "lat_utm11", "point_y", "y")
 
         # load ground-truth trees
         orig_gt_trees = {}
         for region in self.regions:
-            files = glob.glob(GT_DIR.joinpath(region + "*.csv").as_posix())
-            assert len(files) == 1
-            table = pd.read_csv(files[0])
-            # lowercase the columns
-            table.columns = [x.lower() for x in table.columns]
-            x_col = None
-            y_col = None
-            for col in x_column_options:
-                if col in table:
-                    x_col = table[col].to_numpy()
-                    break
-            for col in y_column_options:
-                if col in table:
-                    y_col = table[col].to_numpy()
-                    break
-            if x_col is None or y_col is None:
-                raise ValueError("Could not find correct gt columns for {}".format(region))
-            gt_pts = np.stack([x_col, y_col], axis=-1)
-            orig_gt_trees[region] = gt_pts
+            orig_gt_trees[region] = load_gt_trees(region)
 
         # load bounds and lidar
         self.bounds_full = {}
@@ -367,22 +346,15 @@ class LidarPatchGen(keras.utils.Sequence):
 
     def get_naip(self, patch_id):
         """
-        get naip image. Channels: R-G-B-NIR
+        get naip image. Channels: R-G-B-NIR. Min 0, max 1.
         args:
             patch_id: id for subdiv or full patch. tuple: (region, patch_num, ...)
         """
         bounds = self.get_patch_bounds(patch_id)
         # load naip file
         region, patch_num = patch_id[:2]
-        naipfile = get_naipfile_path(region, patch_num)
-        with rasterio.open(naipfile) as raster:
-            # https://gis.stackexchange.com/questions/336874/get-a-window-from-a-raster-in-rasterio-using-coordinates-instead-of-row-column-o
-            im = raster.read(window=rasterio.windows.from_bounds(*bounds.minmax_fmt(), raster.transform))
-        # channels last format
-        im = np.moveaxis(im, 0, -1) / 255.0
-        # sometimes it selects a row of pixels outside of the image, which results in spurious very large negative numbers
-        im = np.clip(im, 0, 1)
-        return im
+        return load_naip(region, patch_num, bounds=bounds)
+
 
     def get_patch_bounds(self, patch_id):
         """

@@ -8,6 +8,7 @@ from pathlib import PurePath
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import rasterio
 # import numba
 
@@ -444,6 +445,12 @@ def load_params_into_ARGS(model_dir, ARGS, skip_params=(), false_params=()):
 
 
 def glob_modeldir(modelname):
+    """
+    given a raw name (like "test-model"), find the most recent matching model
+    path (eg, "models/test-model-220207-123423/")
+    returns:
+        pathlib.PurePath
+    """
     allmodels_dir = REPO_ROOT.joinpath("models/")
 
     # first try exact match
@@ -536,15 +543,59 @@ def get_naipfile_path(region, patch_num):
         raise ValueError("{} matching NAIP files found for '{} {}'. Expected exactly 1".format(len(found), region, patch_num))
     return found[0]
 
-def load_naip(region, patch_num):
+def load_naip(region, patch_num, bounds=None):
+    """
+    load a NAIP tile, or a subsection of it
+    args:
+        region: str
+        patch_num: int
+        bounds: Bounds object, to select a subwindow of the NAIP
+    """
     naipfile = get_naipfile_path(region, patch_num)
     with rasterio.open(naipfile) as raster:
-        im = raster.read()
+        if bounds is None:
+            im = raster.read()
+        else:
+            # https://gis.stackexchange.com/questions/336874/get-a-window-from-a-raster-in-rasterio-using-coordinates-instead-of-row-column-o
+            im = raster.read(window=rasterio.windows.from_bounds(*bounds.minmax_fmt(), raster.transform))
     # channels last format
     im = np.moveaxis(im, 0, -1) / 255.0
     # sometimes it selects a row of pixels outside of the image, which results in spurious very large negative numbers
     im = np.clip(im, 0, 1)
     return im
+
+
+def load_gt_trees(region):
+    """
+    load all ground-truth annotations from a region
+    args:
+        region: str
+    """
+    x_column_options = ("long_nad83", "long_utm11", "point_x", "x")
+    y_column_options = ("lat_nad83", "lat_utm11", "point_y", "y")
+
+    GT_DIR = DATA_DIR.joinpath("ground_truth_csvs")
+    files = glob.glob(GT_DIR.joinpath(region + "*.csv").as_posix())
+    assert len(files) == 1, f"found {len(files)} instead of 1"
+    table = pd.read_csv(files[0])
+
+    # lowercase the columns
+    table.columns = [x.lower() for x in table.columns]
+    x_col = None
+    y_col = None
+    for col in x_column_options:
+        if col in table:
+            x_col = table[col].to_numpy()
+            break
+    for col in y_column_options:
+        if col in table:
+            y_col = table[col].to_numpy()
+            break
+    if x_col is None or y_col is None:
+        raise ValueError("Could not find correct gt columns for {}".format(region))
+    gt_pts = np.stack([x_col, y_col], axis=-1)
+    return gt_pts
+
 
 def get_avg_patch_size():
     """
