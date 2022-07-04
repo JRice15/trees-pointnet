@@ -103,8 +103,6 @@ class LidarPatchGen(keras.utils.Sequence):
         self.orig_patch_ids = patch_ids
         self.regions = list(set([i[0] for i in self.orig_patch_ids]))
         self.y_counts_only = False
-        if ARGS.loss == "count":
-            self.y_counts_only = True
         self.nattributes = len(LIDAR_CHANNELS)
         self.npoints = ARGS.npoints
         self.batch_time = 0

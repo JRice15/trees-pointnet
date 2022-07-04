@@ -39,7 +39,7 @@ optimizer_options = {
 }
 
 valid_output_modes = ["seg", "dense", "count"]
-valid_losses = ["mmd", "count", "treetop", "gridmse"]
+valid_losses = ["mmd", "gridmse", "p2p"]
 
 parser = argparse.ArgumentParser(add_help=False)
 # main required args
@@ -194,10 +194,9 @@ print("Building model")
 
 # map loss modes to number of output features and points
 output_channels_map = {
-    "count": 1,   # count
-    "treetop": 1, # x,y,confidence
-    "gridmse": 3, # confidence, xys are appended
-    "mmd": 3,     # x,y,confidence
+    "gridmse": 3,   # x,y,confidence
+    "mmd": 3,       # x,y,confidence
+    "p2p": 3        # x,y,confidence
 }
 
 model = pointnet(

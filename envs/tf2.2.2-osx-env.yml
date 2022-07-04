@@ -6,7 +6,7 @@ dependencies:
   - pandas
   - matplotlib
   - pip
-  - rasterio
+  - rasterio==1.2.10
   - hyperopt
   - scikit-learn
   - scikit-image

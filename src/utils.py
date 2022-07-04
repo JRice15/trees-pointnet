@@ -324,7 +324,7 @@ def rasterize_and_plot(pts, filename, *, gaussian_blur=True, rel_sigma=None, abs
 
 def plot_one_example(outdir, patch_id, *, Y, X=None, pred=None, pred_peaks=None, 
         pred_overlap_gridded=None, naip=None, zero_one_bounds=False,
-        grid_resolution=None):
+        grid_resolution=128):
     """
     generate raster plots for one example input and output from a dataset
     args:

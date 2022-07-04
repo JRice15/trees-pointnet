@@ -22,22 +22,14 @@ def get_loss():
         error_func(predictions, gt_targets): -> scalar
     where scalar is an error metric (can be negative)
     """
-    if ARGS.loss == "treetop":
-        assert ARGS.output_mode in ("seg", "dense")
-        raise NotImplementedError()
-        # if ARGS.ragged:
-        #     return ragged_pointwise_treetop()
-        # else:
-        #     return nonrag_pointwise_treetop()
     if ARGS.loss == "mmd":
         assert ARGS.output_mode in ("seg", "dense")
         return max_mean_discrepancy()
     if ARGS.loss == "gridmse":
         assert ARGS.output_mode in ("seg", "dense")
         return grid_mse()
-    if ARGS.loss == "count":
-        assert ARGS.output_mode == "count"
-        return keras.losses.mse, [keras.metrics.mse]
+    if ARGS.loss == "p2p":
+        return point_to_point()
 
     raise ValueError("No loss for mode '{}'".format(ARGS.loss))
 
@@ -192,64 +184,62 @@ def max_mean_discrepancy():
 
 
 
-
 def point_to_point():
     """
     From P2PNet (Song et al 2021): https://github.com/TencentYoutuResearch/CrowdCounting-P2PNet
     """
 
+    tf.config.experimental_run_functions_eagerly(True)
+
     def matcher(pred, gt):
         """
+        computes optimal matching assignment between the two
         args:
             preds: shape (B,npoints,3) where 3 -> (x, y, confidence)
             gt: shape (B,maxtrees,3) where 3 -> (x, y, isvalidtree)
         returns:
             matching: indexes of matched pred for each ground truth (B, )
         """
-        batchsize, maxtrees = tf.shape(gt)[:2]
-        n_points = tf.shape(pred)[1]
+        batchsize, maxtrees = tf.shape(gt).numpy()[:2]
+        n_points = tf.shape(pred).numpy()[1]
         indices = np.zeros((batchsize, maxtrees), dtype=int)
         is_match = np.zeros((batchsize, n_points), dtype=float)
 
-        for idx,(batch_pred, batch_gt) in enumerate(zip(pred, gt)):
+        for idx,(pred_batch, gt_batch) in enumerate(zip(pred, gt)):
             # only use valid gt trees (which are always the first N in the array, so 
             # indices for valid trees won't change after this masking)
-            batch_gt = batch_gt[batch_gt[:,2] > 0]
-            n_gt = len(batch_gt)
+            gt_batch = gt_batch[gt_batch[:,2] > 0]
+            n_gt = len(gt_batch)
 
-            # calculate pairwise distances
-            dists = pairwise_distances(batch_gt[:,:2], batch_pred[:,:2])
-            # make high confidence things closer to everything, moderated by a weight
-            cost_matrix = dists - tf.expand_dims(ARGS.p2p_conf_weight * batch_pred[:,2], axis=0)
+            if n_gt > 0:
+                # calculate pairwise distances
+                dists = pairwise_distances(gt_batch[:,:2], pred_batch[:,:2])
+                # make high confidence things closer to everything, moderated by a weight
+                cost_matrix = dists - tf.expand_dims(ARGS.p2p_conf_weight * pred_batch[:,2], axis=0)
 
-            # find optimal assignment
-            gt_inds, pred_inds = linear_sum_assignment(cost_matrix)
-            # gt inds are always sorted 0-N, so not needed
-            indices[idx,:n_gt] = pred_inds
-            is_match[idx,pred_inds] = 1.0
+                # find optimal assignment
+                gt_inds, pred_inds = linear_sum_assignment(cost_matrix)
+                # gt inds are always sorted 0-N, so not needed
+                indices[idx,:n_gt] = pred_inds
+                is_match[idx,pred_inds] = 1.0
         
         indices = tf.stop_gradient( tf.constant(indices, dtype="int32") )
-        is_match = tf.stop_gradient( tf.constant(is_match, dtype=K.floatx()) )
+        is_match = tf.stop_gradient( tf.constant(is_match, dtype="bool") )
         return indices, is_match
 
-    # @tf.function
+    @tf.function
     def classification_loss(pred, ismatched):
         """
         Equation 4 in Song et al
         Make matched predictions have high confidence, and unmatched have low
         """
         confs = pred[...,2]
-        n_ismatched = tf.reduce_sum(ismatched, axis=-1)
-        # everything is either matched or unmatched
-        pos_elements = tf.math.log(confs) * ismatched
-        neg_elements = tf.math.log((1 - confs)) * (1 - ismatched)
-        neg_elements *= ARGS.p2p_unmatched_weight
-        # sum together elementwise. Only one of the two will be non-zero in each element
-        all_elements = pos_elements + neg_elements
-        # binary crossentropy loss
-        return -tf.reduce_mean(all_elements)
+        # we want high confidence when matched to a gt, and low otherwise
+        ismatched = tf.cast(ismatched, K.floatx())
+        loss = K.binary_crossentropy(ismatched, confs)
+        return tf.reduce_mean(loss, axis=-1)
     
-    # @tf.function
+    @tf.function
     def location_loss(pred, gt, matching):
         """
         Equation 5 in Song et al
@@ -261,25 +251,24 @@ def point_to_point():
         # squared distance (error) between gt and pred: (x1-x2)^2 + (y1-y2)^2
         error = (pred_locs_ordered - gt_locs) ** 2
         error = tf.reduce_sum(error, axis=-1)
-        # average over valid matches
-        error = (error * gt_isvalid) / tf.reduce_sum(gt_isvalid, axis=-1, keepdims=True)
+        # average over valid matches in each example
+        error = tf.reduce_sum(error * gt_isvalid, axis=-1) / tf.reduce_sum(gt_isvalid, axis=-1)
         return error
 
-
-    # @tf.function
-    def p2p_from_matching(pred, gt, matching, ismatched):
+    def p2p_loss(gt, pred):
         """
         Equation 6 in Song et al
         """
-        loss = classification_loss(pred, ismatched)
-        loss += ARGS.p2p_loc_weight * location_loss(pred, gt, matching)
-        return loss
-
-    def p2p_loss(gt, pred):
         # get matching (no gradient there)
         matching, ismatched = matcher(pred, gt)
-        # compute loss
-        return p2p_from_matching(pred, gt, matching, ismatched)
+        # compute classification loss
+        cls_loss = classification_loss(pred, ismatched)
+        # for each example in the batch, determine whether there were gt trees
+        has_gt = tf.reduce_any(ismatched, axis=-1)
+        # only compute location loss when there are gt trees (is nan otherwise)
+        loc_loss = tf.where(has_gt, location_loss(pred, gt, matching), 0.0)
+        # final eq
+        return cls_loss + (ARGS.p2p_loc_weight * loc_loss)
 
     return p2p_loss, None
 

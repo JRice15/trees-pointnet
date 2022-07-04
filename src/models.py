@@ -305,7 +305,7 @@ def pointnet(inpt_shape, size_multiplier, output_channels):
     """
     npoints, nattributes = inpt_shape
     inpt = layers.Input(inpt_shape, name="inpt_layer", 
-        #batch_size=ARGS.batchsize
+        # batch_size=ARGS.batchsize
     ) # (B,N,K)
 
     xy_locs = inpt[...,:2]
@@ -320,30 +320,20 @@ def pointnet(inpt_shape, size_multiplier, output_channels):
     # output flow
     if ARGS.output_mode == "seg":
         output = seg_output_flow(local_features, global_feature, size_multiplier, output_channels)
-    elif ARGS.output_mode == "count":
-        output = cls_output_flow(global_feature, output_channels)
     elif ARGS.output_mode == "dense":
         output = dense_output_flow_2(global_feature, ARGS.out_npoints, output_channels)
     else:
-        raise NotImplementedError()
+        raise NotImplementedError("unknown output flow")
 
-    # optional post processing for some methods
-    if ARGS.loss in ("mmd", "gridmse"):
-        assert output_channels == 3
-        pts = output[...,:2]
-        confs = output[...,-1:]
-        # limit location coords to 0-1
-        pts = layers.ReLU(max_value=1.0, name="loc-lim")(pts)
-        # limit confidence to >= 0
-        confs = layers.Activation(ARGS.conf_act, name="conf-lim")(confs)
-        output = layers.Concatenate(axis=-1, name="final-concat")([pts, confs])
-        
-    # if ARGS.loss == "treetop":
-    #     assert output_channels == 1
-    #     # limit confidences to 0 to 1
-    #     output = layers.Activation("sigmoid", name="pwtt-sigmoid")(output)
-    #     # add input xy locations to each point
-    #     output = layers.Concatenate(axis=-1, name="pwtt-concat_inpt")([xy_locs, output])
+    # post processing
+    assert output_channels == 3
+    pts = output[...,:2]
+    confs = output[...,2:]
+    # limit location coords to 0-1
+    pts = layers.ReLU(max_value=1.0, name="loc-lim")(pts)
+    # limit confidence to >= 0
+    confs = layers.Activation(ARGS.conf_act, name="conf-lim")(confs)
+    output = layers.Concatenate(axis=-1, name="final-concat")([pts, confs])
 
     model = Model(inpt, output)
 
