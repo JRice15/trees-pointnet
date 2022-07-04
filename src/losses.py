@@ -198,81 +198,88 @@ def point_to_point():
     From P2PNet (Song et al 2021): https://github.com/TencentYoutuResearch/CrowdCounting-P2PNet
     """
 
-def matcher(pred, gt):
-    """
-    args:
-        preds: shape (B,npoints,3) where 3 -> (x, y, confidence)
-        gt: shape (B,maxtrees,3) where 3 -> (x, y, isvalidtree)
-    returns:
-        matching: indexes of matched pred for each ground truth (B, )
-    """
-    batchsize, maxtrees = tf.shape(gt)[:2]
-    n_points = tf.shape(pred)[1]
-    indices = np.zeros((batchsize, maxtrees), dtype=int)
-    is_match = np.zeros((batchsize, n_points))
+    def matcher(pred, gt):
+        """
+        args:
+            preds: shape (B,npoints,3) where 3 -> (x, y, confidence)
+            gt: shape (B,maxtrees,3) where 3 -> (x, y, isvalidtree)
+        returns:
+            matching: indexes of matched pred for each ground truth (B, )
+        """
+        batchsize, maxtrees = tf.shape(gt)[:2]
+        n_points = tf.shape(pred)[1]
+        indices = np.zeros((batchsize, maxtrees), dtype=int)
+        is_match = np.zeros((batchsize, n_points), dtype=float)
 
-    for idx,(batch_pred, batch_gt) in enumerate(zip(pred, gt)):
-        # only use valid gt trees (which are always the first N in the array, so 
-        # indices for valid trees won't change after this masking)
-        batch_gt = batch_gt[batch_gt[:,2] > 0]
-        n_gt = len(batch_gt)
+        for idx,(batch_pred, batch_gt) in enumerate(zip(pred, gt)):
+            # only use valid gt trees (which are always the first N in the array, so 
+            # indices for valid trees won't change after this masking)
+            batch_gt = batch_gt[batch_gt[:,2] > 0]
+            n_gt = len(batch_gt)
 
-        # calculate pairwise distances
-        dists = pairwise_distances(batch_gt[:,:2], batch_pred[:,:2])
-        # make high confidence things closer to everything, moderated by a weight
-        cost_matrix = dists - tf.expand_dims(ARGS.p2p_conf_weight * batch_pred[:,2], axis=0)
+            # calculate pairwise distances
+            dists = pairwise_distances(batch_gt[:,:2], batch_pred[:,:2])
+            # make high confidence things closer to everything, moderated by a weight
+            cost_matrix = dists - tf.expand_dims(ARGS.p2p_conf_weight * batch_pred[:,2], axis=0)
 
-        # find optimal assignment
-        gt_inds, pred_inds = linear_sum_assignment(cost_matrix)
-        # gt inds are always sorted 0-N, so not needed
-        indices[idx,:n_gt] = pred_inds
-        is_match[idx,pred_inds] = 1.0
-    
-    return tf.constant(indices, dtype="int32"), tf.constant(is_match, dtype=K.floatx())
+            # find optimal assignment
+            gt_inds, pred_inds = linear_sum_assignment(cost_matrix)
+            # gt inds are always sorted 0-N, so not needed
+            indices[idx,:n_gt] = pred_inds
+            is_match[idx,pred_inds] = 1.0
+        
+        indices = tf.stop_gradient( tf.constant(indices, dtype="int32") )
+        is_match = tf.stop_gradient( tf.constant(is_match, dtype=K.floatx()) )
+        return indices, is_match
 
-    @tf.function
+    # @tf.function
     def classification_loss(pred, ismatched):
         """
         Equation 4 in Song et al
         Make matched predictions have high confidence, and unmatched have low
         """
-        confs = pred[:,2]
+        confs = pred[...,2]
         n_ismatched = tf.reduce_sum(ismatched, axis=-1)
         # everything is either matched or unmatched
-        pos_elements = tf.math.log(confs * ismatched)
-        neg_elements = tf.math.log((1 - confs) * (1 - ismatched))
+        pos_elements = tf.math.log(confs) * ismatched
+        neg_elements = tf.math.log((1 - confs)) * (1 - ismatched)
         neg_elements *= ARGS.p2p_unmatched_weight
         # sum together elementwise. Only one of the two will be non-zero in each element
         all_elements = pos_elements + neg_elements
         # binary crossentropy loss
-        return -tf.reduce_mean(tf.math.log(all_elements))
+        return -tf.reduce_mean(all_elements)
     
-    @tf.function
+    # @tf.function
     def location_loss(pred, gt, matching):
         """
         Equation 5 in Song et al
         Make matched predictions be close to their grount-truth matches
         """
-        pred_locs_ordered = tf.gather(pred[:,:2], matching, axis=1)
-        gt_locs = gt[:,:2]
-        gt_isvalid = gt[:,2]
-        # squared distance (error) between gt and pred
+        pred_locs_ordered = tf.gather(pred[...,:2], matching, axis=1, batch_dims=1)
+        gt_locs = gt[...,:2]
+        gt_isvalid = gt[...,2]
+        # squared distance (error) between gt and pred: (x1-x2)^2 + (y1-y2)^2
         error = (pred_locs_ordered - gt_locs) ** 2
+        error = tf.reduce_sum(error, axis=-1)
         # average over valid matches
-        error = (error * gt_isvalid) / tf.reduce_sum(gt_isvalid, axis=-1)
+        error = (error * gt_isvalid) / tf.reduce_sum(gt_isvalid, axis=-1, keepdims=True)
         return error
 
 
-    @tf.function
+    # @tf.function
     def p2p_from_matching(pred, gt, matching, ismatched):
         """
         Equation 6 in Song et al
         """
-        return classification_loss(pred, ismatched) + \
-            ( ARGS.p2p_loc_weight * location_loss(pred, gt, matching) )
+        loss = classification_loss(pred, ismatched)
+        loss += ARGS.p2p_loc_weight * location_loss(pred, gt, matching)
+        return loss
 
     def p2p_loss(gt, pred):
         # get matching (no gradient there)
-        matching, ismatched = tf.stop_gradient( matcher(pred, gt) )
+        matching, ismatched = matcher(pred, gt)
         # compute loss
         return p2p_from_matching(pred, gt, matching, ismatched)
+
+    return p2p_loss, None
+
