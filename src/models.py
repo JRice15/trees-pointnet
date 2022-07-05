@@ -341,10 +341,7 @@ def pointnet(inpt_shape, size_multiplier, output_channels):
         model.add_metric(loss_val, name=loss_name, aggregation="mean")
 
     model.add_metric(tf.reduce_mean(confs), name="conf_mean", aggregation="mean")
-    model.add_metric(tf.reduce_max(confs), name="conf_max", aggregation="mean")    
+    model.add_metric(tf.reduce_max(confs), name="conf_max", aggregation="mean")
 
     return model
-
-
-
 

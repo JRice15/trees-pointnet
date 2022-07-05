@@ -244,10 +244,11 @@ def point_to_point():
         Make matched predictions have high confidence, and unmatched have low
         """
         confs = pred[...,2]
-        # we want high confidence when matched to a gt, and low otherwise
         ismatched = tf.cast(ismatched, K.floatx())
+        # we want high confidence when matched to a gt, and low otherwise
         bce = K.binary_crossentropy(ismatched, confs)
-        # scale only the loss at the unmatched points by p2p_unmatched_weight
+        # scale only the loss at the unmatched points by p2p_unmatched_weight.
+        # ismatched is acting as a true/false mask here
         loss = (ismatched * bce) + (ARGS.p2p_unmatched_weight * (1-ismatched) * bce)
         return tf.reduce_mean(loss, axis=-1)
     
@@ -264,7 +265,10 @@ def point_to_point():
         error = (pred_locs_ordered - gt_locs) ** 2
         error = tf.reduce_sum(error, axis=-1)
         # average over valid matches in each example
-        error = tf.reduce_sum(error * gt_isvalid, axis=-1) / tf.reduce_sum(gt_isvalid, axis=-1)
+        total = tf.reduce_sum(error * gt_isvalid, axis=-1)
+        count_valid = tf.reduce_sum(gt_isvalid, axis=-1)
+        # handle div by zero when no valid gt trees
+        error = tf.where(count_valid > 0, total / count_valid, 0.0)
         return error
 
     class CustomMean(tf.keras.metrics.Metric):
@@ -300,20 +304,16 @@ def point_to_point():
         """
         Equation 6 in Song et al
         """
-        # cls_metric.reset_states() # is just .reset_state() in later versions of tf
-        # loc_metric.reset_states()
         # get matching (no gradient there)
         matching, ismatched = matcher(pred, gt)
         # compute classification loss
         cls_loss = classification_loss(pred, ismatched)
         # only compute location loss when there are gt trees (is nan otherwise)
-        has_gt = tf.reduce_any(tf.cast(ismatched, tf.bool), axis=-1)
-        loc_loss = ARGS.p2p_loc_weight * tf.where(has_gt, location_loss(pred, gt, matching), 0.0)
+        loc_loss = ARGS.p2p_loc_weight * location_loss(pred, gt, matching)
         # update metrics
         cls_metric.my_update_state(cls_loss)
         loc_metric.my_update_state(loc_loss)
         # final equation
-        # checknans(cls_loss, loc_loss)
         return cls_loss + loc_loss
 
     return p2p_loss, [cls_metric, loc_metric]

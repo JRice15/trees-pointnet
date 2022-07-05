@@ -1,30 +1,30 @@
+import argparse
 import contextlib
 import datetime
-import json
 import glob
-import os
-import argparse
-from pprint import pprint
-from pathlib import PurePath
-import time
-import shutil
 import itertools
+import json
+import math
+import os
+import shutil
+import time
+from pathlib import PurePath
+from pprint import pprint
 
+import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import Model
 from tensorflow.keras import backend as K
-from tensorflow.keras import callbacks, layers
-from tensorflow.keras import optimizers
-import matplotlib.pyplot as plt
+from tensorflow.keras import callbacks, layers, optimizers
 
-from src import DATA_DIR, REPO_ROOT, ARGS, MODEL_SAVE_FMT
-from src.patch_generator import get_datasets
+from src import ARGS, DATA_DIR, MODEL_SAVE_FMT, REPO_ROOT
 from src.losses import get_loss
 from src.models import pointnet
-from src.tf_utils import MyModelCheckpoint, output_model, load_saved_model
-from src.utils import get_default_dsname, get_all_regions
+from src.patch_generator import get_datasets
+from src.tf_utils import MyModelCheckpoint, load_saved_model, output_model
+from src.utils import get_all_regions, get_default_dsname
 import evaluate
 
 """
@@ -72,9 +72,9 @@ hypergrp = parser.add_argument_group("training hyperparameters")
 hypergrp.add_argument("--optimizer",choices=list(optimizer_options.keys()),default="adam")
 hypergrp.add_argument("--epochs",type=int,default=500)
 hypergrp.add_argument("--batchsize",type=int,default=16)
-hypergrp.add_argument("--lr",type=float,default=1e-2,help="initial learning rate")
+hypergrp.add_argument("--lr",type=float,default=1e-3,help="initial learning rate")
 hypergrp.add_argument("--reducelr-factor",type=float,default=0.2,help="factor to multiply lr by for reducelronplateau")
-hypergrp.add_argument("--reducelr-patience",type=int,default=5,help="number of epochs with no valloss improvement to reduce lr")
+hypergrp.add_argument("--reducelr-patience",type=int,default=3,help="number of epochs with no valloss improvement to reduce lr")
 
 # model parameters
 modelgrp = parser.add_argument_group("model parameters")
@@ -124,7 +124,7 @@ assert ARGS.subdivide >= 1
 # manual args handling
 if ARGS.test:
     ARGS.epochs = 6
-    ARGS.batchsize = 2
+    ARGS.batchsize = 3
 
 pprint(vars(ARGS))
 
@@ -219,7 +219,7 @@ callback_dict = {
     "history": callbacks.History(),
     "reducelr": callbacks.ReduceLROnPlateau(factor=ARGS.reducelr_factor, patience=ARGS.reducelr_patience,
         min_lr=1e-6, verbose=1),
-    "earlystopping": callbacks.EarlyStopping(verbose=1, patience=int(ARGS.reducelr_patience*1.5)),
+    "earlystopping": callbacks.EarlyStopping(verbose=1, patience=ARGS.reducelr_patience+2),
     "modelcheckpoint": MyModelCheckpoint(MODEL_DIR, verbose=1, 
         epoch_per_save=1, save_best_only=True)
 }
@@ -244,6 +244,7 @@ except KeyboardInterrupt:
 except Exception as e:
     # otherwise log then throw the error
     import traceback
+
     # create signal file
     with open(MODEL_DIR.joinpath("training_failed.txt"), "w") as f:
         traceback.print_exc(file=f)

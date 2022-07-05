@@ -100,6 +100,8 @@ class LidarPatchGen(keras.utils.Sequence):
         self.dsname = ARGS.dsname
         self.batch_size = ARGS.batchsize if batchsize is None else batchsize
         self.n_subdivide = ARGS.subdivide
+        if ARGS.test:
+            patch_ids = patch_ids[:10]
         self.orig_patch_ids = patch_ids
         self.regions = list(set([i[0] for i in self.orig_patch_ids]))
         self.y_counts_only = False
@@ -205,8 +207,6 @@ class LidarPatchGen(keras.utils.Sequence):
             self.valid_patch_ids.append(patch_id)
     
         self.num_ids = len(self.valid_patch_ids)
-        if ARGS.test:
-            self.num_ids = 2
 
         # normalize lidar
         for patch_id,pts in self.lidar_subdiv.items():
