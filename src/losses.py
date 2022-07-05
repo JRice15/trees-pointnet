@@ -221,7 +221,7 @@ def point_to_point():
             n_gt = len(gt_batch)
 
             if n_gt > 0:
-                checknans(gt_batch, pred_batch)
+                # checknans(gt_batch, pred_batch)
                 # calculate pairwise distances
                 dists = pairwise_distances(gt_batch[:,:2], pred_batch[:,:2])
                 # make high confidence things closer to everything, moderated by a weight
@@ -294,8 +294,8 @@ def point_to_point():
             return self.total / self.count
 
 
-    # cls_metric = CustomMean(name="cls_loss")
-    # loc_metric = CustomMean(name="loc_loss")            
+    cls_metric = CustomMean(name="cls_loss")
+    loc_metric = CustomMean(name="loc_loss")            
 
     def p2p_loss(gt, pred):
         """
@@ -311,11 +311,11 @@ def point_to_point():
         has_gt = tf.reduce_any(tf.cast(ismatched, tf.bool), axis=-1)
         loc_loss = ARGS.p2p_loc_weight * tf.where(has_gt, location_loss(pred, gt, matching), 0.0)
         # update metrics
-        # cls_metric.my_update_state(cls_loss)
-        # loc_metric.my_update_state(loc_loss)
-        # final eq
-        checknans(cls_loss, loc_loss)
+        cls_metric.my_update_state(cls_loss)
+        loc_metric.my_update_state(loc_loss)
+        # final equation
+        # checknans(cls_loss, loc_loss)
         return cls_loss + loc_loss
 
-    return p2p_loss, None #[cls_metric, loc_metric]
+    return p2p_loss, [cls_metric, loc_metric]
 
