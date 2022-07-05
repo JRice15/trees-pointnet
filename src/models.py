@@ -84,7 +84,7 @@ def pointnet_transform(x_in, batchsize, kind):
 
 def seg_output_flow(local_features, global_feature, size_multiplier, outchannels):
     """
-    Base segmentation output flow
+    Return a prediction for each input point
     Returns:
         per-point feature vectors: (B,N,outchannels)
     example shape: (16, 500, 3)
@@ -124,7 +124,7 @@ def seg_output_flow(local_features, global_feature, size_multiplier, outchannels
 
 def cls_output_flow(global_feature, outchannels):
     """
-    Base global classification output flow
+    Globally classify the whole point cloud
     returns:
         global classification vector: (B,outchannels)
     example shape: (16, 3)
@@ -142,7 +142,6 @@ def cls_output_flow(global_feature, outchannels):
             activation=False)(x)
 
     return x
-
 
 
 def dense_output_flow_2(global_feature, out_npoints, out_channels):
@@ -340,6 +339,9 @@ def pointnet(inpt_shape, size_multiplier, output_channels):
     for loss_name, loss_val in losses.items():
         model.add_loss(loss_val)
         model.add_metric(loss_val, name=loss_name, aggregation="mean")
+
+    model.add_metric(tf.reduce_mean(confs), name="conf_mean", aggregation="mean")
+    model.add_metric(tf.reduce_max(confs), name="conf_max", aggregation="mean")    
 
     return model
 
