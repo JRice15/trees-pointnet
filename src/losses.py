@@ -268,29 +268,28 @@ def point_to_point():
         return error
 
     class CustomMean(tf.keras.metrics.Metric):
+        __name__ = "CustomMean"
 
-        def __init__(self, name):
-            super().__init__(name=name)
+        def __init__(self, name, **kwargs):
+            super().__init__(name=name, **kwargs)
             self.total = 0
             self.count = 0
 
         def update_state(self, y, x):
-            print("fake update")
             pass
     
         def my_update_state(self, values):
-            print("update")
             values = values.numpy()
             self.total += values.sum()
             self.count += values.size
         
         def reset_states(self):
-            print("reset")
             self.total = 0
             self.count = 0
         
         def result(self):
-            print("result")
+            if self.count == 0:
+                return 0
             return self.total / self.count
 
 
