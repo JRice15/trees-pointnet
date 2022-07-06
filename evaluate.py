@@ -103,10 +103,11 @@ def peaklocalmax_postprocessing(pred_dict, bounds_dict, min_dists, min_conf_thre
 
 
 def filter_by_conf_threshold(preds_dict, threshold):
-    return {
+    preds_dict = {
         p_id: pts[pts[:,2] > threshold] if len(pts) else pts
         for p_id, pts in preds_dict.items()
     }
+    return {p_id: pts for p_id, pts in preds_dict.items() if pts.size}
 
 def postprocess_and_pointmatch(preds, gt, bounds, params, gridsearch_params):
     """
@@ -124,7 +125,8 @@ def postprocess_and_pointmatch(preds, gt, bounds, params, gridsearch_params):
     timer = MyTimer()
 
     orig_len = sum(map(len, preds.values()))
-    preds = filter_by_conf_threshold(preds, params["pre_threshold"])
+    pre_threshold = 10 ** params["pre_threshold_exp"]
+    preds = filter_by_conf_threshold(preds, pre_threshold)
     new_len = sum(map(len, preds.values()))
     timer.measure("pre-thresholding filtered {}% of points".format(round((orig_len - new_len) / orig_len * 100), 2))
 
@@ -133,7 +135,7 @@ def postprocess_and_pointmatch(preds, gt, bounds, params, gridsearch_params):
     if postprocess_mode == "peaklocalmax":
         processed_preds = peaklocalmax_postprocessing(preds, bounds,
                                 min_dists=gridsearch_params["min_dist"],
-                                min_conf_threshold=min(gridsearch_params["conf_threshold"]))
+                                min_conf_threshold=min(gridsearch_params["post_threshold"]))
 
     elif postprocess_mode == "dbscan":
         algo_initializer = lambda: DBSCAN(eps=params["eps"], min_samples=params["min_samples"])
@@ -190,7 +192,7 @@ def build_postprocessing_objective(raw_preds, gt, bounds, min_dists, post_thresh
     def objective(trial):
         # params for which evaluating a change in them is expensive
         params = {
-            "pre_threshold": 10 ** trial.suggest_float(-5, 0, step=0.2) # threshold on raw points confs
+            "pre_threshold_exp": trial.suggest_float("pre_threshold_exp", -5, 0, step=0.2) # threshold on raw points confs
         }
         # params for which we can evaluate all of them every time because it is quick to do
         gridparams = {
@@ -295,7 +297,7 @@ def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
     study.enqueue_trial({"postprocessing_mode": "peaklocalmax", "gaussian_sigma": ARGS.gaussian_sigma, "pre_threshold": 1e-3})
     objective = build_postprocessing_objective(preds_full_unnormed, patchgen.gt_full, 
                     patchgen.bounds_full, min_dists=ALL_MIN_DISTS, 
-                    conf_thresholds=ALL_CONF_THRESHOLDS)
+                    post_thresholds=ALL_POST_THRESHOLDS)
     study.optimize(objective, n_trials=100, timeout=60*10)
 
     print(study.best_trial)
