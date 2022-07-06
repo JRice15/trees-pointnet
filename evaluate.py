@@ -1,9 +1,9 @@
-import logging
 import argparse
 import contextlib
 import datetime
 import glob
 import json
+import logging
 import os
 import time
 from pathlib import PurePath
@@ -20,323 +20,184 @@ from sklearn.metrics import pairwise_distances
 from tensorflow import keras
 from tensorflow.keras import backend as K
 from tqdm import tqdm
+from sklearn.cluster import DBSCAN, KMeans, MiniBatchKMeans
 
 from src import ARGS, DATA_DIR, MODEL_SAVE_FMT, REPO_ROOT
-from src.patch_generator import get_datasets
+from src.eval_utils import (OVERLAP_METHODS, find_local_maxima, pointmatch,
+                            rasterize_preds, viz_predictions)
 from src.losses import get_loss
 from src.models import pointnet
+from src.patch_generator import get_datasets
 from src.tf_utils import load_saved_model
-from src.utils import (glob_modeldir, rasterize_pts_gaussian_blur, group_by_composite_key,
-                       plot_one_example, rasterize_and_plot, scaled_0_1, load_params_into_ARGS)
-from src.utils import MyTimer
-
-# max dist that two points can be considered matched, in meters
-MAX_MATCH_DIST = 6
-# size of grids to rasterize
-GRID_RESOLUTION = 128
+from src.utils import (MyTimer, glob_modeldir, group_by_composite_key,
+                       load_params_into_ARGS, plot_one_example,
+                       rasterize_and_plot, rasterize_pts_gaussian_blur,
+                       scaled_0_1, LabeledBox)
 
 
-"""
-PointMatching & PM utils
-"""
 
-def pointmatch(all_gts, all_preds, conf_threshold, prune_unpromising=True):
+def clustering_postprocessing(pred_dict, algorithm, cluster_aggs):
     """
     args:
-        all_gts: dict, mapping patchid to array of shape (ntrees,2) where channels are (x,y)
-        all_preds: dict, mappin patchid to array of shape (npatches,npoints,3) where channels are (x,y,confidence)
-        conf_threshold: abs confidence threshold that predicted points must meet to be considered a predicted tree
-        prune_unpromising: whether to stop if 1 or fewer true positives are recorded after 100 patches
+        pred_dict
+        algo: no-args function that returns an sklearn clustering object
+        cluster_aggs: list of str, options are "max" and/or "mean"
     returns:
-        dict: precision, recall, fscore, rmse, pruned (bool)
+        list of 2-tuples, where each tuple is:
+            (pts, dict of best gridsearch params)
     """
-    COST_MATRIX_MAXVAL = 1e10
+    centroids_dict = {}
+    exemplars_dict = {}
+    for p_id, xyz in pred_dict.items():
+        xy = xyz[:,:2]
+        confs = xyz[:,-1]
 
-    all_tp = 0
-    all_fp = 0
-    all_fn = 0
-    all_tp_dists = []
-    pruned = False
+        # initialize clean clustering and predict
+        labels = algorithm().fit_predict(xy, sample_weight=confs)
 
-    for i,patch_id in enumerate(all_gts.keys()):
-        # pruning early if we've gotten only 0 or 1 true positives
-        if i == 50 and prune_unpromising:
-            if all_tp <= 1:
-                pruned = True
-                break
+        xyz = xyz[labels >= 0]
+        labels = labels[labels >= 0]
 
-        gt = all_gts[patch_id]
-        # get pred, or empty array if missing from dict
-        try:
-            pred = all_preds[patch_id]
-        except KeyError:
-            pred = np.empty((0,3))
+        # two methods of finding the representative point in a cluster
+        centroids = []
+        exemplars = []
+        for label in np.unique(labels):
+            selected = xyz[labels == label]
+            centroids.append(
+                np.average(selected, axis=0, weights=selected[:,2])
+            )
+            exemplars.append(
+                selected[np.argmax(selected[:,2])]
+            )
 
-        # filter valid preds
-        pred = pred[pred[:,2] >= conf_threshold]
-
-        if len(gt) == 0:
-            all_fp += len(pred)
-            continue
-        elif len(pred) == 0:
-            all_fn += len(gt)
-            continue
-
-        # calculate pairwise distances
-        dists = pairwise_distances(gt[:,:2],pred[:,:2])
-        
-        # trees must be within max match distance
-        dists[dists>MAX_MATCH_DIST] = np.inf
-
-        # find optimal assignment
-        cost_matrix = np.copy(dists)
-        cost_matrix[np.isinf(cost_matrix)] = COST_MATRIX_MAXVAL
-        row_ind, col_ind = linear_sum_assignment(cost_matrix)
-        dists[:] = np.inf
-        dists[row_ind,col_ind] = cost_matrix[row_ind,col_ind]
-        dists[dists>=COST_MATRIX_MAXVAL] = np.inf
-        
-        # associated pred trees = true positives
-        # tp_inds = np.where(np.any(np.logical_not(np.isinf(dists)),axis=0))[0]
-        tp_inds = np.where(~np.isinf(dists))[1]
-        all_tp += len(tp_inds)
-
-        # un-associated pred trees = false positives
-        fp_inds = np.where(np.all(np.isinf(dists),axis=0))[0]
-        all_fp += len(fp_inds)
-
-        # un-associated gt trees = false negatives
-        fn_inds = np.where(np.all(np.isinf(dists),axis=1))[0]
-        all_fn += len(fn_inds)
-        
-        if len(tp_inds):
-            tp_dists = np.min(dists[:,tp_inds],axis=0)
-            all_tp_dists.append(tp_dists)
-
-    if all_tp + all_fp > 0:
-        precision = all_tp/(all_tp+all_fp)
-    else:
-        precision = 0
-    if all_tp + all_fn > 0:
-        recall = all_tp/(all_tp+all_fn)
-    else:
-        recall = 0
-    if precision + recall > 0:
-        fscore = 2*(precision*recall)/(precision+recall)
-    else:
-        fscore = 0
-    if len(all_tp_dists):
-        all_tp_dists = np.concatenate(all_tp_dists)
-        rmse = np.sqrt(np.mean(all_tp_dists**2))
-    else:
-        rmse = -1
+        centroids_dict[p_id] = np.array(centroids)
+        exemplars_dict[p_id] = np.array(exemplars)
     
-    # calling float/int on a lot of these because json doesn't like numpy floats/ints
-    results = {
-        'pruned': pruned,
-        'tp': int(all_tp),
-        'fp': int(all_fp),
-        'fn': int(all_fn),
-        'precision': float(precision),
-        'recall': float(recall),
-        'fscore': float(fscore),
-        'rmse': float(rmse),
-        'threshold': float(conf_threshold),
-    }
+    results = []
+    if "mean" in cluster_aggs:
+        results.append( (centroids_dict, {"cluster_agg": "mean"}) )
+    if "max" in cluster_aggs:
+        results.append( (exemplars_dict, {"cluster_agg": "max"}) )   
+    assert len(results) 
     return results
 
 
 
-def find_local_maxima(pred_grids, bounds, min_conf_threshold=None):
+def run_peaklocalmax_postprocessing(pred_dict, bounds_dict, min_dists, min_conf_threshold):
     """
     args:
-        pred_grids: outputs of rasterize_preds(...)
-        bounds: list of Bounds
-        min_conf_threshold: smallest conf threshold
-    returns:
-        dict: mapping patch id to local peaks, shape (N,3) where channels are x,y,confidence
+        pred_dict
+        bounds_dict
+        min_dists: list of values to try for min_dists between peaks
+        min_conf_threshold: lowest confidence threshold
     """
-    maxima = {}
-    for patch_id,pred_dict in tqdm(pred_grids.items(), total=len(pred_grids)):
-        gridvals = pred_dict["vals"]
-        gridcoords = pred_dict["coords"]
+    pred_grids = rasterize_preds(pred_dict, bounds_dict)
+    timer.measure("rasterizing")
 
-        # find local maxima
-        peak_pixel_inds = peak_local_max(gridvals, 
-                                threshold_abs=min_conf_threshold, # must meet the min threshold
-                                min_distance=2) # disallow maxima in adjacent pixels
-        peak_pixel_inds = tuple(peak_pixel_inds.T)
+    results = []
+    for min_dist in min_dists:
+        pred_peaks = find_local_maxima(pred_grids,  min_conf_threshold=min_conf_threshold)
+        results.append( (pred_peaks, {"min_dist": min_dist}) )
+    timer.measure("computing peaklocalmax")
 
-        # get geo coords of the maxima pixels
-        peak_confs = gridvals[peak_pixel_inds]
-        peak_coords = gridcoords[peak_pixel_inds]
-        # convert back to format of input preds
-        peak_pts = np.concatenate((peak_coords, peak_confs[...,np.newaxis]), axis=-1)
-        maxima[patch_id] = peak_pts
-
-    return maxima
+    return results
 
 
-@ray.remote
-def _ray_rasterize_pts_blur(*args, **kwargs):
-    """
-    distribute rasterization using Ray
-    """
-    return rasterize_pts_gaussian_blur(*args, **kwargs)
 
-def rasterize_preds(preds, bounds, is_subdiv=False):
+def postprocess_and_pointmatch(preds, gt, params, gridsearch_params):
     """
     args:
-        preds: dict mapping patch id to pred pts (must be original CRS, not 0-1 scale)
-        bounds: dict mapping patch id to Bounds
-        is_subdiv: bool, whether patches are subdiv or full-sized
+        preds: dict mapping patch id to raw pred pts
+        gt: dict mapping patch id to gt trees
+        params: postprocessing method params
+        gridsearch_params: secondary params which are gridsearched over (max vs summing, conf thresholds). conf_threshold key required
     returns:
-        dict: mapping patch id to another dict, with keys "vals" and "coords"
+        best pointmatch metrics
+        best gridsearch params
     """
-    if is_subdiv:
-        resolution = GRID_RESOLUTION // ARGS.subdivide
+    timer = MyTimer()
+
+    # Post-processing of raw predicted points to get final predicted tree locations
+    postprocess_mode = params["postprocess_mode"]
+    if postprocess_mode == "peaklocalmax":
+        processed_preds = peaklocalmax_postprocessing(preds)
+
+    elif postprocess_mode == "dbscan":
+        algo_initializer = lambda: DBSCAN(eps=params["eps"], min_samples=params["min_samples"])
+        processed_preds = clustering_postprocessing(preds, algo_initializer)
+
+    elif postprocess_mode == "kmeans":
+        if params["minibatch"]:
+            algo_f = MiniBatchKMeans
+        else:
+            algo_f = KMeans
+        algo_initializer = lambda: algo_f(n_clusters=params["n_clusters"], random_state=0)
+        processed_preds = clustering_postprocessing(preds, algo_initializer)
+        
     else:
-        resolution = GRID_RESOLUTION
+        raise ValueError(f"Unknown postprocess mode {postprocess_mode}")
 
-    # initialize ray, silence output
-    if not ray.is_initialized():
-        ray.init(
-            log_to_driver=False
-        )
+    timer.measure(f"postprocessing={postprocess_mode}")
 
-    futures = []
-    keys = []
-    for key, pred in preds.items():
-        future = _ray_rasterize_pts_blur.remote(
-                bounds[key], pred[:,:2], pred[:,2], 
-                abs_sigma=ARGS.gaussian_sigma, mode=ARGS.grid_agg,
-                resolution=resolution)
-        futures.append(future)
-        keys.append(key)
+    # TODO conf threshold
+    # Pointmatching on the results
+    best_pointmatch_results = {"fscore": -1}
+    best_gridparams = None
+    for (pts, these_gridparams) in processed_preds:
+        for conf_thresh in gridsearch_params["conf_threshold"]:
+            pointmatch_results = pointmatch(gt, pts, conf_threshold=conf_thresh)
+            if pointmatch_results["fscore"] > best_pointmatch_results["fscore"]:
+                best_pointmatch_results = pointmatch_results
+                best_gridparams = {
+                    "conf_threshold": conf_thresh,
+                    **these_gridparams
+                }
+
+    timer.measure(f"pointmatching x{len(processed_preds) * len(gridsearch_params['conf_threshold'])}")
     
-    results = ray.get(futures)
-    pred_grids = {}
-    for key, (vals, coords) in zip(keys, results):
-        pred_grids[key] = {"vals": vals, "coords": coords}
-
-    # pred_grids_grouped = group_by_composite_key(pred_grids, first_n=2)
-    return pred_grids
+    return best_pointmatch_results, best_gridparams
+    
 
 
-"""
-Overlap methods
-"""
+ALL_CONF_THRESHOLDS = [0] + list(np.arange(-6, 0, step=0.5))
 
-def drop_overlaps(X, bounds_subdiv=None):
-    """
-    args:
-        X: some dict, mapping patch subdiv id to pts
-    returns:    
-        X, with overlap patches dropped, grouped and concatenated by full patch id
-    """
-    # drop overlap patches
-    X = {key: pts for key, pts in X.items() if key[-2] % 2 == 0 and key[-1] % 2 == 0}
-    # group and concat
-    return group_by_composite_key(X, first_n=2,
-            agg_f=lambda x: np.concatenate(list(x.values()), axis=0)
-        )
+def make_objective(preds_full, gt_full, conf_thresholds, cache={}):
 
+    def objective(trial):
+        print("Trial", trial.number)
+        # params for which evaluating a change in them is expensive
+        params = {}
+        # params for which we can evaluate all of them every time because it is quick to do
+        gridparams = {
+            "conf_threshold": conf_thresholds
+        }
 
-def overlap_by_mid_cutoff(preds_subdiv, bounds_subdiv):
-    """
-    converts overlapping sub-patches back into full patches
-    args:
-        preds_subdiv: dict, mapping subdiv patch id to pts
-        bounds_subdiv: dict, mappng subdiv patch id to bounds
-    returns:
-        dict: mapping full patch id to pts
-    """
-    preds_subdiv_chopped = {}
-    for patch_id, preds in preds_subdiv.items():
-        xmin, ymin, xmax, ymax = bounds_subdiv[patch_id].minmax_fmt()
-        x_cut = (xmax - xmin) / 4
-        y_cut = (ymax - ymin) / 4
-        region, patchnum, px, py = patch_id
-        # check for neighbor patches
-        if (region, patchnum, px-1, py) in preds_subdiv:
-            xmin += x_cut
-        if (region, patchnum, px+1, py) in preds_subdiv:
-            xmax -= x_cut
-        if (region, patchnum, px, py-1) in preds_subdiv:
-            ymin += y_cut
-        if (region, patchnum, px, py+1) in preds_subdiv:
-            ymax -= y_cut
-        # make relevant chops
-        x = preds[:,0]
-        y = preds[:,1]
-        preds = preds[(x >= xmin) & (x < xmax) & (y >= ymin) & (y < ymax)]
-        preds_subdiv_chopped[patch_id] = preds
+        # Post-processing of raw predicted points to get final predicted tree locations
+        postprocess_mode = trial.suggest_categorical("postprocess_mode", ["peaklocalmax", "dbscan", "kmeans"])
+        params["postprocess_mode"] = postprocess_mode
+        if postprocess_mode == "peaklocalmax":
+            params["gaussian_sigma"] = trial.suggest_float("gaussian_sigma", ARGS.gaussian_sigma-1.0, ARGS.gaussian_sigma+1.0, step=0.5) # in meters
+        elif postprocess_mode == "dbscan":
+            params["eps"] = trial.suggest_float("eps", 0.25, 5.0, step=0.25) # max distance between neighbors, in meters
+            params["min_samples"] = trial.suggest_float("min_samples", 0, 10, step=0.2) # min total confidence in cluster
+        elif postprocess_mode == "kmeans":
+            params["minibatch"] = trial.suggest_categorical("minibatch", [False, True])
+            params["n_clusters"] = trial.suggest_int("n_cluster", 10, 120, step=10)
+        else:
+            raise ValueError(f"Unknown postprocess mode {postprocess_mode}")
 
-    # group by (region, patchnum) and concat
-    preds_combined = group_by_composite_key(preds_subdiv_chopped, first_n=2,
-                        agg_f=lambda x: np.concatenate(list(x.values()), axis=0))
+        if postprocess_mode in ("dbscan", "kmeans"):
+            gridparams["cluster_agg"] = ["sum", "max"]
 
-    return preds_combined
+        results, best_gridparams = postprocess_and_pointmatch(preds_full, gt_full, params, gridsearch_params)
 
+        for key,value in best_gridparams.items():
+            trial.set_user_attr(key, value)
 
-OVERLAP_METHODS = {
-    "drop": drop_overlaps,
-    "cut": overlap_by_mid_cutoff,
-}
+        return results["fscore"]
 
+    return objective
 
-"""
-Visualization
-"""
-
-def viz_predictions(patchgen, outdir, *, X_subdiv, X_full, Y_full, Y_subdiv, 
-        preds_subdiv, preds_full, pred_grids, pred_peaks):
-    """
-    data visualizations
-    """
-    print("Generating visualizations...")
-    os.makedirs(outdir, exist_ok=True)
-
-    patch_ids = sorted(preds_full.keys())
-    n_ids = len(patch_ids)
-    subpatch_ids = sorted(preds_subdiv.keys())
-
-    # grab random 10ish examples
-    step_size = max(1, n_ids//10)
-    for p_id in tqdm(patch_ids[::step_size]):
-        patch_name = "_".join([str(x) for x in p_id])
-        patch_dir = outdir.joinpath(patch_name)
-        # first three subpatch ids
-        these_subpatch_ids = [key for key in subpatch_ids if key[:2] == p_id]
-        for subp_id in these_subpatch_ids[:3]:
-            subpatch_dir = patch_dir.joinpath("subpatches")
-
-            bounds = patchgen.get_patch_bounds(subp_id)
-            plot_one_example(
-                outdir=subpatch_dir,
-                patch_id=subp_id,
-                X=X_subdiv[subp_id],
-                Y=Y_subdiv[subp_id],
-                pred=preds_subdiv[subp_id],
-                # pred_peaks=bounds.filter_pts(pred_peaks[p_id]), # peaks within this subpatch
-                naip=patchgen.get_naip(subp_id),
-                grid_resolution=GRID_RESOLUTION//ARGS.subdivide,
-                zero_one_bounds=True
-            )
-
-        # plot full-patch data
-        naip = patchgen.get_naip(p_id)
-        plot_one_example(
-            outdir=patch_dir,
-            patch_id=p_id, 
-            X=X_full[p_id], 
-            Y=Y_full[p_id], 
-            pred=preds_full[p_id], 
-            pred_overlap_gridded=pred_grids[p_id],
-            pred_peaks=pred_peaks[p_id],
-            naip=patchgen.get_naip(p_id), 
-            grid_resolution=GRID_RESOLUTION,
-        )
 
 
 
@@ -389,15 +250,7 @@ def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
         np.savez_compressed(outfile.as_posix(), **preds_string_keys)
         del preds_string_keys
 
-    # rasterize full patches
-    print("Rasterizing preds...")
-    pred_grids_unnormed = rasterize_preds(preds_full_unnormed, patchgen.bounds_full)
-    timer.measure()
 
-    # find localmax peak predictions
-    print("Finding prediction maxima...")
-    pred_peaks_unnormed = find_local_maxima(pred_grids_unnormed, patchgen.bounds_full, min_conf_threshold=min(pointmatch_thresholds))
-    timer.measure()
 
     # get full ground-truth
     Y_full_unnormed = patchgen.gt_full

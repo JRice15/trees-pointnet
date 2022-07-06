@@ -94,6 +94,36 @@ class Bounds:
         return cls(**kwargs)
 
 
+class LabeledBox:
+    """
+    a box storing an object, with an optional set of key-value pairs describing it
+    """
+
+    def __init__(self, obj, **params):
+        self._obj = obj
+        self._labels = labels
+
+    def get(self):
+        return self._obj
+
+    def __getattr__(self, attr):
+        return self._labels[attr]
+
+    def set_labels(self, **labels):
+        for k,v in labels.items():
+            if k in self.labels:
+                raise ValueError(f"{k} already in params")
+            self.labels[k] = v
+        return self
+
+    def get_labels(self):
+        return self._labels
+
+    def copy(self):
+        return LabeledObject(self.obj, **self.labels)
+
+
+
 def height_1_gaussian(x, center, sigma):
     """
     gaussian scaled to always have a height of 1
