@@ -155,11 +155,13 @@ def rasterize_pts_gaussian_blur(bounds, pts, weights, abs_sigma=None, rel_sigma=
         bounds: Bounds object
         pts: (x,y) locations within the bounds
         weights: corresponding weights, (negative weights will be set to zero)
+        mode: how to aggregate values at each grid location. 
+            can be a string, or list of strings
+            options: max, sum, second-highest, none
         {rel|abs}_sigma: specify relative (fraction of side length) or absolute distance sigma of gaussian smoothing kernel
-        mode: how to aggregate values at each grid location. options: max, sum, second-highest
         resolution: size length of grid
     returns:
-        gridvals: N x M grid of weighted values
+        gridvals: N x M grid of weighted values, except if mode is a list gridvals will be a dict mapping mode str to these grids
         gridpts: N x M x 2 grid, representing the x,y coordinates of each pixel
     """
     xmin, xmax, ymin, ymax = bounds.xy_fmt()
@@ -177,11 +179,22 @@ def rasterize_pts_gaussian_blur(bounds, pts, weights, abs_sigma=None, rel_sigma=
     x, y = np.meshgrid(x, y)
     gridpts = np.stack([x,y], axis=-1)
 
-    # initialize grid for aggregation methods
-    if mode == "second-highest":
-        gridvals_list = []
+    # initialize data for all modes
+    gridvals = {
+        "second-highest": [],
+        "sum": np.zeros_like(x),
+        "max": np.zeros_like(x),
+    }
+
+    # make mode always be a list of str
+    if isinstance(mode, str):
+        mode_list = [mode]
     else:
-        gridvals = np.zeros_like(x)
+        assert isinstance(mode, list)
+        mode_list = mode
+        assert len(mode_list)
+    for m in mode_list:
+        assert m in gridvals.keys()
 
     # filter out small weights: 
     # 1/100th of max weight or 1e-3, whichever is smaller
@@ -193,21 +206,24 @@ def rasterize_pts_gaussian_blur(bounds, pts, weights, abs_sigma=None, rel_sigma=
     for point,weight in zip(pts, weights):
         new_vals = weight * height_1_gaussian(gridpts, point, sigma=gaussian_sigma)
 
-        if mode == "sum":
-            gridvals += new_vals
-        elif mode == "max":
-            gridvals = np.maximum(gridvals, new_vals)
-        elif mode == "second-highest":
+        if "sum" in mode_list:
+            gridvals["sum"] += new_vals
+        if "max" in mode_list:
+            gridvals["max"] = np.maximum(gridvals["max"], new_vals)
+        if "second-highest" in mode_list:
             # collect all values
-            gridvals_list.append(new_vals)
-        else:
-            raise ValueError("Unknown rasterize_pts mode")
+            gridvals["second-highest"].append(new_vals)
     
-    if mode == "second-highest":
-        gridvals = np.stack(gridvals_list, axis=0)
+    if "second-highest" in mode_list:
+        second_highest = gridvals["second-highest"]
+        second_highest = np.stack(second_highest, axis=0)
         # get second largest along channels dim
-        gridvals = np.sort(gridvals, axis=0)[-2]
+        gridvals["second-highest"] = np.sort(second_highest, axis=0)[-2]
 
+    if not isinstance(mode, list):
+        gridvals = gridvals[mode]
+    else:
+        gridvals = {k:v for k,v in gridvals.items() if k in mode_list}
     return gridvals, gridpts
 
 
@@ -219,7 +235,7 @@ def rasterize_pts_pixelwise(bounds, pts, weights, mode="sum", resolution=64):
         bounds: Bounds object
         pts: (x,y) locations within the bounds
         weights: corresponding weights, (negative weights will be set to zero)
-        mode: how to aggregate values at each grid location. options: max, sum, second-highest
+        mode: str, how to aggregate values at each grid location. options: max, sum, second-highest
         resolution: side length of grid
     returns:
         gridvals: N x M grid of weighted values

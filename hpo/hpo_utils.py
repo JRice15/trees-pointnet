@@ -51,6 +51,10 @@ def get_study(name, assume_exists):
         engine_kwargs={"connect_args": {"timeout": 15}}, # longer than usual timeout is ok, because 15s is insignificant compared to the time each trial takes
     )
     sampler = optuna.samplers.TPESampler(
+        multivariate=True, # consider the relations between different parameters
+        group=True,
+        warn_independent_sampling=True,
+        constant_liar=True, # avoid very similar param combinations being tried simultaneously
         n_startup_trials=25, # number of random sample trials to begin with
         seed=1,
     )

@@ -84,20 +84,22 @@ def clustering_postprocessing(pred_dict, algorithm, cluster_aggs):
 
 
 
-def peaklocalmax_postprocessing(pred_dict, bounds_dict, min_dists, min_conf_threshold):
+def peaklocalmax_postprocessing(pred_dict, bounds_dict, grid_aggs, min_dists, min_conf_threshold):
     """
     args:
         pred_dict
         bounds_dict
+        grid_aggs: rasterization aggregation modes
         min_dists: list of values to try for min_dists between peaks
         min_conf_threshold: lowest confidence threshold
     """
-    pred_grids = rasterize_preds(pred_dict, bounds_dict)
+    pred_grids, pred_coords = rasterize_preds(pred_dict, bounds_dict, modes=grid_aggs, is_subdiv=False)
 
     results = []
-    for min_dist in min_dists:
-        pred_peaks = find_local_maxima(pred_grids, min_dist=min_dist, conf_threshold=min_conf_threshold)
-        results.append( (pred_peaks, {"min_dist": min_dist}) )
+    for grid_agg, these_grids in pred_grids.items():
+        for min_dist in min_dists:
+            pred_peaks = find_local_maxima(these_grids, pred_coords, min_dist=min_dist, conf_threshold=min_conf_threshold)
+            results.append( (pred_peaks, {"min_dist": min_dist, "grid_agg": grid_agg}) )
 
     return results
 
@@ -124,16 +126,21 @@ def postprocess_and_pointmatch(preds, gt, bounds, params, gridsearch_params):
     """
     timer = MyTimer()
 
-    orig_len = sum(map(len, preds.values()))
-    pre_threshold = 10 ** params["pre_threshold_exp"]
-    preds = filter_by_conf_threshold(preds, pre_threshold)
-    new_len = sum(map(len, preds.values()))
-    timer.measure("pre-thresholding filtered {}% of points".format(round((orig_len - new_len) / orig_len * 100), 2))
-
     # Post-processing of raw predicted points to get final predicted tree locations
     postprocess_mode = params["postprocess_mode"]
-    if postprocess_mode == "peaklocalmax":
+
+    if postprocess_mode != "raw":
+        orig_len = sum(map(len, preds.values()))
+        pre_threshold = 10 ** params["pre_threshold_exp"]
+        preds = filter_by_conf_threshold(preds, pre_threshold)
+        new_len = sum(map(len, preds.values()))
+        print("  pre-thresholding filtered {}% of points".format(round((orig_len - new_len) / orig_len * 100), 2))
+
+    if postprocess_mode == "raw":
+        processed_preds = [(preds, {})]
+    elif postprocess_mode == "peaklocalmax":
         processed_preds = peaklocalmax_postprocessing(preds, bounds,
+                                grid_aggs=gridsearch_params["grid_agg"],
                                 min_dists=gridsearch_params["min_dist"],
                                 min_conf_threshold=min(gridsearch_params["post_threshold"]))
 
@@ -160,6 +167,7 @@ def postprocess_and_pointmatch(preds, gt, bounds, params, gridsearch_params):
     best_pointmatch_results = {"fscore": -1}
     best_gridparams = None
     for (pts_dict, these_gridparams) in processed_preds:
+        # gridsearch through thresholds on post-processed pts
         for post_threshold in gridsearch_params["post_threshold"]:
             thresholded_pts = filter_by_conf_threshold(pts_dict, post_threshold)
             pointmatch_results = pointmatch(gt, thresholded_pts)
@@ -175,7 +183,7 @@ def postprocess_and_pointmatch(preds, gt, bounds, params, gridsearch_params):
     return best_pointmatch_results, best_gridparams
     
 
-# round approximation of a log distribution
+# log distribution
 ALL_POST_THRESHOLDS = list(10 ** np.arange(-5, 0.2, step=0.2))
 # in units of 0.6-meter NAIP pixels
 ALL_MIN_DISTS = [1, 2, 3, 4, 5]
@@ -191,21 +199,21 @@ def build_postprocessing_objective(raw_preds, gt, bounds, min_dists, post_thresh
 
     def objective(trial):
         # params for which evaluating a change in them is expensive
-        params = {
-            "pre_threshold_exp": trial.suggest_float("pre_threshold_exp", -5, 0, step=0.2) # threshold on raw points confs
-        }
+        params = {}
         # params for which we can evaluate all of them every time because it is quick to do
         gridparams = {
-            "post_threshold": post_thresholds, # threshold on post-processed
-            "min_dist": min_dists,
+            "post_threshold": post_thresholds # threshold on post-processed peaks
         }
 
         # Post-processing of raw predicted points to get final predicted tree locations
-        postprocess_mode = trial.suggest_categorical("postprocess_mode", ["peaklocalmax", "dbscan", "kmeans"])
+        postprocess_mode = trial.suggest_categorical("postprocess_mode", ["peaklocalmax", "dbscan", "kmeans", "raw"])
         params["postprocess_mode"] = postprocess_mode
-        if postprocess_mode == "peaklocalmax":
+        if postprocess_mode == "raw":
+            pass
+        elif postprocess_mode == "peaklocalmax":
             params["gaussian_sigma"] = trial.suggest_float("gaussian_sigma", ARGS.gaussian_sigma-1.0, ARGS.gaussian_sigma+1.0, step=0.5) # in meters
             gridparams["min_dists"] = min_dists
+            gridparams["grid_agg"] = ["max", "sum"]
         elif postprocess_mode == "dbscan":
             params["eps"] = trial.suggest_float("eps", 0.25, 5.0, step=0.25) # max distance between neighbors, in meters
             params["min_samples"] = trial.suggest_float("min_samples", 0, 10, step=0.2) # min total confidence in cluster
@@ -218,6 +226,11 @@ def build_postprocessing_objective(raw_preds, gt, bounds, min_dists, post_thresh
 
         if postprocess_mode in ("dbscan", "kmeans"):
             gridparams["cluster_agg"] = ["sum", "max"]
+
+        if postprocess_mode != "raw":
+            # threshold on raw points confs
+            params["pre_threshold_exp"] = trial.suggest_float("pre_threshold_exp", -5, 0, step=0.2)
+            # with 'raw' postprocessing, we just use the post_threshold instead of both, since they are redundant in that case
 
         print("Trial", trial.number, params)
 
@@ -286,21 +299,31 @@ def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
         del preds_string_keys
 
 
+    sampler = optuna.samplers.TPESampler(
+                multivariate=True,
+                group=True,
+                constant_liar=True,
+                warn_independent_sampling=True, 
+                n_startup_trials=6, 
+                seed=0), # 4 will be pre-set, 2 will be random
     study = optuna.create_study(
-                sampler=optuna.samplers.TPESampler(n_startup_trials=6), # three of them will be pre-set, 3 will be random
+                sampler=sampler,
                 study_name="eval",
                 direction="maximize", 
             )
     # ensure it tries all three methods at reasonable params
+    study.enqueue_trial({"postprocessing_mode": "raw"})
     study.enqueue_trial({"postprocessing_mode": "dbscan", "eps": 1.0, "min_samples": 1.0, "pre_threshold": 1e-3})
     study.enqueue_trial({"postprocessing_mode": "kmeans", "n_cluster": 100, "pre_threshold": 1e-3})
     study.enqueue_trial({"postprocessing_mode": "peaklocalmax", "gaussian_sigma": ARGS.gaussian_sigma, "pre_threshold": 1e-3})
     objective = build_postprocessing_objective(preds_full_unnormed, patchgen.gt_full, 
                     patchgen.bounds_full, min_dists=ALL_MIN_DISTS, 
                     post_thresholds=ALL_POST_THRESHOLDS)
-    study.optimize(objective, n_trials=100, timeout=60*10)
+    study.optimize(objective, n_trials=200, timeout=60*10)
 
-    print(study.best_trial)
+    best = study.best_trial
+    params = best.params
+    gridparams = best.user_attrs
 
     if not ARGS.noplot:
         print("Denormalizing & overlapping X...")

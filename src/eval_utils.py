@@ -137,19 +137,19 @@ def pointmatch(all_gts, all_preds, prune_unpromising=True):
 
 
 
-def find_local_maxima(pred_grids, min_dist=1, conf_threshold=None):
+def find_local_maxima(pred_grids, pred_coords, min_dist=1, conf_threshold=None):
     """
     args:
-        pred_grids: outputs of rasterize_preds(...)
+        pred_grid: dict mapping patchid to raster, shape (N,N)
+        pred_coords: dict mapping patchid to coordinates of each raster pixel, shape (N,N,2)
         conf_threshold: smallest conf that a peak is allowed to have
         min_distance: smallest allowed distance, in NAIP pixels (0.6 meters), between peaks
     returns:
         dict: mapping patch id to local peaks, shape (N,3) where channels are x,y,confidence
     """
     maxima = {}
-    for patch_id,pred_dict in pred_grids.items():
-        gridvals = pred_dict["vals"]
-        gridcoords = pred_dict["coords"]
+    for patch_id, gridvals in pred_grids.items():
+        gridcoords = pred_coords[patch_id]
 
         # get average pixel width
         n_pixels = gridvals.shape[0]
@@ -178,14 +178,15 @@ def _ray_rasterize_pts_blur(*args, **kwargs):
     """
     return rasterize_pts_gaussian_blur(*args, **kwargs)
 
-def rasterize_preds(preds, bounds, is_subdiv=False):
+def rasterize_preds(preds, bounds, modes, is_subdiv=False):
     """
     args:
         preds: dict mapping patch id to pred pts (must be original CRS, not 0-1 scale)
         bounds: dict mapping patch id to Bounds
+        modes: list of grid agg modes
         is_subdiv: bool, whether patches are subdiv or full-sized
     returns:
-        dict: mapping patch id to another dict, with keys "vals" and "coords"
+        dict
     """
     if is_subdiv:
         resolution = GRID_RESOLUTION // ARGS.subdivide
@@ -199,22 +200,24 @@ def rasterize_preds(preds, bounds, is_subdiv=False):
         )
 
     futures = []
-    keys = []
-    for key, pred in preds.items():
+    patch_ids = []
+    for p_id, pred in preds.items():
         future = _ray_rasterize_pts_blur.remote(
-                bounds[key], pred[:,:2], pred[:,2], 
-                abs_sigma=ARGS.gaussian_sigma, mode=ARGS.grid_agg,
+                bounds[p_id], pred[:,:2], pred[:,2], 
+                abs_sigma=ARGS.gaussian_sigma, mode=modes,
                 resolution=resolution)
         futures.append(future)
-        keys.append(key)
+        patch_ids.append(p_id)
     
     results = ray.get(futures)
     pred_grids = {}
-    for key, (vals, coords) in zip(keys, results):
-        pred_grids[key] = {"vals": vals, "coords": coords}
+    pred_coords = {}
+    for p_id, (vals, coords) in zip(patch_ids, results):
+        pred_grids[p_id] = vals
+        pred_coords[p_id] = pred_coords
 
     # pred_grids_grouped = group_by_composite_key(pred_grids, first_n=2)
-    return pred_grids
+    return pred_grids, pred_coords
 
 
 """
