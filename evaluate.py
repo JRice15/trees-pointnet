@@ -102,6 +102,11 @@ def peaklocalmax_postprocessing(pred_dict, bounds_dict, min_dists, min_conf_thre
     return results
 
 
+def filter_by_conf_threshold(preds_dict, threshold):
+    return {
+        p_id: pts[pts[:,2] > threshold] if len(pts) else pts
+        for p_id, pts in preds_dict.items()
+    }
 
 def postprocess_and_pointmatch(preds, gt, bounds, params, gridsearch_params):
     """
@@ -110,12 +115,18 @@ def postprocess_and_pointmatch(preds, gt, bounds, params, gridsearch_params):
         gt: dict mapping patch id to gt trees
         bounds: dict mapping patch id to bounds
         params: postprocessing method params
-        gridsearch_params: secondary params which are gridsearched over (max vs summing, conf thresholds). conf_threshold key required
+        gridsearch_params: secondary params which are gridsearched over (max vs summing, conf thresholds). 
+            retuired keys: post_threshold
     returns:
         best pointmatch metrics
         best gridsearch params
     """
     timer = MyTimer()
+
+    orig_len = sum(map(len, preds.values()))
+    preds = filter_by_conf_threshold(preds, params["pre_threshold"])
+    new_len = sum(map(len, preds.values()))
+    timer.measure("pre-thresholding filtered {}% of points".format(round((orig_len - new_len) / orig_len * 100), 2))
 
     # Post-processing of raw predicted points to get final predicted tree locations
     postprocess_mode = params["postprocess_mode"]
@@ -147,41 +158,43 @@ def postprocess_and_pointmatch(preds, gt, bounds, params, gridsearch_params):
     best_pointmatch_results = {"fscore": -1}
     best_gridparams = None
     for (pts_dict, these_gridparams) in processed_preds:
-        for conf_thresh in gridsearch_params["conf_threshold"]:
-            pts_dict = {p_id: pts[pts[:,2] > conf_thresh] if len(pts) else pts for p_id, pts in pts_dict.items()}
-            pointmatch_results = pointmatch(gt, pts_dict)
+        for post_threshold in gridsearch_params["post_threshold"]:
+            thresholded_pts = filter_by_conf_threshold(pts_dict, post_threshold)
+            pointmatch_results = pointmatch(gt, thresholded_pts)
             if pointmatch_results["fscore"] > best_pointmatch_results["fscore"]:
                 best_pointmatch_results = pointmatch_results
                 best_gridparams = {
-                    "conf_threshold": conf_thresh,
+                    "post_threshold": post_threshold,
                     **these_gridparams
                 }
 
-    timer.measure(f"pointmatching x{len(processed_preds) * len(gridsearch_params['conf_threshold'])}")
+    timer.measure(f"pointmatching x{len(processed_preds) * len(gridsearch_params['post_threshold'])}")
     
     return best_pointmatch_results, best_gridparams
     
 
 # round approximation of a log distribution
-ALL_CONF_THRESHOLDS = [1e-5, 1e-4, 1e-3, 2e-3, 5e-3, 1e-2, 2e-2, 5e-2, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+ALL_POST_THRESHOLDS = list(10 ** np.arange(-5, 0.2, step=0.2))
 # in units of 0.6-meter NAIP pixels
 ALL_MIN_DISTS = [1, 2, 3, 4, 5]
 
-def build_postprocessing_objective(preds, gt, bounds, min_dists, conf_thresholds, cache={}):
+def build_postprocessing_objective(raw_preds, gt, bounds, min_dists, post_thresholds, cache={}):
     """
     args:
-        preds: dict
+        raw_preds: dict
         gt: dict
         min_dists: list of min dists to gridsearch
-        conf_thresholds: list of thresholds to test
+        post_thresholds: list of thresholds applying to post-processed preds to test
     """
 
     def objective(trial):
         # params for which evaluating a change in them is expensive
-        params = {}
+        params = {
+            "pre_threshold": 10 ** trial.suggest_float(-5, 0, step=0.2) # threshold on raw points confs
+        }
         # params for which we can evaluate all of them every time because it is quick to do
         gridparams = {
-            "conf_threshold": conf_thresholds,
+            "post_threshold": post_thresholds, # threshold on post-processed
             "min_dist": min_dists,
         }
 
@@ -206,7 +219,7 @@ def build_postprocessing_objective(preds, gt, bounds, min_dists, conf_thresholds
 
         print("Trial", trial.number, params)
 
-        results, best_gridparams = postprocess_and_pointmatch(preds, gt, bounds, params, gridparams)
+        results, best_gridparams = postprocess_and_pointmatch(raw_preds, gt, bounds, params, gridparams)
 
         for key,value in best_gridparams.items():
             trial.set_user_attr(key, value)
@@ -277,9 +290,9 @@ def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
                 direction="maximize", 
             )
     # ensure it tries all three methods at reasonable params
-    study.enqueue_trial({"postprocessing_mode": "dbscan", "eps": 1.0, "min_samples": 1.0})
-    study.enqueue_trial({"postprocessing_mode": "kmeans", "n_cluster": 100})
-    study.enqueue_trial({"postprocessing_mode": "peaklocalmax", "gaussian_sigma": ARGS.gaussian_sigma})
+    study.enqueue_trial({"postprocessing_mode": "dbscan", "eps": 1.0, "min_samples": 1.0, "pre_threshold": 1e-3})
+    study.enqueue_trial({"postprocessing_mode": "kmeans", "n_cluster": 100, "pre_threshold": 1e-3})
+    study.enqueue_trial({"postprocessing_mode": "peaklocalmax", "gaussian_sigma": ARGS.gaussian_sigma, "pre_threshold": 1e-3})
     objective = build_postprocessing_objective(preds_full_unnormed, patchgen.gt_full, 
                     patchgen.bounds_full, min_dists=ALL_MIN_DISTS, 
                     conf_thresholds=ALL_CONF_THRESHOLDS)
