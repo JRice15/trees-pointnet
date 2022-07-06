@@ -199,6 +199,37 @@ def point_to_point():
 
     tf.config.experimental_run_functions_eagerly(True)
 
+    class CustomMean(tf.keras.metrics.Metric):
+        __name__ = "CustomMean"
+
+        def __init__(self, name, **kwargs):
+            super().__init__(name=name, **kwargs)
+            self.total = 0
+            self.count = 0
+
+        def update_state(self, y, x):
+            pass
+    
+        def my_update_state(self, values):
+            values = values.numpy()
+            self.total += values.sum()
+            self.count += values.size
+        
+        def reset_states(self):
+            self.total = 0
+            self.count = 0
+        
+        def result(self):
+            if self.count == 0:
+                return 0
+            return self.total / self.count
+
+
+    cls_matched_metric = CustomMean(name="cls_m_loss")
+    cls_unmatched_metric = CustomMean(name="cls_unm_loss")
+    loc_metric = CustomMean(name="loc_loss")            
+    all_metrics = [cls_matched_metric, cls_unmatched_metric, loc_metric]
+
     def matcher(pred, gt):
         """
         computes optimal matching assignment between the two
@@ -249,7 +280,13 @@ def point_to_point():
         bce = K.binary_crossentropy(ismatched, confs)
         # scale only the loss at the unmatched points by p2p_unmatched_weight.
         # ismatched is acting as a true/false mask here
-        loss = (ismatched * bce) + (ARGS.p2p_unmatched_weight * (1-ismatched) * bce)
+        matched_loss = (ismatched * bce)
+        unmatched_loss = (ARGS.p2p_unmatched_weight * (1-ismatched) * bce)
+        # update metrics
+        cls_matched_metric.my_update_state(matched_loss)
+        cls_unmatched_metric.my_update_state(unmatched_loss)
+        # sum elementwise (only one will be non-zero in each element
+        loss = matched_loss + unmatched_loss
         return tf.reduce_mean(loss, axis=-1)
     
     @tf.function
@@ -268,37 +305,12 @@ def point_to_point():
         total = tf.reduce_sum(error * gt_isvalid, axis=-1)
         count_valid = tf.reduce_sum(gt_isvalid, axis=-1)
         # handle div by zero when no valid gt trees
-        error = tf.where(count_valid > 0, total / count_valid, 0.0)
-        return error
+        loss = tf.where(count_valid > 0, total / count_valid, 0.0)
+        loss *= ARGS.p2p_loc_weight
+        # update metric
+        loc_metric.my_update_state(loss)
+        return loss
 
-    class CustomMean(tf.keras.metrics.Metric):
-        __name__ = "CustomMean"
-
-        def __init__(self, name, **kwargs):
-            super().__init__(name=name, **kwargs)
-            self.total = 0
-            self.count = 0
-
-        def update_state(self, y, x):
-            pass
-    
-        def my_update_state(self, values):
-            values = values.numpy()
-            self.total += values.sum()
-            self.count += values.size
-        
-        def reset_states(self):
-            self.total = 0
-            self.count = 0
-        
-        def result(self):
-            if self.count == 0:
-                return 0
-            return self.total / self.count
-
-
-    cls_metric = CustomMean(name="cls_loss")
-    loc_metric = CustomMean(name="loc_loss")            
 
     def p2p_loss(gt, pred):
         """
@@ -306,15 +318,11 @@ def point_to_point():
         """
         # get matching (no gradient there)
         matching, ismatched = matcher(pred, gt)
-        # compute classification loss
+        # compute losses
         cls_loss = classification_loss(pred, ismatched)
-        # only compute location loss when there are gt trees (is nan otherwise)
-        loc_loss = ARGS.p2p_loc_weight * location_loss(pred, gt, matching)
-        # update metrics
-        cls_metric.my_update_state(cls_loss)
-        loc_metric.my_update_state(loc_loss)
+        loc_loss = location_loss(pred, gt, matching)
         # final equation
         return cls_loss + loc_loss
 
-    return p2p_loss, [cls_metric, loc_metric]
+    return p2p_loss, all_metrics
 

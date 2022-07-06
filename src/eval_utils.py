@@ -147,13 +147,13 @@ def find_local_maxima(pred_grids, min_dist=1, conf_threshold=None):
         dict: mapping patch id to local peaks, shape (N,3) where channels are x,y,confidence
     """
     maxima = {}
-    for patch_id,pred_dict in tqdm(pred_grids.items(), total=len(pred_grids)):
+    for patch_id,pred_dict in pred_grids.items():
         gridvals = pred_dict["vals"]
         gridcoords = pred_dict["coords"]
 
         # get average pixel width
         n_pixels = gridvals.shape[0]
-        min_dist_pixels = min_dist * (256 / n_pixels)
+        min_dist_pixels = round(min_dist * (256 / n_pixels))
 
         # find local maxima
         peak_pixel_inds = peak_local_max(gridvals, 

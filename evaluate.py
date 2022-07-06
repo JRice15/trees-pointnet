@@ -9,6 +9,7 @@ import time
 from pathlib import PurePath
 from pprint import pprint
 
+import optuna
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
@@ -92,13 +93,11 @@ def peaklocalmax_postprocessing(pred_dict, bounds_dict, min_dists, min_conf_thre
         min_conf_threshold: lowest confidence threshold
     """
     pred_grids = rasterize_preds(pred_dict, bounds_dict)
-    timer.measure("rasterizing")
 
     results = []
     for min_dist in min_dists:
-        pred_peaks = find_local_maxima(pred_grids,  min_conf_threshold=min_conf_threshold)
+        pred_peaks = find_local_maxima(pred_grids, min_dist=min_dist, conf_threshold=min_conf_threshold)
         results.append( (pred_peaks, {"min_dist": min_dist}) )
-    timer.measure("computing peaklocalmax")
 
     return results
 
@@ -144,14 +143,13 @@ def postprocess_and_pointmatch(preds, gt, bounds, params, gridsearch_params):
 
     timer.measure(f"postprocessing={postprocess_mode}")
 
-    # TODO conf threshold
     # Pointmatching on the results
     best_pointmatch_results = {"fscore": -1}
     best_gridparams = None
-    for (pts, these_gridparams) in processed_preds:
+    for (pts_dict, these_gridparams) in processed_preds:
         for conf_thresh in gridsearch_params["conf_threshold"]:
-            pts = pts[pts[:,2] > conf_thresh]
-            pointmatch_results = pointmatch(gt, pts)
+            pts_dict = {p_id: pts[pts[:,2] > conf_thresh] if len(pts) else pts for p_id, pts in pts_dict.items()}
+            pointmatch_results = pointmatch(gt, pts_dict)
             if pointmatch_results["fscore"] > best_pointmatch_results["fscore"]:
                 best_pointmatch_results = pointmatch_results
                 best_gridparams = {
@@ -164,8 +162,9 @@ def postprocess_and_pointmatch(preds, gt, bounds, params, gridsearch_params):
     return best_pointmatch_results, best_gridparams
     
 
-
-ALL_CONF_THRESHOLDS = list(10 ** np.arange(-5, -1, step=0.5)) + list(np.arange(0.2, 1.0, 0.1))
+# round approximation of a log distribution
+ALL_CONF_THRESHOLDS = [1e-5, 1e-4, 1e-3, 2e-3, 5e-3, 1e-2, 2e-2, 5e-2, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+# in units of 0.6-meter NAIP pixels
 ALL_MIN_DISTS = [1, 2, 3, 4, 5]
 
 def build_postprocessing_objective(preds, gt, bounds, min_dists, conf_thresholds, cache={}):
@@ -178,12 +177,12 @@ def build_postprocessing_objective(preds, gt, bounds, min_dists, conf_thresholds
     """
 
     def objective(trial):
-        print("Trial", trial.number)
         # params for which evaluating a change in them is expensive
         params = {}
         # params for which we can evaluate all of them every time because it is quick to do
         gridparams = {
-            "conf_threshold": conf_thresholds
+            "conf_threshold": conf_thresholds,
+            "min_dist": min_dists,
         }
 
         # Post-processing of raw predicted points to get final predicted tree locations
@@ -196,7 +195,8 @@ def build_postprocessing_objective(preds, gt, bounds, min_dists, conf_thresholds
             params["eps"] = trial.suggest_float("eps", 0.25, 5.0, step=0.25) # max distance between neighbors, in meters
             params["min_samples"] = trial.suggest_float("min_samples", 0, 10, step=0.2) # min total confidence in cluster
         elif postprocess_mode == "kmeans":
-            params["minibatch"] = trial.suggest_categorical("minibatch", [False, True])
+            #params["minibatch"] = trial.suggest_categorical("minibatch", [False, True])
+            params["minibatch"] = True # regular kmeans is too slow
             params["n_clusters"] = trial.suggest_int("n_cluster", 10, 120, step=10)
         else:
             raise ValueError(f"Unknown postprocess mode {postprocess_mode}")
@@ -204,10 +204,15 @@ def build_postprocessing_objective(preds, gt, bounds, min_dists, conf_thresholds
         if postprocess_mode in ("dbscan", "kmeans"):
             gridparams["cluster_agg"] = ["sum", "max"]
 
-        results, best_gridparams = postprocess_and_pointmatch(preds, gt, bounds, params, gridsearch_params)
+        print("Trial", trial.number, params)
+
+        results, best_gridparams = postprocess_and_pointmatch(preds, gt, bounds, params, gridparams)
 
         for key,value in best_gridparams.items():
             trial.set_user_attr(key, value)
+
+        print(results)
+        print(best_gridparams)
 
         return results["fscore"]
 
@@ -266,7 +271,15 @@ def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
         del preds_string_keys
 
 
-    study = optuna.create_study(direction="maximize")
+    study = optuna.create_study(
+                sampler=optuna.samplers.TPESampler(n_startup_trials=6), # three of them will be pre-set, 3 will be random
+                study_name="eval",
+                direction="maximize", 
+            )
+    # ensure it tries all three methods at reasonable params
+    study.enqueue_trial({"postprocessing_mode": "dbscan", "eps": 1.0, "min_samples": 1.0})
+    study.enqueue_trial({"postprocessing_mode": "kmeans", "n_cluster": 100})
+    study.enqueue_trial({"postprocessing_mode": "peaklocalmax", "gaussian_sigma": ARGS.gaussian_sigma})
     objective = build_postprocessing_objective(preds_full_unnormed, patchgen.gt_full, 
                     patchgen.bounds_full, min_dists=ALL_MIN_DISTS, 
                     conf_thresholds=ALL_CONF_THRESHOLDS)
