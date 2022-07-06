@@ -83,7 +83,7 @@ def clustering_postprocessing(pred_dict, algorithm, cluster_aggs):
 
 
 
-def run_peaklocalmax_postprocessing(pred_dict, bounds_dict, min_dists, min_conf_threshold):
+def peaklocalmax_postprocessing(pred_dict, bounds_dict, min_dists, min_conf_threshold):
     """
     args:
         pred_dict
@@ -104,11 +104,12 @@ def run_peaklocalmax_postprocessing(pred_dict, bounds_dict, min_dists, min_conf_
 
 
 
-def postprocess_and_pointmatch(preds, gt, params, gridsearch_params):
+def postprocess_and_pointmatch(preds, gt, bounds, params, gridsearch_params):
     """
     args:
         preds: dict mapping patch id to raw pred pts
         gt: dict mapping patch id to gt trees
+        bounds: dict mapping patch id to bounds
         params: postprocessing method params
         gridsearch_params: secondary params which are gridsearched over (max vs summing, conf thresholds). conf_threshold key required
     returns:
@@ -120,11 +121,14 @@ def postprocess_and_pointmatch(preds, gt, params, gridsearch_params):
     # Post-processing of raw predicted points to get final predicted tree locations
     postprocess_mode = params["postprocess_mode"]
     if postprocess_mode == "peaklocalmax":
-        processed_preds = peaklocalmax_postprocessing(preds)
+        processed_preds = peaklocalmax_postprocessing(preds, bounds,
+                                min_dists=gridsearch_params["min_dist"],
+                                min_conf_threshold=min(gridsearch_params["conf_threshold"]))
 
     elif postprocess_mode == "dbscan":
         algo_initializer = lambda: DBSCAN(eps=params["eps"], min_samples=params["min_samples"])
-        processed_preds = clustering_postprocessing(preds, algo_initializer)
+        processed_preds = clustering_postprocessing(preds, algo_initializer,
+                                cluster_aggs=gridsearch_params["cluster_agg"])
 
     elif postprocess_mode == "kmeans":
         if params["minibatch"]:
@@ -132,8 +136,9 @@ def postprocess_and_pointmatch(preds, gt, params, gridsearch_params):
         else:
             algo_f = KMeans
         algo_initializer = lambda: algo_f(n_clusters=params["n_clusters"], random_state=0)
-        processed_preds = clustering_postprocessing(preds, algo_initializer)
-        
+        processed_preds = clustering_postprocessing(preds, algo_initializer, 
+                                cluster_aggs=gridsearch_params["cluster_agg"])
+
     else:
         raise ValueError(f"Unknown postprocess mode {postprocess_mode}")
 
@@ -145,7 +150,8 @@ def postprocess_and_pointmatch(preds, gt, params, gridsearch_params):
     best_gridparams = None
     for (pts, these_gridparams) in processed_preds:
         for conf_thresh in gridsearch_params["conf_threshold"]:
-            pointmatch_results = pointmatch(gt, pts, conf_threshold=conf_thresh)
+            pts = pts[pts[:,2] > conf_thresh]
+            pointmatch_results = pointmatch(gt, pts)
             if pointmatch_results["fscore"] > best_pointmatch_results["fscore"]:
                 best_pointmatch_results = pointmatch_results
                 best_gridparams = {
@@ -159,9 +165,17 @@ def postprocess_and_pointmatch(preds, gt, params, gridsearch_params):
     
 
 
-ALL_CONF_THRESHOLDS = [0] + list(np.arange(-6, 0, step=0.5))
+ALL_CONF_THRESHOLDS = list(10 ** np.arange(-5, -1, step=0.5)) + list(np.arange(0.2, 1.0, 0.1))
+ALL_MIN_DISTS = [1, 2, 3, 4, 5]
 
-def make_objective(preds_full, gt_full, conf_thresholds, cache={}):
+def build_postprocessing_objective(preds, gt, bounds, min_dists, conf_thresholds, cache={}):
+    """
+    args:
+        preds: dict
+        gt: dict
+        min_dists: list of min dists to gridsearch
+        conf_thresholds: list of thresholds to test
+    """
 
     def objective(trial):
         print("Trial", trial.number)
@@ -177,6 +191,7 @@ def make_objective(preds_full, gt_full, conf_thresholds, cache={}):
         params["postprocess_mode"] = postprocess_mode
         if postprocess_mode == "peaklocalmax":
             params["gaussian_sigma"] = trial.suggest_float("gaussian_sigma", ARGS.gaussian_sigma-1.0, ARGS.gaussian_sigma+1.0, step=0.5) # in meters
+            gridparams["min_dists"] = min_dists
         elif postprocess_mode == "dbscan":
             params["eps"] = trial.suggest_float("eps", 0.25, 5.0, step=0.25) # max distance between neighbors, in meters
             params["min_samples"] = trial.suggest_float("min_samples", 0, 10, step=0.2) # min total confidence in cluster
@@ -189,7 +204,7 @@ def make_objective(preds_full, gt_full, conf_thresholds, cache={}):
         if postprocess_mode in ("dbscan", "kmeans"):
             gridparams["cluster_agg"] = ["sum", "max"]
 
-        results, best_gridparams = postprocess_and_pointmatch(preds_full, gt_full, params, gridsearch_params)
+        results, best_gridparams = postprocess_and_pointmatch(preds, gt, bounds, params, gridsearch_params)
 
         for key,value in best_gridparams.items():
             trial.set_user_attr(key, value)
@@ -251,9 +266,13 @@ def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
         del preds_string_keys
 
 
+    study = optuna.create_study(direction="maximize")
+    objective = build_postprocessing_objective(preds_full_unnormed, patchgen.gt_full, 
+                    patchgen.bounds_full, min_dists=ALL_MIN_DISTS, 
+                    conf_thresholds=ALL_CONF_THRESHOLDS)
+    study.optimize(objective, n_trials=100, timeout=60*10)
 
-    # get full ground-truth
-    Y_full_unnormed = patchgen.gt_full
+    print(study.best_trial)
 
     if not ARGS.noplot:
         print("Denormalizing & overlapping X...")
