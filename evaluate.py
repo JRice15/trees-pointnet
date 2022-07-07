@@ -313,9 +313,9 @@ def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
             )
     # ensure it tries all three methods at reasonable params
     study.enqueue_trial({"postprocess_mode": "raw"})
-    study.enqueue_trial({"postprocess_mode": "dbscan", "eps": 1.0, "min_samples": 1.0, "pre_threshold": 1e-3})
-    study.enqueue_trial({"postprocess_mode": "kmeans", "n_cluster": 100, "pre_threshold": 1e-3})
-    study.enqueue_trial({"postprocess_mode": "peaklocalmax", "gaussian_sigma": ARGS.gaussian_sigma, "pre_threshold": 1e-3})
+    study.enqueue_trial({"postprocess_mode": "dbscan", "eps": 1.0, "min_samples": 1.0, "pre_threshold_exp": -3})
+    study.enqueue_trial({"postprocess_mode": "kmeans", "n_cluster": 100, "pre_threshold_exp": -3})
+    study.enqueue_trial({"postprocess_mode": "peaklocalmax", "gaussian_sigma": ARGS.gaussian_sigma, "pre_threshold_exp": -3})
     objective = build_postprocessing_objective(preds_full_unnormed, patchgen.gt_full, 
                     patchgen.bounds_full, min_dists=ALL_MIN_DISTS, 
                     post_thresholds=ALL_POST_THRESHOLDS)

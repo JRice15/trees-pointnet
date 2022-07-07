@@ -214,7 +214,7 @@ def rasterize_preds(preds, bounds, grid_aggs, is_subdiv=False):
     pred_grids = {mode: {} for mode in grid_aggs}
     pred_coords = {}
     for p_id, (vals_dict, coords) in zip(patch_ids, results):
-        for (mode, vals) in vals_dict.item():
+        for (mode, vals) in vals_dict.items():
             pred_grids[mode][p_id] = vals
         pred_coords[p_id] = coords
 
