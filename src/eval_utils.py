@@ -218,7 +218,6 @@ def rasterize_preds(preds, bounds, grid_aggs, is_subdiv=False):
             pred_grids[mode][p_id] = vals
         pred_coords[p_id] = coords
 
-    # pred_grids_grouped = group_by_composite_key(pred_grids, first_n=2)
     return pred_grids, pred_coords
 
 

@@ -37,11 +37,11 @@ from src.utils import (MyTimer, glob_modeldir, group_by_composite_key,
 
 
 
-def clustering_postprocessing(pred_dict, algorithm, cluster_aggs):
+def clustering_postprocessing(pred_dict, algo_initializer, cluster_aggs):
     """
     args:
         pred_dict
-        algo: no-args function that returns an sklearn clustering object
+        algo_initializer: no-args function that returns an sklearn clustering object
         cluster_aggs: list of str, options are "max" and/or "mean"
     returns:
         list of 2-tuples, where each tuple is:
@@ -54,7 +54,13 @@ def clustering_postprocessing(pred_dict, algorithm, cluster_aggs):
         confs = xyz[:,-1]
 
         # initialize clean clustering and predict
-        labels = algorithm().fit_predict(xy, sample_weight=confs)
+        algorithm = algo_initializer()
+        try:
+            labels = algorithm.fit_predict(xy, sample_weight=confs)
+        except ValueError as e:
+            # sometimes things go wrong, like trying to cluster less than n_clusters points with kmeans
+            print("Clustering error:", e)
+            raise optuna.exceptions.TrialPruned()
 
         xyz = xyz[labels >= 0]
         labels = labels[labels >= 0]
@@ -110,6 +116,7 @@ def filter_by_conf_threshold(preds_dict, threshold):
         for p_id, pts in preds_dict.items()
     }
     return {p_id: pts for p_id, pts in preds_dict.items() if pts.size}
+
 
 def postprocess_and_pointmatch(preds, gt, bounds, params, gridsearch_params):
     """
