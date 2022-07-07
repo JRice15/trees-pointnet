@@ -93,7 +93,7 @@ def peaklocalmax_postprocessing(pred_dict, bounds_dict, grid_aggs, min_dists, mi
         min_dists: list of values to try for min_dists between peaks
         min_conf_threshold: lowest confidence threshold
     """
-    pred_grids, pred_coords = rasterize_preds(pred_dict, bounds_dict, modes=grid_aggs, is_subdiv=False)
+    pred_grids, pred_coords = rasterize_preds(pred_dict, bounds_dict, grid_aggs=grid_aggs, is_subdiv=False)
 
     results = []
     for grid_agg, these_grids in pred_grids.items():
@@ -212,7 +212,7 @@ def build_postprocessing_objective(raw_preds, gt, bounds, min_dists, post_thresh
             pass
         elif postprocess_mode == "peaklocalmax":
             params["gaussian_sigma"] = trial.suggest_float("gaussian_sigma", ARGS.gaussian_sigma-1.0, ARGS.gaussian_sigma+1.0, step=0.5) # in meters
-            gridparams["min_dists"] = min_dists
+            gridparams["min_dist"] = min_dists
             gridparams["grid_agg"] = ["max", "sum"]
         elif postprocess_mode == "dbscan":
             params["eps"] = trial.suggest_float("eps", 0.25, 5.0, step=0.25) # max distance between neighbors, in meters

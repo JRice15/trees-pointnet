@@ -178,7 +178,7 @@ def _ray_rasterize_pts_blur(*args, **kwargs):
     """
     return rasterize_pts_gaussian_blur(*args, **kwargs)
 
-def rasterize_preds(preds, bounds, modes, is_subdiv=False):
+def rasterize_preds(preds, bounds, grid_aggs, is_subdiv=False):
     """
     args:
         preds: dict mapping patch id to pred pts (must be original CRS, not 0-1 scale)
@@ -186,7 +186,8 @@ def rasterize_preds(preds, bounds, modes, is_subdiv=False):
         modes: list of grid agg modes
         is_subdiv: bool, whether patches are subdiv or full-sized
     returns:
-        dict
+        pred_grids: dict mapping grid_agg mode to dict mapping p_id to raster, shape (N,N)
+        pred_coords: dict mapping p_id to coords of raster, shape (N,N,2)
     """
     if is_subdiv:
         resolution = GRID_RESOLUTION // ARGS.subdivide
@@ -204,17 +205,18 @@ def rasterize_preds(preds, bounds, modes, is_subdiv=False):
     for p_id, pred in preds.items():
         future = _ray_rasterize_pts_blur.remote(
                 bounds[p_id], pred[:,:2], pred[:,2], 
-                abs_sigma=ARGS.gaussian_sigma, mode=modes,
+                abs_sigma=ARGS.gaussian_sigma, mode=grid_aggs,
                 resolution=resolution)
         futures.append(future)
         patch_ids.append(p_id)
     
     results = ray.get(futures)
-    pred_grids = {}
+    pred_grids = {mode: {} for mode in grid_aggs}
     pred_coords = {}
-    for p_id, (vals, coords) in zip(patch_ids, results):
-        pred_grids[p_id] = vals
-        pred_coords[p_id] = pred_coords
+    for p_id, (vals_dict, coords) in zip(patch_ids, results):
+        for (mode, vals) in vals_dict.item():
+            pred_grids[mode][p_id] = vals
+        pred_coords[p_id] = coords
 
     # pred_grids_grouped = group_by_composite_key(pred_grids, first_n=2)
     return pred_grids, pred_coords
