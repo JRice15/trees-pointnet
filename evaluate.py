@@ -118,10 +118,10 @@ def filter_by_conf_threshold(preds_dict, threshold):
     return {p_id: pts for p_id, pts in preds_dict.items() if pts.size}
 
 
-def postprocess_and_pointmatch(preds, gt, bounds, params, gridsearch_params):
+def postprocess_and_pointmatch(preds_overlapped, gt, bounds, params, gridsearch_params):
     """
     args:
-        preds: dict mapping patch id to raw pred pts
+        preds_overlapped: dict mapping overlap method to dict mapping patch id to raw pred pts
         gt: dict mapping patch id to gt trees
         bounds: dict mapping patch id to bounds
         params: postprocessing method params
@@ -130,12 +130,17 @@ def postprocess_and_pointmatch(preds, gt, bounds, params, gridsearch_params):
     returns:
         best pointmatch metrics
         best gridsearch params
+        best pred_dict
     """
     timer = MyTimer()
+
+    # get correctly overlapped preds
+    preds = preds_overlapped[params["overlap_method"]]
 
     # Post-processing of raw predicted points to get final predicted tree locations
     postprocess_mode = params["postprocess_mode"]
 
+    # pre-thresholding for most methods
     if postprocess_mode != "raw":
         orig_len = sum(map(len, preds.values()))
         pre_threshold = 10 ** params["pre_threshold_exp"]
@@ -143,8 +148,10 @@ def postprocess_and_pointmatch(preds, gt, bounds, params, gridsearch_params):
         new_len = sum(map(len, preds.values()))
         print("  pre-thresholding filtered {}% of points".format(round((orig_len - new_len) / orig_len * 100), 2))
 
+    # Post processing
     if postprocess_mode == "raw":
         processed_preds = [(preds, {})]
+
     elif postprocess_mode == "peaklocalmax":
         processed_preds = peaklocalmax_postprocessing(preds, bounds,
                                 grid_aggs=gridsearch_params["grid_agg"],
@@ -173,6 +180,8 @@ def postprocess_and_pointmatch(preds, gt, bounds, params, gridsearch_params):
     # Pointmatching on the results
     best_pointmatch_results = {"fscore": -1}
     best_gridparams = None
+    best_pts = None
+    # post-processing methods can return multiple options internally, if they do a gridsearch inside the method somewhere
     for (pts_dict, these_gridparams) in processed_preds:
         # gridsearch through thresholds on post-processed pts
         for post_threshold in gridsearch_params["post_threshold"]:
@@ -184,10 +193,11 @@ def postprocess_and_pointmatch(preds, gt, bounds, params, gridsearch_params):
                     "post_threshold": post_threshold,
                     **these_gridparams
                 }
+                best_pts = thresholded_pts
 
     timer.measure(f"pointmatching x{len(processed_preds) * len(gridsearch_params['post_threshold'])}")
     
-    return best_pointmatch_results, best_gridparams
+    return best_pointmatch_results, best_gridparams, best_pts
     
 
 # log distribution
@@ -195,18 +205,22 @@ ALL_POST_THRESHOLDS = list(10 ** np.arange(-5, 0.2, step=0.2))
 # in units of 0.6-meter NAIP pixels
 ALL_MIN_DISTS = [1, 2, 3, 4, 5]
 
-def build_postprocessing_objective(raw_preds, gt, bounds, min_dists, post_thresholds, cache={}):
+def build_postprocessing_objective(preds_overlapped, gt, bounds, min_dists, post_thresholds):
     """
     args:
-        raw_preds: dict
-        gt: dict
+        preds_overlapped: dict mapping overlap method to dict mapping p_id to pts
+        gt: dict mapping p_id to pts
+        bounds: dict mapping p_id to Bounds
         min_dists: list of min dists to gridsearch
         post_thresholds: list of thresholds applying to post-processed preds to test
     """
 
     def objective(trial):
         # params for which evaluating a change in them is expensive
-        params = {}
+        params = {
+            # how to combine overlapping tiles
+            "overlap_method": trial.suggest_categorical("overlap_method", list(OVERLAP_METHODS.keys()))
+        }
         # params for which we can evaluate all of them every time because it is quick to do
         gridparams = {
             "post_threshold": post_thresholds # threshold on post-processed peaks
@@ -218,7 +232,7 @@ def build_postprocessing_objective(raw_preds, gt, bounds, min_dists, post_thresh
         if postprocess_mode == "raw":
             pass
         elif postprocess_mode == "peaklocalmax":
-            params["gaussian_sigma"] = trial.suggest_float("gaussian_sigma", ARGS.gaussian_sigma-1.0, ARGS.gaussian_sigma+1.0, step=0.5) # in meters
+            params["gaussian_sigma"] = trial.suggest_float("gaussian_sigma", max(0.5, ARGS.gaussian_sigma-2.0), ARGS.gaussian_sigma+1.0, step=0.5) # in meters
             gridparams["min_dist"] = min_dists
             gridparams["grid_agg"] = ["max", "sum"]
         elif postprocess_mode == "dbscan":
@@ -241,7 +255,7 @@ def build_postprocessing_objective(raw_preds, gt, bounds, min_dists, post_thresh
 
         print("Trial", trial.number, params)
 
-        results, best_gridparams = postprocess_and_pointmatch(raw_preds, gt, bounds, params, gridparams)
+        results, best_gridparams, _ = postprocess_and_pointmatch(raw_preds, gt, bounds, params, gridparams)
 
         for key,value in best_gridparams.items():
             trial.set_user_attr(key, value)
@@ -255,27 +269,19 @@ def build_postprocessing_objective(raw_preds, gt, bounds, min_dists, post_thresh
 
 
 
-
-def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
+def generate_predictions(patchgen, model, model_dir):
     """
-    generate predictions, visualizations, and evaluation metrics from a model 
-    on a LidarPatchGen dataset
-    args:
-        patchgen: dataset, patch generator
-        model: Keras Model to predict with
-        model_dir: pathlib.PurePath of model's output
-        pointmatch_thresholds: list of floats
+    generate, denormalize, and overlap predictions
+    returns:
+        overlapped preds: dict mapping overlap_method to dict mapping p_id to pts
+        X_subdiv_normed: raw input points
     """
     outdir = model_dir.joinpath("results_"+patchgen.name)
     os.makedirs(outdir, exist_ok=True)
 
-    timer = MyTimer()
-    """
-    generate predictions
-    """
     print("\nGenerating predictions...")
-    assert patchgen.batch_size == 1
-    
+    timer = MyTimer()
+
     X_subdiv_normed, _ = patchgen.load_all()
     X_subdiv_normed = np.squeeze(X_subdiv_normed.numpy())
     preds_subdiv_normed = np.squeeze(model.predict(X_subdiv_normed))
@@ -283,29 +289,32 @@ def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
     # associate each pred set with its patch id
     preds_subdiv_normed = dict(zip(patchgen.valid_patch_ids, preds_subdiv_normed))
     X_subdiv_normed = dict(zip(patchgen.valid_patch_ids, X_subdiv_normed))
-    timer.measure()
+    timer.measure("generation")
 
     # denormalize data
     print("Denormalizing preds...")
     preds_subdiv_unnormed = {p_id: patchgen.denormalize_pts(pts, p_id) for p_id,pts in preds_subdiv_normed.items()}
-    timer.measure()
+    timer.measure("denormalize")
 
     # combine with overlap
     print("Overlapping preds...")
-    overlap_fn = OVERLAP_METHODS[ARGS.overlap_mode]
-    preds_full_unnormed = overlap_fn(preds_subdiv_unnormed, patchgen.bounds_subdiv)
-    timer.measure()
-    
-    # save predictions
-    if ARGS.save_preds:
-        preds_string_keys = {
-            "_".join(map(str, p_id)): pts for p_id, pts in preds_full_unnormed.items()
-        }
-        outfile = outdir.joinpath("raw_preds.npz")
-        np.savez_compressed(outfile.as_posix(), **preds_string_keys)
-        del preds_string_keys
+    overlapped_preds = {}
+    for name, overlap_fn in OVERLAP_METHODS.items():
+        preds_overlapped = overlap_fn(preds_subdiv_unnormed, patchgen.bounds_subdiv)
+        overlapped_preds[name] = preds_overlapped
+    timer.measure("overlap")
+
+    return overlapped_preds, X_subdiv_normed
 
 
+
+def estimate_postproc_params(preds_overlapped_dict, gt_dict, bounds_dict):
+    """
+    Estimate best postprocessing params on a set of predictions and their corresponding ground truth
+    returns:
+        params
+        gridparams
+    """
     sampler = optuna.samplers.TPESampler(
                 multivariate=True,
                 group=True,
@@ -316,15 +325,17 @@ def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
     study = optuna.create_study(
                 sampler=sampler,
                 study_name="eval",
-                direction="maximize", 
+                direction="maximize",
             )
-    # ensure it tries all three methods at reasonable params
+    # ensure it tries all methods at reasonable params
     study.enqueue_trial({"postprocess_mode": "raw"})
     study.enqueue_trial({"postprocess_mode": "dbscan", "eps": 1.0, "min_samples": 1.0, "pre_threshold_exp": -3})
     study.enqueue_trial({"postprocess_mode": "kmeans", "n_cluster": 100, "pre_threshold_exp": -3})
     study.enqueue_trial({"postprocess_mode": "peaklocalmax", "gaussian_sigma": ARGS.gaussian_sigma, "pre_threshold_exp": -3})
-    objective = build_postprocessing_objective(preds_full_unnormed, patchgen.gt_full, 
-                    patchgen.bounds_full, min_dists=ALL_MIN_DISTS, 
+
+    objective = build_postprocessing_objective(
+                    preds_overlapped_dict, gt_dict, bounds_dict, 
+                    min_dists=ALL_MIN_DISTS, 
                     post_thresholds=ALL_POST_THRESHOLDS)
     study.optimize(objective, n_trials=200, timeout=60*10)
 
@@ -332,63 +343,61 @@ def evaluate_pointmatching(patchgen, model, model_dir, pointmatch_thresholds):
     params = best.params
     gridparams = best.user_attrs
 
-    if not ARGS.noplot:
-        print("Denormalizing & overlapping X...")
-        # denormalize X
-        X_subdiv_unnormed = {p_id: patchgen.denormalize_pts(pts, p_id) for p_id,pts in X_subdiv_normed.items()}
+    return params, gridparams
 
-        # drop overlapping subpatches, combine into full patches
-        X_full_unnormed = drop_overlaps(X_subdiv_unnormed)
-        timer.measure()
 
-        Y_subdiv_normed = patchgen.gt_subdiv
-        viz_predictions(patchgen, outdir.joinpath("visualizations"), 
-            # use normed for subdiv data
-            X_subdiv=X_subdiv_normed, Y_subdiv=Y_subdiv_normed, preds_subdiv=preds_subdiv_normed, 
-            # use unnormed for full data
-            X_full=X_full_unnormed, Y_full=Y_full_unnormed, preds_full=preds_full_unnormed, 
-            pred_grids=pred_grids_unnormed, pred_peaks=pred_peaks_unnormed)
-        timer.measure()
-
+def evaluate_postproc_params(patchgen, model_dir, preds_overlapped_dict, X_subdiv_normed, params, gridparams):
+    """
+    Evaluate the final postprocessing params found by optuna
+    args:
 
     """
-    Pointmatching
-    """
-    print("Pointmatching...")
-    results = []
-    for thresh in tqdm(pointmatch_thresholds):
-        result = pointmatch(Y_full_unnormed, pred_peaks_unnormed, thresh)
-        results.append(result)
-    timer.measure()
+    outdir = model_dir.joinpath("results_"+patchgen.name)
+    os.makedirs(outdir, exist_ok=True)
 
-    # find best, by fscore
-    best_idx = np.argmax([x["fscore"] for x in results])
+    timer = MyTimer()
 
-    best_stats = {k:results[best_idx][k] for k in results[0].keys()}
-    all_stats = {k:[x[k] for x in results] for k in results[0].keys()}
+    # gridparams expects a list for each value
+    formatted_gridparams = {k:[v] for k,v in gridparams}
+    # run postprocessing
+    results, _, best_preds = postprocess_and_pointmatch(preds_overlapped_dict, 
+                                patchgen.gt_full, patchgen.bounds_full, 
+                                params=params, gridsearch_params=formatted_gridparams)
+    timer.measure("final post-processing")
 
-    print("results:")
-    pprint(best_stats)
-
-    pointmatch_stats = {
-        "best": best_stats,
-        "all": all_stats,
-    }
-
-    # get or initialize stats for all overlap modes
+    # save stats
     results_file = outdir.joinpath("results_pointmatch.json").as_posix()
-    if os.path.exists(results_file):
-        with open(results_file, "r") as f:
-            all_modes_results = json.load(f)
-    else:
-        all_modes_results = {}
-    # update with new stats
-    all_modes_results[ARGS.overlap_mode] = pointmatch_stats
-    # save
+    all_stats = {
+        "metrics": results,
+        "params": params,
+        "gridparams": gridparams,
+    }
     with open(results_file, "w") as f:
-        json.dump(all_modes_results, f, indent=2)
+        json.dump(all_stats, f, indent=2)
 
-    return pointmatch_stats
+    # save predictions
+    if ARGS.save_preds:
+        preds_string_keys = {
+            "_".join(map(str, p_id)): pts for p_id, pts in best_preds.items()
+        }
+        outfile = outdir.joinpath("raw_preds.npz")
+        np.savez_compressed(outfile.as_posix(), **preds_string_keys)
+        del preds_string_keys
+
+    raw_preds = preds_overlapped_dict[gridparams["overlap_mode"]]
+    if not ARGS.noplot:
+        print("Generating visualizations...")
+        viz_predictions(
+            patchgen, outdir.joinpath("visualizations"), 
+            X_subdiv=X_subdiv_normed, 
+            Y_subdiv=patchgen.gt_subdiv,
+            Y_full=patchgen.gt_full, 
+            preds_full=raw_preds, 
+            pred_peaks=best_preds)
+        timer.measure()
+
+    return results
+
 
 
 def evaluate_loss_metrics(patchgen, model, model_dir):
@@ -397,16 +406,16 @@ def evaluate_loss_metrics(patchgen, model, model_dir):
     args:
         patchgen
     """
-    print("Evaluating model's metrics...")
     outdir = model_dir.joinpath("results_"+patchgen.name)
     os.makedirs(outdir, exist_ok=True)
 
+    print("Evaluating model's metrics...")
     metric_vals = model.evaluate(patchgen, batch_size=ARGS.batchsize)
     
     if not isinstance(metric_vals, list):
         results = {"loss": metric_vals}
     else:
-        results = {model.metrics_names[i]:v for i,v in enumerate(metric_vals)}
+        results = dict(zip(model.metric_names, metric_vals))
 
     with open(outdir.joinpath("results_model_metrics.json"), "w") as f:
         json.dump(results, f, indent=2)
@@ -416,6 +425,9 @@ def evaluate_loss_metrics(patchgen, model, model_dir):
         print(k+":", v)
     
     return results
+
+
+
 
 
 def main():
@@ -429,42 +441,39 @@ def main():
 
     model = load_saved_model(MODEL_DIR)
 
-    if "test" in ARGS.eval_sets and "val" not in ARGS.eval_sets:
-        ARGS.eval_sets += ("val",)
-    datasets = get_datasets(ARGS.dsname, ARGS.regions, ARGS.eval_sets, train_batchsize=1, val_batchsize=1)
-    datasets = dict(zip(ARGS.eval_sets, datasets))
-
-    # grid search approximating log-scale
-    THRESHOLDS = list(np.arange(0, 0.030, 0.005)) + list(np.arange(0.030, 0.100, 0.010)) + list(np.arange(0.100, 1, 0.025))
-    # RASTERIZE_MODES = ["sum", "max"]
+    val_gen, test_gen = get_datasets(ARGS.dsname, ARGS.regions, ("val", "test"))
 
     # train set evaluation
-    if "train" in ARGS.eval_sets:
-        train_gen = datasets["train"]
-        train_gen.training = False
-        train_gen.summary()
-        if not ARGS.nolosses:
-            evaluate_loss_metrics(train_gen, model, MODEL_DIR)
-        evaluate_pointmatching(train_gen, model, MODEL_DIR, THRESHOLDS)
+    # if "train" in ARGS.eval_sets:
+        # raise NotImplementedError()
+        # train_gen = datasets["train"]
+        # train_gen.training = False
+        # train_gen.summary()
+        # if not ARGS.nolosses:
+        #     evaluate_loss_metrics(train_gen, model, MODEL_DIR)
+        # evaluate_pointmatching(train_gen, model, MODEL_DIR)
 
     # validation set evaluation
-    if "val" in ARGS.eval_sets or "test" in ARGS.eval_sets:
-        val_gen = datasets["val"]
-        val_gen.summary()
-        if not ARGS.nolosses:
-            evaluate_loss_metrics(val_gen, model, MODEL_DIR)
-        pointmatch_stats = evaluate_pointmatching(val_gen, model, MODEL_DIR, THRESHOLDS)
-        val_best_thresh = pointmatch_stats["best"]["threshold"]
+    val_gen.summary()
+    if not ARGS.nolosses:
+        evaluate_loss_metrics(val_gen, model, MODEL_DIR)
+    preds_val, X_val = generate_predictions(val_gen, model, MODEL_DIR)
+
+    # estimate best params on validation set
+    params, gridparams = estimate_postproc_params(preds_val, val_gen.gt_full, val_gen.bounds_full)
+    # evaluate
+    evaluate_postproc_params(patchgen, MODEL_DIR, preds_val, X_val, 
+            params=params, gridparams=gridparams)
 
     # test set evaluation
-    if "test" in ARGS.eval_sets:
-        test_gen = datasets["test"]
-        test_gen.summary()
-        if not ARGS.nolosses:
-            evaluate_loss_metrics(test_gen, model, MODEL_DIR)
-        evaluate_pointmatching(test_gen, model, MODEL_DIR, [val_best_thresh])
+    test_gen.summary()
+    if not ARGS.nolosses:
+        evaluate_loss_metrics(test_gen, model, MODEL_DIR)
+    preds_test, X_test = generate_predictions(test_gen, model, MODEL_DIR)
 
-
+    # use val-set estimated params on test set
+    evaluate_postproc_params(patchgen, MODEL_DIR, preds_test, X_test, 
+            params=params, gridparams=gridparams)
 
 
 if __name__ == "__main__":
@@ -473,11 +482,9 @@ if __name__ == "__main__":
     """
     parser = argparse.ArgumentParser()
     parser.add_argument("--name",required=True,help="name of model to run, with possible timestamp in front")
-    parser.add_argument("--sets",dest="eval_sets",default=("val","test"),nargs="+",help="datasets to evaluate on: train, val, and/or test. test automatically selects val as well")
+    # parser.add_argument("--sets",dest="eval_sets",default=("val","test"),nargs="+",help="datasets to evaluate on: train, val, and/or test. test automatically selects val as well")
     parser.add_argument("--noplot",action="store_true",help="don't make plots (significantly improves speed)")
     parser.add_argument("--nolosses",action="store_true",help="do not compute loss metrics")
-    parser.add_argument("--overlap-mode",default="drop",choices=list(OVERLAP_METHODS.keys()),
-        help="method by which to combine overlapping tiles")
     parser.add_argument("--save-preds",action="store_true",help="save raw predictions as npy files")
     parser.parse_args(namespace=ARGS)
 

@@ -52,9 +52,7 @@ requiredgrp.add_argument("--loss",required=True,help="loss mode to use (must be 
 
 # main optional
 optionalgrp = parser.add_argument_group("optional")
-optionalgrp.add_argument("--eval",dest="eval_sets",nargs="+",choices=("train", "val", "test"),
-    help="specify one or more of 'train', 'val', 'test' to evaluate ('test' automatically selects 'val' as well)")
-optionalgrp.add_argument("--overlap-mode",default="drop",help="(when --eval supplied): overlap mode during evaluation")
+optionalgrp.add_argument("--eval",action="store_true",help="whether to evaluate at the end")
 optionalgrp.add_argument("-h", "--help", action="help", help="show this message and exit")
 
 # dataset
@@ -152,7 +150,8 @@ load data
 train_gen, val_gen = get_datasets(ARGS.dsname, ARGS.regions, ("train", "val"))
 train_gen.summary()
 val_gen.summary()
-inpt_shape = train_gen.get_batch_shape()[0][1:]
+x_shape, y_shape = train_gen.get_batch_shape()
+inpt_shape = x_shape[1:]
 
 
 if not ARGS.noplot:
@@ -274,7 +273,7 @@ del train_gen
 del val_gen
 
 
-if ARGS.eval_sets:
+if ARGS.eval:
     """
     Testing phase
     """

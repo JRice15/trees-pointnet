@@ -77,7 +77,7 @@ class LidarPatchGen(keras.utils.Sequence):
     important data attributes:
         valid_patch_ids: ids of subdivided patches that are valid as model inputs, ie have not been dropped for having too few lidar points
         bounds_full/subdiv: dict mapping patch id to Bounds for each full or subdivided patch
-        gt_full/subdiv: dict mapping patch id to ground truth trees in that patch
+        gt_full/subdiv: dict mapping patch id to ground truth tree locations in that patch
         lidar_subdiv: dict mapping patch it to lidar points in that patch (no 'full' version, as it is a waste of memory)
     """
 
@@ -461,8 +461,7 @@ def get_tvt_split(dsname, regions):
 
 
 
-def get_datasets(dsname, regions, sets=("train", "val", "test"), 
-        val_batchsize=None, train_batchsize=None):
+def get_datasets(dsname, regions, sets=("train", "val", "test"), batchsize=None):
     """
     get the `sets` datasets from ds `dsname`
     returns:
@@ -474,13 +473,13 @@ def get_datasets(dsname, regions, sets=("train", "val", "test"),
     result = []
     for name in sets:
         if name == "train":
-            train_gen = LidarPatchGen(train, name="train", training=True, batchsize=train_batchsize)
+            train_gen = LidarPatchGen(train, name="train", training=True, batchsize=batchsize)
             result.append(train_gen)
         elif name == "val":
-            val_gen = LidarPatchGen(val, name="validation", batchsize=val_batchsize)
+            val_gen = LidarPatchGen(val, name="validation", batchsize=batchsize)
             result.append(val_gen)
         elif name == "test":
-            test_gen = LidarPatchGen(test, name="test", batchsize=1)
+            test_gen = LidarPatchGen(test, name="test", batchsize=batchsize)
             result.append(test_gen)
         else:
             raise ValueError("Unknown ds set '{}'".format(name))

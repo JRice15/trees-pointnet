@@ -29,7 +29,7 @@ def viz_pointcloud(xyz, point_size=5, colors=None):
 def viz_from_ds(args):
     from src import DATA_DIR, ARGS
     from src.utils import get_default_dsname, get_all_regions
-    from src.patch_generator import get_datasets, get_tvt_split
+    from src.patch_generator import LidarPatchGen
 
     if args.name is None:
         args.name = get_default_dsname()
@@ -47,26 +47,12 @@ def viz_from_ds(args):
     ARGS.test = False
 
     region, patch = args.pid
-    path
-
-    # all_regions = get_all_regions(args.dsname)
-    regions = [region]
-
     patch_id = (region, int(patch))
-    train_ids, val_ids, test_ids = get_tvt_split(args.name, regions)
-    if patch_id in train_ids:
-        kind = "train"
-    elif patch_id in val_ids:
-        kind = "val"
-    elif patch_id in test_ids:
-        kind = "test"
-    else:
-        raise ValueError("Bad patch: {}".format(patch_id))
-    
-    (ds,) = get_datasets(ARGS.dsname, regions, sets=[kind])
+
+    regions = [region]
+    ds = LidarPatchGen([patch_id], name="viz", batchsize=1, training=False)
 
     print(ds.summary())
-
     # print(sorted(ds.patch_ids))
 
     all_xyz = None
