@@ -472,7 +472,7 @@ def main():
 
     # validation set evaluation
     val_gen.summary()
-    val_dir = MODEL_DIR.joinpath("results_val")
+    val_dir = MODEL_DIR.joinpath("results_validation")
     if not ARGS.nolosses:
         evaluate_loss_metrics(val_gen, model, val_dir)
     preds_val, X_val = generate_predictions(val_gen, model, val_dir)
@@ -485,7 +485,7 @@ def main():
 
     # test set evaluation
     test_gen.summary()
-    test_dir = MODEL_DIR.joinpath("results_val")
+    test_dir = MODEL_DIR.joinpath("results_test")
     if not ARGS.nolosses:
         evaluate_loss_metrics(test_gen, model, test_dir)
     preds_test, X_test = generate_predictions(test_gen, model, test_dir)
