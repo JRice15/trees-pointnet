@@ -255,7 +255,7 @@ def build_postprocessing_objective(preds_overlapped, gt, bounds, min_dists, post
 
         print("Trial", trial.number, params)
 
-        results, best_gridparams, _ = postprocess_and_pointmatch(raw_preds, gt, bounds, params, gridparams)
+        results, best_gridparams, _ = postprocess_and_pointmatch(preds_overlapped, gt, bounds, params, gridparams)
 
         for key,value in best_gridparams.items():
             trial.set_user_attr(key, value)
@@ -358,7 +358,7 @@ def evaluate_postproc_params(patchgen, model_dir, preds_overlapped_dict, X_subdi
     timer = MyTimer()
 
     # gridparams expects a list for each value
-    formatted_gridparams = {k:[v] for k,v in gridparams}
+    formatted_gridparams = {k:[v] for k,v in gridparams.items()}
     # run postprocessing
     results, _, best_preds = postprocess_and_pointmatch(preds_overlapped_dict, 
                                 patchgen.gt_full, patchgen.bounds_full, 
@@ -384,8 +384,8 @@ def evaluate_postproc_params(patchgen, model_dir, preds_overlapped_dict, X_subdi
         np.savez_compressed(outfile.as_posix(), **preds_string_keys)
         del preds_string_keys
 
-    raw_preds = preds_overlapped_dict[gridparams["overlap_mode"]]
     if not ARGS.noplot:
+        raw_preds = preds_overlapped_dict[params["overlap_method"]]
         print("Generating visualizations...")
         viz_predictions(
             patchgen, outdir.joinpath("visualizations"), 
@@ -393,7 +393,7 @@ def evaluate_postproc_params(patchgen, model_dir, preds_overlapped_dict, X_subdi
             Y_subdiv=patchgen.gt_subdiv,
             Y_full=patchgen.gt_full, 
             preds_full=raw_preds, 
-            pred_peaks=best_preds)
+            preds_full_peaks=best_preds)
         timer.measure()
 
     return results
@@ -462,7 +462,7 @@ def main():
     # estimate best params on validation set
     params, gridparams = estimate_postproc_params(preds_val, val_gen.gt_full, val_gen.bounds_full)
     # evaluate
-    evaluate_postproc_params(patchgen, MODEL_DIR, preds_val, X_val, 
+    evaluate_postproc_params(val_gen, MODEL_DIR, preds_val, X_val, 
             params=params, gridparams=gridparams)
 
     # test set evaluation
@@ -472,7 +472,7 @@ def main():
     preds_test, X_test = generate_predictions(test_gen, model, MODEL_DIR)
 
     # use val-set estimated params on test set
-    evaluate_postproc_params(patchgen, MODEL_DIR, preds_test, X_test, 
+    evaluate_postproc_params(test_gen, MODEL_DIR, preds_test, X_test, 
             params=params, gridparams=gridparams)
 
 

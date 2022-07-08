@@ -302,7 +302,6 @@ def viz_predictions(patchgen, outdir, *, X_subdiv, Y_full, Y_subdiv,
 
     # drop overlapping subpatches, combine into full patches
     X_full = drop_overlaps(X_subdiv_unnormed)
-    timer.measure()
     del X_subdiv_unnormed
 
     print("Generating visualizations...")
@@ -310,7 +309,7 @@ def viz_predictions(patchgen, outdir, *, X_subdiv, Y_full, Y_subdiv,
 
     patch_ids = sorted(preds_full.keys())
     n_ids = len(patch_ids)
-    subpatch_ids = sorted(preds_subdiv.keys())
+    subpatch_ids = sorted(X_subdiv.keys())
 
     # grab random 10ish examples
     step_size = max(1, n_ids//10)
@@ -328,7 +327,7 @@ def viz_predictions(patchgen, outdir, *, X_subdiv, Y_full, Y_subdiv,
                 patch_id=subp_id,
                 X=X_subdiv[subp_id],
                 Y=Y_subdiv[subp_id],
-                pred=preds_subdiv[subp_id],
+                pred=preds_subdiv[subp_id] if preds_subdiv is not None else None,
                 # pred_peaks=bounds.filter_pts(pred_peaks[p_id]), # peaks within this subpatch
                 naip=patchgen.get_naip(subp_id),
                 grid_resolution=GRID_RESOLUTION//ARGS.subdivide,
@@ -336,15 +335,15 @@ def viz_predictions(patchgen, outdir, *, X_subdiv, Y_full, Y_subdiv,
             )
 
         # plot full-patch data
-        naip = patchgen.get_naip(p_id)
         plot_one_example(
             outdir=patch_dir,
             patch_id=p_id, 
             X=X_full[p_id], 
             Y=Y_full[p_id], 
-            pred=preds_full[p_id], 
-            pred_peaks=pred_peaks[p_id],
+            pred=preds_full[p_id],
+            pred_peaks=preds_full_peaks[p_id] if p_id in preds_full_peaks else None,
             naip=patchgen.get_naip(p_id), 
             grid_resolution=GRID_RESOLUTION,
         )
+    
 
