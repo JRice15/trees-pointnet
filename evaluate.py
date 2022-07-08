@@ -253,14 +253,13 @@ def build_postprocessing_objective(preds_overlapped, gt, bounds, min_dists, post
             params["pre_threshold_exp"] = trial.suggest_float("pre_threshold_exp", -5, 0, step=0.2)
             # with 'raw' postprocessing, we just use the post_threshold instead of both, since they are redundant in that case
 
-        print("Trial", trial.number, params)
+        print("Trial", trial.number)
 
         results, best_gridparams, _ = postprocess_and_pointmatch(preds_overlapped, gt, bounds, params, gridparams)
 
         for key,value in best_gridparams.items():
             trial.set_user_attr(key, value)
 
-        print(results)
         print(best_gridparams)
 
         return results["fscore"]
@@ -351,8 +350,11 @@ def estimate_postproc_params(preds_overlapped_dict, gt_dict, bounds_dict, outdir
 
     optuna.visualization.plot_optimization_history(study) \
         .write_image(study_dir.joinpath("optimization_history.png").as_posix(), scale=2)
-    optuna.visualization.plot_param_importances(study) \
-        .write_image(study_dir.joinpath("param_importances.png").as_posix(), scale=2)
+    try:
+        optuna.visualization.plot_param_importances(study) \
+            .write_image(study_dir.joinpath("param_importances.png").as_posix(), scale=2)
+    except RuntimeError:
+        pass
     optuna.visualization.plot_slice(study) \
         .write_image(study_dir.joinpath("slice_plot.png").as_posix(), scale=2)
 
