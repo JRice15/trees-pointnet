@@ -353,6 +353,9 @@ def estimate_postproc_params(preds_overlapped_dict, gt_dict, bounds_dict, outdir
         .write_image(study_dir.joinpath("optimization_history.png").as_posix(), scale=2)
     optuna.visualization.plot_param_importances(study) \
         .write_image(study_dir.joinpath("param_importances.png").as_posix(), scale=2)
+    optuna.visualization.plot_slice(study) \
+        .write_image(study_dir.joinpath("slice_plot.png").as_posix(), scale=2)
+
 
     best = study.best_trial
     params = best.params
@@ -473,7 +476,7 @@ def main():
     preds_val, X_val = generate_predictions(val_gen, model, val_dir)
 
     # estimate best params on validation set
-    params, gridparams = estimate_postproc_params(preds_val, val_gen.gt_full, val_gen.bounds_full)
+    params, gridparams = estimate_postproc_params(preds_val, val_gen.gt_full, val_gen.bounds_full, val_dir)
     # evaluate
     evaluate_postproc_params(val_gen, val_dir, preds_val, X_val, 
             params=params, gridparams=gridparams)
