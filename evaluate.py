@@ -392,6 +392,7 @@ def evaluate_postproc_params(patchgen, model_dir, preds_overlapped_dict, X_subdi
             X_subdiv=X_subdiv_normed, 
             Y_subdiv=patchgen.gt_subdiv,
             Y_full=patchgen.gt_full, 
+            bounds_full=patchgen.bounds_full,
             preds_full=raw_preds, 
             preds_full_peaks=best_preds)
         timer.measure()

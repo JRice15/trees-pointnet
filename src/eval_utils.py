@@ -288,7 +288,7 @@ Visualization
 """
 
 def viz_predictions(patchgen, outdir, *, X_subdiv, Y_full, Y_subdiv, 
-        preds_full, preds_full_peaks, preds_subdiv=None):
+        preds_full, preds_full_peaks, bounds_full, preds_subdiv=None):
     """
     data visualizations
     args:
@@ -331,7 +331,7 @@ def viz_predictions(patchgen, outdir, *, X_subdiv, Y_full, Y_subdiv,
                 # pred_peaks=bounds.filter_pts(pred_peaks[p_id]), # peaks within this subpatch
                 naip=patchgen.get_naip(subp_id),
                 grid_resolution=GRID_RESOLUTION//ARGS.subdivide,
-                zero_one_bounds=True
+                bounds=Bounds.zero_to_one(),
             )
 
         # plot full-patch data
@@ -344,6 +344,7 @@ def viz_predictions(patchgen, outdir, *, X_subdiv, Y_full, Y_subdiv,
             pred_peaks=preds_full_peaks[p_id] if p_id in preds_full_peaks else None,
             naip=patchgen.get_naip(p_id), 
             grid_resolution=GRID_RESOLUTION,
+            bounds=bounds_full[p_id]
         )
     
 

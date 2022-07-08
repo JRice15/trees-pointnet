@@ -93,6 +93,13 @@ class Bounds:
         kwargs = dict(zip(keys, bounds))
         return cls(**kwargs)
 
+    @classmethod
+    def zero_to_one(cls):
+        """
+        create a Bounds object signifying bounds from 0 to 1 in the X and Y directions
+        """
+        return Bounds.from_minmax([0, 0, 1, 1])
+
 
 class LabeledBox:
     """
@@ -323,9 +330,9 @@ def plot_raster(gridvals, gridcoords, filename, *, colorbar_label=None,
     plt.close()
 
 
-def rasterize_and_plot(pts, filename, *, gaussian_blur=True, rel_sigma=None, abs_sigma=None, weights=None, 
+def rasterize_and_plot(pts, bounds, filename, *, gaussian_blur=True, rel_sigma=None, abs_sigma=None, weights=None, 
         title=None, clip=None, sqrt_scale=False, mode="sum", mark=None, 
-        zero_one_bounds=False, weight_label=None, grid_resolution=None,
+        weight_label=None, grid_resolution=None,
         colorbar=True, ticks=False):
     """
     create raster plot of points, with optional weights
@@ -337,14 +344,6 @@ def rasterize_and_plot(pts, filename, *, gaussian_blur=True, rel_sigma=None, abs
         {rel|abs}_sigma: specify relative (fraction of side length) or absolute distance sigma of gaussian smoothing kernel
         mark: dict mapping names to points to mark with an x, array shape (n,2)
     """
-    if zero_one_bounds:
-        bounds = Bounds.from_xy([0, 1, 0, 1])
-    else:
-        bounds = Bounds.from_xy([
-            pts[:,0].min(), pts[:,0].max(), 
-            pts[:,1].min(), pts[:,1].max()
-        ])
-
     if gaussian_blur:
         gridvals, gridcoords = rasterize_pts_gaussian_blur(bounds, pts, weights, 
                                 rel_sigma=rel_sigma, abs_sigma=abs_sigma, 
@@ -368,20 +367,22 @@ def rasterize_and_plot(pts, filename, *, gaussian_blur=True, rel_sigma=None, abs
 
 
 
-def plot_one_example(outdir, patch_id, *, Y, X=None, pred=None, pred_peaks=None, 
+def plot_one_example(outdir, patch_id, *, Y, bounds, X=None, pred=None, pred_peaks=None, 
         pred_overlap_gridded=None, naip=None, zero_one_bounds=False,
         grid_resolution=128):
     """
-    generate raster plots for one example input and output from a dataset
+    generate and save raster plots for one example input and output from a dataset
     args:
-        x: input from patch generator
-        y: targets from patch generator
-        patch_id
         outdir: pathlib.PurePath
+        patch_id
+        Y: targets from patch generator
+        X: input from patch generator
+        bounds
         pred: raw predictions from network
         pred_peaks: the true final predictions
         naip: naip image
         zero_one_bounds: whether points are in 0-1 scale (instead of epsg26911)
+    returns: none
     """
     if not os.path.exists(outdir):
         os.makedirs(outdir, exist_ok=True)
@@ -419,7 +420,7 @@ def plot_one_example(outdir, patch_id, *, Y, X=None, pred=None, pred_peaks=None,
             mode="second-highest", 
             filename=outdir.joinpath("{}_lidar_height".format(patchname)), 
             mark=markings, 
-            zero_one_bounds=zero_one_bounds,
+            bounds=bounds,
             grid_resolution=grid_resolution)
         
         # lidar ndvi
@@ -432,7 +433,7 @@ def plot_one_example(outdir, patch_id, *, Y, X=None, pred=None, pred_peaks=None,
             gaussian_blur=False,
             filename=outdir.joinpath("{}_lidar_ndvi".format(patchname)),
             mark=markings, 
-            zero_one_bounds=zero_one_bounds,
+            bounds=bounds,
             grid_resolution=grid_resolution)
 
     # raw predictions
@@ -448,7 +449,7 @@ def plot_one_example(outdir, patch_id, *, Y, X=None, pred=None, pred_peaks=None,
             filename=outdir.joinpath("{}_pred_raw".format(patchname)),
             mode="max", 
             mark=markings, 
-            zero_one_bounds=zero_one_bounds,
+            bounds=bounds,
             grid_resolution=grid_resolution)
 
 

@@ -172,15 +172,15 @@ if not ARGS.noplot:
             train_viz_dir.joinpath("normalized"),
             ids[i],
             X=x, Y=y, naip=naip, 
-            zero_one_bounds=True)
+            bounds=Bounds.zero_to_one())
 
         x = train_gen.denormalize_pts(x, ids[i])
         y[:,:2] = train_gen.denormalize_pts(y[:,:2], ids[i])
         evaluate.plot_one_example(
             train_viz_dir.joinpath("original_scale"),
             ids[i],
-            X=x, Y=y, naip=naip, 
-            zero_one_bounds=False)
+            X=x, Y=y, naip=naip,
+            bounds=Bounds.zero_to_one())
             
         if ARGS.test:
             break
