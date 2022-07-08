@@ -220,7 +220,6 @@ def main():
     if ARGS.overwrite:
         if os.path.exists(studypath(ARGS.name)):
             os.remove(study_path)
-    os.makedirs(f"{ROOT}/hpo/studies/", exist_ok=True)
 
     if ARGS.resume:
         # read metadata
@@ -240,6 +239,7 @@ def main():
     if ARGS.dsname is None:
         raise ValueError("Dataset name is required")
     # save metadata
+    os.makedirs(studypath(ARGS.name), exist_ok=True)
     with open(studypath(ARGS.name, "metadata.json"), "w") as f:
         json.dump(vars(ARGS), f)
 
