@@ -351,7 +351,7 @@ def scale_meters_to_0_1(meters, subdivide):
     the 0-1 normalized scale used during training
     """
     patch_len_meters = get_avg_patch_size() / subdivide
-    return distance / patch_len_meters
+    return meters / patch_len_meters
 
 
 def group_by_composite_key(d, first_n, agg_f=None):
