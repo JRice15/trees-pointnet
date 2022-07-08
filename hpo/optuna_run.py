@@ -69,7 +69,7 @@ def make_objective_func(ARGS, gpu, interrupt_event):
         """
         # constants/meta params
         constant_params = {
-            "name": "hpo/study_{name}/{name}_trial{number}".format(name=ARGS.name, number=trial.number),
+            "name": "hpo/{name}/{name}_trial{number}".format(name=ARGS.name, number=trial.number),
             "dsname": ARGS.dsname,
         }
         if ARGS.test:
