@@ -1,9 +1,9 @@
-import logging
 import argparse
 import contextlib
 import datetime
 import glob
 import json
+import logging
 import os
 import time
 from pathlib import PurePath
@@ -22,8 +22,10 @@ from tensorflow.keras import backend as K
 from tqdm import tqdm
 
 from src import ARGS, DATA_DIR, MODEL_SAVE_FMT, REPO_ROOT
-from src.utils import (glob_modeldir, rasterize_pts_gaussian_blur, group_by_composite_key,
-                       plot_one_example, rasterize_and_plot, scaled_0_1, load_params_into_ARGS)
+from src.utils import (Bounds, glob_modeldir, group_by_composite_key,
+                       load_params_into_ARGS, plot_one_example,
+                       rasterize_and_plot, rasterize_pts_gaussian_blur,
+                       scaled_0_1)
 
 # max dist that two points can be considered matched, in meters
 MAX_MATCH_DIST = 6
@@ -227,6 +229,7 @@ Overlap methods
 
 def drop_overlaps(X, bounds_subdiv=None):
     """
+    drop "odd" patches, so that the remaining even ones do not overlap
     args:
         X: some dict, mapping patch subdiv id to pts
     returns:    
@@ -240,9 +243,10 @@ def drop_overlaps(X, bounds_subdiv=None):
         )
 
 
-def overlap_by_mid_cutoff(preds_subdiv, bounds_subdiv):
+def overlap_by_mid_buffer(preds_subdiv, bounds_subdiv):
     """
-    converts overlapping sub-patches back into full patches
+    overlaps sub-patches back into full patches by only keeping the middle 50% of 
+    each subpatch (except for subpatched on the edges)
     args:
         preds_subdiv: dict, mapping subdiv patch id to pts
         bounds_subdiv: dict, mappng subdiv patch id to bounds
@@ -279,7 +283,7 @@ def overlap_by_mid_cutoff(preds_subdiv, bounds_subdiv):
 
 OVERLAP_METHODS = {
     "drop": drop_overlaps,
-    "cut": overlap_by_mid_cutoff,
+    "buffer": overlap_by_mid_buffer,
 }
 
 

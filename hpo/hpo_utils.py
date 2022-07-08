@@ -38,6 +38,11 @@ class ignore_kbint():
         signal.signal(signal.SIGINT, self.old_handler)
 
 
+def studypath(study_name, filename=None):
+    if filename is None:
+        return f"{ROOT}/hpo/studies/{study_name}/"
+    return f"{ROOT}/hpo/studies/{study_name}/{filename}"
+
 def get_study(name, assume_exists):
     """
     get optuna study. If actual existence is different from assume_exists, error is raised
@@ -45,9 +50,9 @@ def get_study(name, assume_exists):
         name: str
         assume_exists: bool
     """
-    os.makedirs(f"{ROOT}/hpo/studies", exist_ok=True)
+    os.makedirs(studypath(name), exist_ok=True)
     storage = optuna.storages.RDBStorage(
-        url=f"sqlite:///{ROOT}/hpo/studies/{name}.db",
+        url="sqlite:///" + studypath(name, "study.db"),
         engine_kwargs={"connect_args": {"timeout": 15}}, # longer than usual timeout is ok, because 15s is insignificant compared to the time each trial takes
     )
     sampler = optuna.samplers.TPESampler(

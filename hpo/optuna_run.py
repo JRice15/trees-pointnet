@@ -44,9 +44,10 @@ import numpy as np
 import optuna
 import pandas as pd
 
-from hpo_utils import (ROOT, KilledTrialError, TrialFailedError, MyHpoError,
-                       TrialTimeoutError, get_study, ignore_kbint, glob_modeldir)
 import search_spaces
+from hpo_utils import (ROOT, KilledTrialError, MyHpoError, TrialFailedError,
+                       TrialTimeoutError, get_study, glob_modeldir,
+                       ignore_kbint, studypath)
 
 # frequency (seconds) with which workers check their subprocesses
 WORKER_POLL_FREQ = 10
@@ -215,16 +216,15 @@ def main():
 
     assert not (ARGS.overwrite and ARGS.resume), "Cannot both overwrite and resume!"
     if ARGS.overwrite:
-        dbpath = f"{ROOT}/hpo/studies/{ARGS.name}.db"
-        if os.path.exists(dbpath):
-            os.remove(dbpath)
+        if os.path.exists(studypath(ARGS.name)):
+            os.remove(study_path)
     os.makedirs(f"{ROOT}/hpo/studies/", exist_ok=True)
 
     if ARGS.resume:
         if (ARGS.search_space is not None) or (ARGS.dsname is not None):
             raise ValueError("Don't supply --search-space or --dsname when supplying --resume")
         # read metadata
-        with open(f"{ROOT}/hpo/studies/{ARGS.name}.json", "r") as f:
+        with open(studypath(ARGS.name, "metadata.json"), "r") as f:
             params = json.load(f)
         ARGS.search_space = params["search_space"]
         ARGS.dsname = params["dsname"]
@@ -235,7 +235,7 @@ def main():
     if ARGS.dsname is None:
         raise ValueError("Dataset name is required")
     # save metadata
-    with open(f"{ROOT}/hpo/studies/{ARGS.name}.json", "w") as f:
+    with open(studypath(ARGS.name, "metadata.json"), "w") as f:
         json.dump(vars(ARGS), f)
 
     # create the study, or verify existence

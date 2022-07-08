@@ -218,6 +218,8 @@ def build_postprocessing_objective(preds_overlapped, gt, bounds, min_dists, post
     def objective(trial):
         # params for which evaluating a change in them is expensive
         params = {
+            # Post-processing of raw predicted points to get final predicted tree locations
+            "postprocess_mode": trial.suggest_categorical("postprocess_mode", ["peaklocalmax", "dbscan", "kmeans", "raw"]),
             # how to combine overlapping tiles
             "overlap_method": trial.suggest_categorical("overlap_method", list(OVERLAP_METHODS.keys()))
         }
@@ -226,9 +228,7 @@ def build_postprocessing_objective(preds_overlapped, gt, bounds, min_dists, post
             "post_threshold": post_thresholds # threshold on post-processed peaks
         }
 
-        # Post-processing of raw predicted points to get final predicted tree locations
-        postprocess_mode = trial.suggest_categorical("postprocess_mode", ["peaklocalmax", "dbscan", "kmeans", "raw"])
-        params["postprocess_mode"] = postprocess_mode
+        postprocess_mode = params["postprocess_mode"]
         if postprocess_mode == "raw":
             pass
         elif postprocess_mode == "peaklocalmax":
@@ -269,14 +269,13 @@ def build_postprocessing_objective(preds_overlapped, gt, bounds, min_dists, post
 
 
 
-def generate_predictions(patchgen, model, model_dir):
+def generate_predictions(patchgen, model, outdir):
     """
     generate, denormalize, and overlap predictions
     returns:
         overlapped preds: dict mapping overlap_method to dict mapping p_id to pts
         X_subdiv_normed: raw input points
     """
-    outdir = model_dir.joinpath("results_"+patchgen.name)
     os.makedirs(outdir, exist_ok=True)
 
     print("\nGenerating predictions...")
@@ -308,7 +307,7 @@ def generate_predictions(patchgen, model, model_dir):
 
 
 
-def estimate_postproc_params(preds_overlapped_dict, gt_dict, bounds_dict):
+def estimate_postproc_params(preds_overlapped_dict, gt_dict, bounds_dict, outdir):
     """
     Estimate best postprocessing params on a set of predictions and their corresponding ground truth
     returns:
@@ -328,16 +327,32 @@ def estimate_postproc_params(preds_overlapped_dict, gt_dict, bounds_dict):
                 direction="maximize",
             )
     # ensure it tries all methods at reasonable params
-    study.enqueue_trial({"postprocess_mode": "raw"})
-    study.enqueue_trial({"postprocess_mode": "dbscan", "eps": 1.0, "min_samples": 1.0, "pre_threshold_exp": -3})
-    study.enqueue_trial({"postprocess_mode": "kmeans", "n_cluster": 100, "pre_threshold_exp": -3})
-    study.enqueue_trial({"postprocess_mode": "peaklocalmax", "gaussian_sigma": ARGS.gaussian_sigma, "pre_threshold_exp": -3})
+    study.enqueue_trial(
+        {"postprocess_mode": "raw", "overlap_method": "buffer"})
+    study.enqueue_trial(
+        {"postprocess_mode": "dbscan", "eps": 1.0, "min_samples": 1.0, "pre_threshold_exp": -3, "overlap_method": "buffer"})
+    study.enqueue_trial(
+        {"postprocess_mode": "kmeans", "n_cluster": 100, "pre_threshold_exp": -3, "overlap_method": "buffer"})
+    study.enqueue_trial(
+        {"postprocess_mode": "peaklocalmax", "gaussian_sigma": ARGS.gaussian_sigma, "pre_threshold_exp": -3, "overlap_method": "buffer"})
 
     objective = build_postprocessing_objective(
                     preds_overlapped_dict, gt_dict, bounds_dict, 
                     min_dists=ALL_MIN_DISTS, 
                     post_thresholds=ALL_POST_THRESHOLDS)
-    study.optimize(objective, n_trials=200, timeout=60*10)
+
+    study.optimize(objective, 
+        n_trials=200,  # max trials, timeout supersedes
+        timeout=60*10, # 10 minute timeout
+    )
+
+    study_dir = outdir.joinpath("postprocessing_param_estimation/")
+    os.makedirs(study_dir, exist_ok=True)
+
+    optuna.visualization.plot_optimization_history(study) \
+        .write_image(study_dir.joinpath("optimization_history.png").as_posix(), scale=2)
+    optuna.visualization.plot_param_importances(study) \
+        .write_image(study_dir.joinpath("param_importances.png").as_posix(), scale=2)
 
     best = study.best_trial
     params = best.params
@@ -346,15 +361,12 @@ def estimate_postproc_params(preds_overlapped_dict, gt_dict, bounds_dict):
     return params, gridparams
 
 
-def evaluate_postproc_params(patchgen, model_dir, preds_overlapped_dict, X_subdiv_normed, params, gridparams):
+def evaluate_postproc_params(patchgen, outdir, preds_overlapped_dict, X_subdiv_normed, params, gridparams):
     """
     Evaluate the final postprocessing params found by optuna
     args:
 
     """
-    outdir = model_dir.joinpath("results_"+patchgen.name)
-    os.makedirs(outdir, exist_ok=True)
-
     timer = MyTimer()
 
     # gridparams expects a list for each value
@@ -401,13 +413,12 @@ def evaluate_postproc_params(patchgen, model_dir, preds_overlapped_dict, X_subdi
 
 
 
-def evaluate_loss_metrics(patchgen, model, model_dir):
+def evaluate_loss_metrics(patchgen, model, outdir):
     """
     Evaluate model's builtin metrics on a dataset
     args:
         patchgen
     """
-    outdir = model_dir.joinpath("results_"+patchgen.name)
     os.makedirs(outdir, exist_ok=True)
 
     print("Evaluating model's metrics...")
@@ -456,24 +467,26 @@ def main():
 
     # validation set evaluation
     val_gen.summary()
+    val_dir = MODEL_DIR.joinpath("results_val")
     if not ARGS.nolosses:
-        evaluate_loss_metrics(val_gen, model, MODEL_DIR)
-    preds_val, X_val = generate_predictions(val_gen, model, MODEL_DIR)
+        evaluate_loss_metrics(val_gen, model, val_dir)
+    preds_val, X_val = generate_predictions(val_gen, model, val_dir)
 
     # estimate best params on validation set
     params, gridparams = estimate_postproc_params(preds_val, val_gen.gt_full, val_gen.bounds_full)
     # evaluate
-    evaluate_postproc_params(val_gen, MODEL_DIR, preds_val, X_val, 
+    evaluate_postproc_params(val_gen, val_dir, preds_val, X_val, 
             params=params, gridparams=gridparams)
 
     # test set evaluation
     test_gen.summary()
+    test_dir = MODEL_DIR.joinpath("results_val")
     if not ARGS.nolosses:
-        evaluate_loss_metrics(test_gen, model, MODEL_DIR)
-    preds_test, X_test = generate_predictions(test_gen, model, MODEL_DIR)
+        evaluate_loss_metrics(test_gen, model, test_dir)
+    preds_test, X_test = generate_predictions(test_gen, model, test_dir)
 
     # use val-set estimated params on test set
-    evaluate_postproc_params(test_gen, MODEL_DIR, preds_test, X_test, 
+    evaluate_postproc_params(test_gen, test_dir, preds_test, X_test, 
             params=params, gridparams=gridparams)
 
 

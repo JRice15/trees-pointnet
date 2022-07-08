@@ -16,8 +16,7 @@ import numpy as np
 import pandas as pd
 import optuna
 
-from hpo_utils import get_study
-
+from hpo_utils import get_study, studypath
 
 
 
@@ -47,9 +46,12 @@ def main():
     print("\n10 most recent params:")
     print(pdf.tail(10).T)
 
-    optuna.visualization.plot_optimization_history(study).show()
-    optuna.visualization.plot_param_importances(study).show()
-    optuna.visualization.plot_slice(study).show()
+    optuna.visualization.plot_optimization_history(study) \
+        .write_image(studypath(ARGS.name, "optimization_history.png"), scale=2)
+    optuna.visualization.plot_param_importances(study) \
+        .write_image(studypath(ARGS.name, "param_importances.png"), scale=2)
+    optuna.visualization.plot_slice(study) \
+        .write_image(studypath(ARGS.name, "slice_plot.png"), scale=2)
 
 
 if __name__ == "__main__":
