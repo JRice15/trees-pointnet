@@ -52,12 +52,10 @@ from hpo_utils import (ROOT, KilledTrialError, MyHpoError, TrialFailedError,
 # frequency (seconds) with which workers check their subprocesses
 WORKER_POLL_FREQ = 10
 
-OVERLAP_MODE = "drop"
-
 
 valid_optimizers = ["adam", "adadelta", "nadam", "adamax"]
 valid_output_modes = ["seg", "dense"]
-valid_losses = ["mmd", "gridmse"]
+valid_losses = ["mmd", "gridmse", "p2p"]
 
 
 def make_objective_func(ARGS, gpu, interrupt_event):
@@ -73,12 +71,13 @@ def make_objective_func(ARGS, gpu, interrupt_event):
         constant_params = {
             "name": "hpo/study_{name}/{name}_trial{number}".format(name=ARGS.name, number=trial.number),
             "dsname": ARGS.dsname,
-            "eval": ["val", "test"],
-            "overlap-mode": OVERLAP_MODE,
         }
         if ARGS.test:
             constant_params["epochs"] = 1
-        constant_flags = ["noplot"]
+        constant_flags = [
+            "noplot",
+            "eval",
+        ]
 
         # search space params
         params, flags = space.get_params(ARGS, trial)
@@ -128,7 +127,7 @@ def make_objective_func(ARGS, gpu, interrupt_event):
         with open(results_file, "r") as f:
             results = json.load(f)
         
-        return results[OVERLAP_MODE]["best"]["fscore"]
+        return results["metrics"]["fscore"]
 
     return objective
 
@@ -205,7 +204,7 @@ def main():
     parser.add_argument("--dsname",help="(if not resuming:) name of dataset to use ")
     parser.add_argument("--earlystop",type=int,default=50,help="number of trials with no improvement when earlystopping occurs")
     parser.add_argument("--mintrials",type=int,default=200,help="number of trials for which earlystopping is not allowed to occur")
-    parser.add_argument("--timeout-mins",type=float,default=(60*4),help="timeout for individual trials, in minutes (default 4 hours)")
+    parser.add_argument("--timeout-mins",type=float,default=(60*5),help="timeout for individual trials, in minutes (default 5 hours)")
 
     # misc
     parser.add_argument("--test",action="store_true",help="just run one-epoch trials")
@@ -221,11 +220,14 @@ def main():
     os.makedirs(f"{ROOT}/hpo/studies/", exist_ok=True)
 
     if ARGS.resume:
-        if (ARGS.search_space is not None) or (ARGS.dsname is not None):
-            raise ValueError("Don't supply --search-space or --dsname when supplying --resume")
         # read metadata
         with open(studypath(ARGS.name, "metadata.json"), "r") as f:
             params = json.load(f)
+        # allow supplying of dsname/search-space as long as they match meta
+        if ARGS.search_space is not None:
+            assert ARGS.search_space == params["search_space"], "search_space does not match saved metadata value when using `--resume` flag"
+        if ARGS.dsname is not None:
+            assert ARGS.dsname == params["dsname"], "dsname does not match saved metadata value when using `--resume` flag"
         ARGS.search_space = params["search_space"]
         ARGS.dsname = params["dsname"]
 

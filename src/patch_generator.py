@@ -16,9 +16,9 @@ from tensorflow.keras import backend as K
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src import ARGS, DATA_DIR, LIDAR_CHANNELS, REPO_ROOT
-from src.utils import (Bounds, MyTimer, get_all_regions, get_naipfile_path,
-                       group_by_composite_key, load_naip, rasterize_and_plot,
-                       rotate_pts, scaled_0_1, load_gt_trees)
+from src.utils import (Bounds, MyTimer, get_all_regions, get_naip_bounds,
+                       get_naipfile_path, group_by_composite_key,
+                       load_gt_trees, load_naip, rotate_pts, scaled_0_1)
 
 VAL_SPLIT = 0.10
 TEST_SPLIT = 0.10
@@ -142,9 +142,7 @@ class LidarPatchGen(keras.utils.Sequence):
         self.bounds_full = {}
         lidar_full = {}
         for (region,patch_num) in self.orig_patch_ids:
-            naipfile = get_naipfile_path(region, patch_num)
-            with rasterio.open(naipfile) as raster:
-                self.bounds_full[(region,patch_num)] = Bounds.from_minmax(raster.bounds)
+            self.bounds_full[(region,patch_num)] = get_naip_bounds(region, patch_num)
             lidarfile = LIDAR_DIR.joinpath(region, "lidar_patch_{}.npy".format(patch_num)).as_posix()
             pts = np.load(lidarfile)
             # clip spurious Z values

@@ -31,10 +31,9 @@ from src.models import pointnet
 from src.patch_generator import get_datasets
 from src.tf_utils import load_saved_model
 from src.utils import (MyTimer, glob_modeldir, group_by_composite_key,
-                       load_params_into_ARGS, plot_one_example,
-                       rasterize_and_plot, rasterize_pts_gaussian_blur,
+                       load_params_into_ARGS,
                        scaled_0_1, LabeledBox)
-
+from src.viz_utils import rasterize_and_plot, rasterize_pts_gaussian_blur, plot_one_example
 
 
 def clustering_postprocessing(pred_dict, algo_initializer, cluster_aggs):
@@ -118,7 +117,8 @@ def filter_by_conf_threshold(preds_dict, threshold):
     return {p_id: pts for p_id, pts in preds_dict.items() if pts.size}
 
 
-def postprocess_and_pointmatch(preds_overlapped, gt, bounds, params, gridsearch_params):
+def postprocess_and_pointmatch(preds_overlapped, gt, bounds, params, gridsearch_params, 
+        return_inds=False):
     """
     args:
         preds_overlapped: dict mapping overlap method to dict mapping patch id to raw pred pts
@@ -126,11 +126,14 @@ def postprocess_and_pointmatch(preds_overlapped, gt, bounds, params, gridsearch_
         bounds: dict mapping patch id to bounds
         params: postprocessing method params
         gridsearch_params: secondary params which are gridsearched over (max vs summing, conf thresholds). 
-            retuired keys: post_threshold
+            required keys: post_threshold
+        return_inds: return tp/fp/fn indexes in output dict
     returns:
-        best pointmatch metrics
-        best gridsearch params
-        best pred_dict
+        dict with keys:
+            metrics: best pointmatch metrics
+            gridparams: best gridsearch params
+            pts: final pred_dict
+            (if return_inds) inds: tp/fp/fn indexes
     """
     timer = MyTimer()
 
@@ -181,12 +184,18 @@ def postprocess_and_pointmatch(preds_overlapped, gt, bounds, params, gridsearch_
     best_pointmatch_results = {"fscore": -1}
     best_gridparams = None
     best_pts = None
+    best_inds = None
     # post-processing methods can return multiple options internally, if they do a gridsearch inside the method somewhere
     for (pts_dict, these_gridparams) in processed_preds:
         # gridsearch through thresholds on post-processed pts
         for post_threshold in gridsearch_params["post_threshold"]:
+            # post-thresholding
             thresholded_pts = filter_by_conf_threshold(pts_dict, post_threshold)
-            pointmatch_results = pointmatch(gt, thresholded_pts)
+            # run pointmatching
+            pointmatch_results = pointmatch(gt, thresholded_pts, return_inds=return_inds)
+            if return_inds:
+                pointmatch_results, pointmatch_inds = pointmatch_results
+            # save if we found new best fscore
             if pointmatch_results["fscore"] > best_pointmatch_results["fscore"]:
                 best_pointmatch_results = pointmatch_results
                 best_gridparams = {
@@ -194,10 +203,19 @@ def postprocess_and_pointmatch(preds_overlapped, gt, bounds, params, gridsearch_
                     **these_gridparams
                 }
                 best_pts = thresholded_pts
+                if return_inds:
+                    best_inds = pointmatch_inds
 
     timer.measure(f"pointmatching x{len(processed_preds) * len(gridsearch_params['post_threshold'])}")
     
-    return best_pointmatch_results, best_gridparams, best_pts
+    output = {
+        "metrics": best_pointmatch_results,
+        "gridparams": best_gridparams,
+        "pts": best_pts
+    }
+    if return_inds:
+        output["inds"] = best_inds
+    return output
     
 
 # log distribution
@@ -255,14 +273,14 @@ def build_postprocessing_objective(preds_overlapped, gt, bounds, min_dists, post
 
         print("Trial", trial.number)
 
-        results, best_gridparams, _ = postprocess_and_pointmatch(preds_overlapped, gt, bounds, params, gridparams)
+        results = postprocess_and_pointmatch(preds_overlapped, gt, bounds, params, gridparams, return_inds=False)
 
-        for key,value in best_gridparams.items():
+        for key,value in results["gridparams"].items():
             trial.set_user_attr(key, value)
 
-        print(best_gridparams)
+        print(results["gridparams"])
 
-        return results["fscore"]
+        return results["metrics"]["fscore"]
 
     return objective
 
@@ -377,17 +395,18 @@ def evaluate_postproc_params(patchgen, outdir, preds_overlapped_dict, X_subdiv_n
     # gridparams expects a list for each value
     formatted_gridparams = {k:[v] for k,v in gridparams.items()}
     # run postprocessing
-    results, _, best_preds = postprocess_and_pointmatch(preds_overlapped_dict, 
+    results = postprocess_and_pointmatch(preds_overlapped_dict, 
                                 patchgen.gt_full, patchgen.bounds_full, 
-                                params=params, gridsearch_params=formatted_gridparams)
+                                params=params, gridsearch_params=formatted_gridparams,
+                                return_inds=True)
     timer.measure("final post-processing")
 
     # save stats
     results_file = outdir.joinpath("results_pointmatch.json").as_posix()
     all_stats = {
-        "metrics": results,
+        "metrics": results["metrics"],
         "params": params,
-        "gridparams": gridparams,
+        "gridparams": results["gridparams"],
     }
     with open(results_file, "w") as f:
         json.dump(all_stats, f, indent=2)
@@ -395,7 +414,7 @@ def evaluate_postproc_params(patchgen, outdir, preds_overlapped_dict, X_subdiv_n
     # save predictions
     if ARGS.save_preds:
         preds_string_keys = {
-            "_".join(map(str, p_id)): pts for p_id, pts in best_preds.items()
+            "_".join(map(str, p_id)): pts for p_id, pts in results["pts"].items()
         }
         outfile = outdir.joinpath("raw_preds.npz")
         np.savez_compressed(outfile.as_posix(), **preds_string_keys)
@@ -411,7 +430,8 @@ def evaluate_postproc_params(patchgen, outdir, preds_overlapped_dict, X_subdiv_n
             Y_full=patchgen.gt_full, 
             bounds_full=patchgen.bounds_full,
             preds_full=raw_preds, 
-            preds_full_peaks=best_preds)
+            preds_full_peaks=results["pts"],
+            pointmatch_inds=results["inds"],)
         timer.measure()
 
     return results

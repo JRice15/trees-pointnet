@@ -19,13 +19,14 @@ from tensorflow.keras import Model
 from tensorflow.keras import backend as K
 from tensorflow.keras import callbacks, layers, optimizers
 
+import evaluate
 from src import ARGS, DATA_DIR, MODEL_SAVE_FMT, REPO_ROOT
 from src.losses import get_loss
 from src.models import pointnet
 from src.patch_generator import get_datasets
 from src.tf_utils import MyModelCheckpoint, load_saved_model, output_model
-from src.utils import get_all_regions, get_default_dsname
-import evaluate
+from src.utils import Bounds, get_all_regions, get_default_dsname
+from src.viz_utils import plot_one_example
 
 """
 parse args
@@ -81,8 +82,8 @@ modelgrp.add_argument("--npoints",type=int,default=500,help="number of points to
 modelgrp.add_argument("--out-npoints",type=int,default=256,help="(dense output mode): number of output points")
 modelgrp.add_argument("--size-multiplier",type=float,default=1.0,help="number to multiply all default conv output filters by")
 modelgrp.add_argument("--dropout",dest="dropout_rate",type=float,default=0.0,help="dropout rate")
-modelgrp.add_argument("--no-tnet1",dest="use_tnet_1",action="store_false",help="whether to use input transform TNet")
-modelgrp.add_argument("--no-tnet2",dest="use_tnet_2",action="store_false",help="whether to use feature transform TNet")
+modelgrp.add_argument("--use-tnet1",action="store_true",help="whether to use input transform TNet")
+modelgrp.add_argument("--use-tnet2",action="store_true",help="whether to use feature transform TNet")
 modelgrp.add_argument("--conf-act",default="relu",help="activation to use on output confidences")
 
 modelgrp.add_argument("--pnet2",dest="use_pnet2",action="store_true",help="use pointnet++ (aka pointnet2)")
@@ -94,7 +95,7 @@ lossgrp.add_argument("--gaussian-sigma", "--sigma",type=float,default=3,
         help="mmd/gridmse: in meters, std dev of gaussian smoothing applied in the loss")
 lossgrp.add_argument("--mmd-kernel",default="gaussian",
         help="mmd: type of kernel")
-lossgrp.add_argument("--grid-agg",choices=["max","sum"],default="sum",
+lossgrp.add_argument("--gridmse-agg",choices=["max","sum"],default="sum",
         help="gridmse: how to aggregate predicted points during rasterization")
 
 lossgrp.add_argument("--p2p-conf-weight",type=float,default=1.0, #TODO p2p defaults
@@ -164,11 +165,12 @@ if not ARGS.noplot:
     print("X min:", tf.reduce_min(X, axis=[0,1]))
     print("Y max:", tf.reduce_max(Y, axis=[0,1]))
     print("Y min:", tf.reduce_min(Y, axis=[0,1]))
-    for i in range(len(X)):
+    # plot 8 examples
+    for i in range(min(len(X), 8)):
         naip = train_gen.get_naip(ids[i])
         x = X[i].numpy()
         y = Y[i].numpy()
-        evaluate.plot_one_example(
+        plot_one_example(
             train_viz_dir.joinpath("normalized"),
             ids[i],
             X=x, Y=y, naip=naip, 
@@ -176,11 +178,11 @@ if not ARGS.noplot:
 
         x = train_gen.denormalize_pts(x, ids[i])
         y[:,:2] = train_gen.denormalize_pts(y[:,:2], ids[i])
-        evaluate.plot_one_example(
+        plot_one_example(
             train_viz_dir.joinpath("original_scale"),
             ids[i],
             X=x, Y=y, naip=naip,
-            bounds=Bounds.zero_to_one())
+            bounds=train_gen.get_patch_bounds(ids[i]))
             
         if ARGS.test:
             break

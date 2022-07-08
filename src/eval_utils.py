@@ -23,9 +23,9 @@ from tqdm import tqdm
 
 from src import ARGS, DATA_DIR, MODEL_SAVE_FMT, REPO_ROOT
 from src.utils import (Bounds, glob_modeldir, group_by_composite_key,
-                       load_params_into_ARGS, plot_one_example,
-                       rasterize_and_plot, rasterize_pts_gaussian_blur,
-                       scaled_0_1)
+                       load_params_into_ARGS, scaled_0_1)
+from src.viz_utils import (plot_one_example, rasterize_and_plot,
+                           rasterize_pts_gaussian_blur)
 
 # max dist that two points can be considered matched, in meters
 MAX_MATCH_DIST = 6
@@ -37,14 +37,16 @@ GRID_RESOLUTION = 128
 Pointmatching + utils
 """
 
-def pointmatch(all_gts, all_preds, prune_unpromising=True):
+def pointmatch(all_gts, all_preds, prune_unpromising=True, return_inds=False):
     """
     args:
         all_gts: dict, mapping patchid to array of shape (ntrees,2) where channels are (x,y)
         all_preds: dict, mappin patchid to array of shape (npatches,npoints,3) where channels are (x,y,confidence)
         prune_unpromising: whether to stop if 1 or fewer true positives are recorded after 100 patches
+        return_inds: whether to also returns indexes for tp, fp, and fn
     returns:
-        dict: precision, recall, fscore, rmse, pruned (bool)
+        dict with keys: precision, recall, fscore, rmse (-1 if no tp), pruned (bool)
+        (if return_inds): dict mapping patch_id to dict containing tp, fp, and fn inds
     """
     COST_MATRIX_MAXVAL = 1e10
 
@@ -53,6 +55,7 @@ def pointmatch(all_gts, all_preds, prune_unpromising=True):
     all_fn = 0
     all_tp_dists = []
     pruned = False
+    all_inds = {}
 
     for i,patch_id in enumerate(all_gts.keys()):
         # pruning early if we've gotten only 0 or 1 true positives
@@ -106,6 +109,13 @@ def pointmatch(all_gts, all_preds, prune_unpromising=True):
             tp_dists = np.min(dists[:,tp_inds],axis=0)
             all_tp_dists.append(tp_dists)
 
+        if return_inds:
+            all_inds[patch_id] = {
+                "tp": tp_inds,
+                "fp": fp_inds,
+                "fn": fn_inds,
+            }
+
     if all_tp + all_fp > 0:
         precision = all_tp/(all_tp+all_fp)
     else:
@@ -124,7 +134,7 @@ def pointmatch(all_gts, all_preds, prune_unpromising=True):
     else:
         rmse = -1
     
-    # calling float/int on a lot of these because json doesn't like numpy floats/ints
+    # calling float/int on a lot of these because json doesn't like numpy dtypes
     results = {
         'pruned': pruned,
         'tp': int(all_tp),
@@ -135,6 +145,8 @@ def pointmatch(all_gts, all_preds, prune_unpromising=True):
         'fscore': float(fscore),
         'rmse': float(rmse),
     }
+    if return_inds:
+        return results, all_inds
     return results
 
 
@@ -287,12 +299,9 @@ OVERLAP_METHODS = {
 }
 
 
-"""
-Visualization
-"""
-
 def viz_predictions(patchgen, outdir, *, X_subdiv, Y_full, Y_subdiv, 
-        preds_full, preds_full_peaks, bounds_full, preds_subdiv=None):
+        preds_full, preds_full_peaks, bounds_full, # TODO pointmatch_inds,
+        preds_subdiv=None):
     """
     data visualizations
     args:
@@ -351,4 +360,5 @@ def viz_predictions(patchgen, outdir, *, X_subdiv, Y_full, Y_subdiv,
             bounds=bounds_full[p_id]
         )
     
+
 

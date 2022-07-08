@@ -28,8 +28,6 @@ class pnet1_v1(SearchSpace):
         # model arch
         "npoints-exp": 3,
         "sm-exp": 0,
-        "no-tnet1": True,
-        "no-tnet2": True,
         "seg-dropout": 0.2,
         # loss
         "gaussian-sigma": 2.5,
@@ -67,13 +65,7 @@ class pnet1_v1(SearchSpace):
         elif params["output-mode"] == "seg":
             params["dropout"] = trial.suggest_float("seg-dropout", 0.0, 0.7, step=0.05)
 
-        if trial.suggest_categorical("no-tnet1", [True, False]):
-            flags.append("no-tnet1")
-
-        if trial.suggest_categorical("no-tnet2", [True, False]):
-            flags.append("no-tnet2")
-        else:
-            params["ortho-weight"] = 10 ** trial.suggest_int("ortho-exp", -5, 3) # 1e-5 to 1000
+        # not using TNets
 
         return params, flags
 

@@ -60,7 +60,7 @@ def tf_rasterize_pts_gaussian_blur(weighted_pts, gaussian_sigma, resolution=50):
     x, y = tf.meshgrid(x, y)
     gridcoords = tf.cast(tf.stack([x,y], axis=-1), dtype=weighted_pts.dtype)
     # expand out to batch shape
-    mults = [batchsize] + [1 for i in gridcoords.shape]
+    mults = [batchsize] + [1 for _ in gridcoords.shape]
     gridcoords = tf.tile(gridcoords[None,...], mults)
     gridcoords = tf.expand_dims(gridcoords, axis=-2)
 
@@ -70,9 +70,9 @@ def tf_rasterize_pts_gaussian_blur(weighted_pts, gaussian_sigma, resolution=50):
     weights = weighted_pts[...,-1]
     gridvals = tf_height_1_gaussian(gridcoords, pts, sigma=gaussian_sigma)
     gridvals = gridvals * weights
-    if ARGS.grid_agg == "sum":
+    if ARGS.gridmse_agg == "sum":
         gridvals = tf.reduce_sum(gridvals, axis=-1)
-    elif ARGS.grid_agg == "max":
+    elif ARGS.gridmse_agg == "max":
         gridvals = tf.reduce_max(gridvals, axis=-1)
     else:
         raise ValueError("Unknown rasterize_pts mode")
