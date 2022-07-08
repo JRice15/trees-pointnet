@@ -22,8 +22,7 @@ from tensorflow.keras import backend as K
 from tqdm import tqdm
 
 from src import ARGS, DATA_DIR, MODEL_SAVE_FMT, REPO_ROOT
-from src.utils import (Bounds, glob_modeldir, group_by_composite_key,
-                       load_params_into_ARGS, scaled_0_1)
+from src.utils import (Bounds, glob_modeldir, group_by_composite_key)
 from src.viz_utils import (plot_one_example, rasterize_and_plot,
                            rasterize_pts_gaussian_blur)
 

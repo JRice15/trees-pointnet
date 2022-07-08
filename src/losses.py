@@ -11,7 +11,7 @@ from scipy.optimize import linear_sum_assignment
 from sklearn.metrics import pairwise_distances
 
 from src import ARGS
-from src.utils import scaled_0_1
+from src.utils import scale_meters_to_0_1
 
 
 def get_loss():
@@ -84,9 +84,9 @@ def grid_mse():
     """
     assert ARGS.gaussian_sigma is not None
 
-    resolution = 50 # TODO grid resolution
+    resolution = 128 // ARGS.subdivide
 
-    scaled_sigma = scaled_0_1(ARGS.gaussian_sigma)
+    scaled_sigma = scale_meters_to_0_1(ARGS.gaussian_sigma, ARGS.subdivide)
 
     @tf.function
     def loss(gt, pred):
@@ -108,7 +108,7 @@ def max_mean_discrepancy():
     """
     assert ARGS.gaussian_sigma is not None and ARGS.mmd_kernel is not None
 
-    scaled_sigma = scaled_0_1(ARGS.gaussian_sigma)
+    scaled_sigma = scale_meters_to_0_1(ARGS.gaussian_sigma, ARGS.subdivide)
     exp_constant = 4 * scaled_sigma**2
     @tf.function
     def gaussian_kernel_func(diffs):

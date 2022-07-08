@@ -345,12 +345,12 @@ def get_avg_patch_size():
     return stats["avg_side_len_meters"]
 
 
-def scaled_0_1(distance):
+def scale_meters_to_0_1(meters, subdivide):
     """
     return the distance in meters scaled to approximate the
     the 0-1 normalized scale used during training
     """
-    patch_len_meters = get_avg_patch_size() / ARGS.subdivide
+    patch_len_meters = get_avg_patch_size() / subdivide
     return distance / patch_len_meters
 
 

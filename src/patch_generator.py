@@ -17,8 +17,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src import ARGS, DATA_DIR, LIDAR_CHANNELS, REPO_ROOT
 from src.utils import (Bounds, MyTimer, get_all_regions, get_naip_bounds,
-                       get_naipfile_path, group_by_composite_key,
-                       load_gt_trees, load_naip, rotate_pts, scaled_0_1)
+                       get_naipfile_path, load_gt_trees, load_naip, rotate_pts,
+                       scale_meters_to_0_1)
 
 VAL_SPLIT = 0.10
 TEST_SPLIT = 0.10
@@ -282,7 +282,7 @@ class LidarPatchGen(keras.utils.Sequence):
             # random gaussian noise
             if ARGS.noise_sigma is not None:
                 # convert meters to 0-1 scale
-                sigma = scaled_0_1(ARGS.noise_sigma)
+                sigma = scale_meters_to_0_1(ARGS.noise_sigma, subdivide=self.n_subdivide)
                 X_batch += self.random.normal(
                                         loc=0, 
                                         scale=sigma,

@@ -17,7 +17,6 @@ import rasterio
 # import numba
 
 from src import ARGS, DATA_DIR, REPO_ROOT, MODEL_SAVE_FMT
-from src.utils import scaled_0_1
 
 
 # plot marker styles

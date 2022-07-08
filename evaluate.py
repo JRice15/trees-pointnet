@@ -30,9 +30,7 @@ from src.losses import get_loss
 from src.models import pointnet
 from src.patch_generator import get_datasets
 from src.tf_utils import load_saved_model
-from src.utils import (MyTimer, glob_modeldir, group_by_composite_key,
-                       load_params_into_ARGS,
-                       scaled_0_1, LabeledBox)
+from src.utils import MyTimer, glob_modeldir, load_params_into_ARGS
 from src.viz_utils import rasterize_and_plot, rasterize_pts_gaussian_blur, plot_one_example
 
 
