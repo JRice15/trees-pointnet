@@ -23,10 +23,8 @@ def get_loss():
     where scalar is an error metric (can be negative)
     """
     if ARGS.loss == "mmd":
-        assert ARGS.output_mode in ("seg", "dense")
         return max_mean_discrepancy()
     if ARGS.loss == "gridmse":
-        assert ARGS.output_mode in ("seg", "dense")
         return grid_mse()
     if ARGS.loss == "p2p":
         return point_to_point()

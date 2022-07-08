@@ -54,7 +54,7 @@ WORKER_POLL_FREQ = 10
 
 
 valid_optimizers = ["adam", "adadelta", "nadam", "adamax"]
-valid_output_modes = ["seg", "dense"]
+valid_output_flows = ["seg", "dense"]
 valid_losses = ["mmd", "gridmse", "p2p"]
 
 
@@ -75,8 +75,11 @@ def make_objective_func(ARGS, gpu, interrupt_event):
         if ARGS.test:
             constant_params["epochs"] = 1
         constant_flags = [
-            "noplot",
+            # run evaluation
             "eval",
+            # don't compute losses or plots
+            "noplot",
+            "nolosses",
         ]
 
         # search space params

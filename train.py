@@ -39,16 +39,16 @@ optimizer_options = {
     "adamax": optimizers.Adamax,
 }
 
-valid_output_modes = ["seg", "dense", "count"]
+valid_output_flows = ["seg", "dense", "count"]
 valid_losses = ["mmd", "gridmse", "p2p"]
 
 parser = argparse.ArgumentParser(add_help=False)
 # main required args
 requiredgrp = parser.add_argument_group("required")
 requiredgrp.add_argument("--name",required=True,help="name to save this model under or load")
-requiredgrp.add_argument("--output-mode",required=True,help="which output flow to use",
-    choices=valid_output_modes)
-requiredgrp.add_argument("--loss",required=True,help="loss mode to use (must be compatible with output mode)",
+requiredgrp.add_argument("--output-flow",required=True,help="which output flow to use",
+    choices=valid_output_flows)
+requiredgrp.add_argument("--loss",required=True,help="loss function to use",
     choices=valid_losses)
 
 # main optional
@@ -64,7 +64,7 @@ datagrp.add_argument("--regions",default="ALL",nargs="+",help="list of region na
 datagrp.add_argument("--dsname",help="name of generated dataset to use (required if multiple exist)")
 datagrp.add_argument("--noise-sigma",type=float,default=None,help="add gaussian noise to input points")
 datagrp.add_argument("--handle-small",choices=["drop","fill","repeat"],default="drop",
-    help="how to handle patches with fewer than npoints: drop them, fill with (-1,-1,-1), or double up valid points until it meets the threshold")
+    help="how to handle patches with fewer than npoints: drop them, fill with (-1000), or double up valid points until it meets the threshold")
 
 # training hyperparameters
 hypergrp = parser.add_argument_group("training hyperparameters")
@@ -79,7 +79,7 @@ hypergrp.add_argument("--reducelr-patience",type=int,default=3,help="number of e
 modelgrp = parser.add_argument_group("model parameters")
 modelgrp.add_argument("--npoints",type=int,default=500,help="number of points to run per patch. In ragged or non-ragged, "
         "patches with fewer points will be skipped. Also in non-ragged, patches with more points with be subsampled to npoints")
-modelgrp.add_argument("--out-npoints",type=int,default=256,help="(dense output mode): number of output points")
+modelgrp.add_argument("--out-npoints",type=int,default=256,help="(dense output flow): number of output points")
 modelgrp.add_argument("--size-multiplier",type=float,default=1.0,help="number to multiply all default conv output filters by")
 modelgrp.add_argument("--dropout",dest="dropout_rate",type=float,default=0.0,help="dropout rate")
 modelgrp.add_argument("--use-tnet1",action="store_true",help="whether to use input transform TNet")

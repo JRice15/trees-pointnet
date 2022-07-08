@@ -218,10 +218,6 @@ def postprocess_and_pointmatch(preds_overlapped, gt, bounds, params, gridsearch_
     return output
     
 
-# log distribution
-ALL_POST_THRESHOLDS = list(10 ** np.arange(-5, 0.2, step=0.2))
-# in units of 0.6-meter NAIP pixels
-ALL_MIN_DISTS = [1, 2, 3, 4, 5]
 
 def build_postprocessing_objective(preds_overlapped, gt, bounds, min_dists, post_thresholds):
     """
@@ -331,6 +327,12 @@ def estimate_postproc_params(preds_overlapped_dict, gt_dict, bounds_dict, outdir
         params
         gridparams
     """
+    # some values to gridsearch over
+    # log distribution
+    ALL_POST_THRESHOLDS = list(10 ** np.arange(-4, 0.1, step=0.1))
+    # in units of 0.6-meter NAIP pixels
+    ALL_MIN_DISTS = [1, 2, 3, 4, 5]
+
     sampler = optuna.samplers.TPESampler(
                 multivariate=True,
                 group=True,
@@ -452,7 +454,7 @@ def evaluate_loss_metrics(patchgen, model, outdir):
     if not isinstance(metric_vals, list):
         results = {"loss": metric_vals}
     else:
-        results = dict(zip(model.metric_names, metric_vals))
+        results = dict(zip(model.metrics_names, metric_vals))
 
     with open(outdir.joinpath("results_model_metrics.json"), "w") as f:
         json.dump(results, f, indent=2)

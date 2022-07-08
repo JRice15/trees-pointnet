@@ -317,21 +317,29 @@ def pointnet(inpt_shape, size_multiplier, output_channels):
         local_features, global_feature, losses = pointnet_1(x, size_multiplier)
 
     # output flow
-    if ARGS.output_mode == "seg":
+    if ARGS.output_flow == "seg":
         output = seg_output_flow(local_features, global_feature, size_multiplier, output_channels)
-    elif ARGS.output_mode == "dense":
+    elif ARGS.output_flow == "dense":
         output = dense_output_flow_2(global_feature, ARGS.out_npoints, output_channels)
     else:
         raise NotImplementedError("unknown output flow")
 
     # post processing
-    assert output_channels == 3
+    assert output.shape[-1] == 3
     pts = output[...,:2]
     confs = output[...,2:]
+    
     # limit location coords to 0-1
     pts = layers.ReLU(max_value=1.0, name="loc-lim")(pts)
-    # limit confidence to >= 0
-    confs = layers.Activation(ARGS.conf_act, name="conf-lim")(confs)
+
+    # limit confidence between 0 and 1
+    if ARGS.conf_act == "relu":
+        confs = layers.ReLU(max_value=1.0, name="conf-lim")(confs)
+    elif ARGS.conf_act == "sigmoid":
+        confs = layers.Activation("sigmoid", name="conf-lim")(confs)
+    else:
+        raise ValueError(f"Unknown conf act '{ARGS.conf_act}'")
+
     output = layers.Concatenate(axis=-1, name="final-concat")([pts, confs])
 
     model = Model(inpt, output)
