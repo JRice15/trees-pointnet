@@ -1,3 +1,5 @@
+print("\nTraining")
+
 import argparse
 import contextlib
 import datetime

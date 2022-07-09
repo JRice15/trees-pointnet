@@ -465,8 +465,6 @@ def evaluate_loss_metrics(patchgen, model, outdir):
 
 
 
-
-
 def main():
     MODEL_DIR = glob_modeldir(ARGS.name)
     load_params_into_ARGS(MODEL_DIR, ARGS, false_params=["test", "noplot"])

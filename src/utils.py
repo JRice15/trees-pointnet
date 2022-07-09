@@ -166,29 +166,31 @@ def glob_modeldir(modelname):
     """
     allmodels_dir = REPO_ROOT.joinpath("models/")
 
-    # first try exact match
-    matching_models = glob.glob(os.path.join(allmodels_dir.as_posix(), modelname+"-??????-??????", "model"+MODEL_SAVE_FMT))
+    # try match with fully qualified (timestamped) name
+    exact_path = os.path.join(allmodels_dir.as_posix(), modelname)
+    if os.path.exists(exact_path):
+        return PurePath(exact_path)
+
+    # first try exact name match
+    matching_models = glob.glob(os.path.join(allmodels_dir.as_posix(), modelname+"-??????-??????"))
     if len(matching_models) == 0:
         print("No exact model name matches")
         # then try autofill match
-        matching_models = glob.glob(os.path.join(allmodels_dir.as_posix(), modelname+"*", "model"+MODEL_SAVE_FMT))
+        matching_models = glob.glob(os.path.join(allmodels_dir.as_posix(), modelname+"*"))
     
     if len(matching_models) > 1:
-        print("Multiple models match 'name' argument:")
-        print(" ", matching_models)
+        print("Multiple models match 'name' argument.")
         print("Defaulting to the most recent:")
         # all the names have date/time string, so sorting gives order by time
         matching_models.sort()
-        model_path = PurePath(matching_models[-1])
+        model_dir = PurePath(matching_models[-1])
     elif len(matching_models) == 0:
         raise FileNotFoundError("No matching models!")
     else:
-        model_path = PurePath(matching_models[0])
-
-    model_dir = model_path.parent
-    print(" ", model_dir)
+        model_dir = PurePath(matching_models[0])
 
     return model_dir
+
 
 def get_default_dsname():
     """
