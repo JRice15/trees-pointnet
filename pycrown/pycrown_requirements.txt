@@ -1,0 +1,11 @@
+scipy
+scikit-image
+Cython
+numba
+pandas
+geopandas
+Rtree
+Fiona
+Shapely
+laspy==1.5.1
+numpy==1.16.4

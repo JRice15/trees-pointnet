@@ -8,7 +8,7 @@ to create Pycrown env:
 
 ```
 conda create --name pycrown -c conda-forge python==3.6
-conda run -n pycrown pip install -r requirements.txt
+conda run -n pycrown pip install -r pycrown_requirements.txt
 
 wget https://lastools.github.io/download/LAStools.zip
 unzip LAStools.zip
