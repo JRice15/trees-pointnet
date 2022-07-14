@@ -7,5 +7,6 @@ geopandas
 Rtree
 Fiona
 Shapely
+rasterio
 laspy==1.5.1
 numpy==1.16.4

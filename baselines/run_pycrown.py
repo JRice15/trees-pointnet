@@ -146,24 +146,24 @@ if __name__ == '__main__':
     #PC.screen_small_trees(hmin=20., loc='top')
 
     # Convert raster crowns to polygons
-    print('converting to raster crowns')
-    PC.crowns_to_polys_raster()
-    #print('converting to smooth raster crowns')
-    PC.crowns_to_polys_smooth(store_las=False)
+    # print('converting to raster crowns')
+    # PC.crowns_to_polys_raster()
+    # #print('converting to smooth raster crowns')
+    # PC.crowns_to_polys_smooth(store_las=False)
 
-    # Check that all geometries are valid
-    print('quality control')
-    PC.quality_control()
+    # # Check that all geometries are valid
+    # print('quality control')
+    # PC.quality_control()
 
-    print(PC.trees)
+    # print(PC.trees)
 
-    # Export results
-    print('export')
-    PC.export_raster(PC.chm, PC.outpath / 'chm.tif', 'CHM')
-    PC.export_tree_locations(loc='top')
-    PC.export_tree_locations(loc='top_cor')
-    PC.export_tree_crowns(crowntype='crown_poly_raster')
-    PC.export_tree_crowns(crowntype='crown_poly_smooth')
+    # # Export results
+    # print('export')
+    # PC.export_raster(PC.chm, PC.outpath / 'chm.tif', 'CHM')
+    # PC.export_tree_locations(loc='top')
+    # PC.export_tree_locations(loc='top_cor')
+    # PC.export_tree_crowns(crowntype='crown_poly_raster')
+    # PC.export_tree_crowns(crowntype='crown_poly_smooth')
 
     TEND = datetime.now()
 
