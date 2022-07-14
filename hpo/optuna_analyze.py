@@ -46,12 +46,16 @@ def main():
     print("\n10 most recent params:")
     print(pdf.tail(10).T)
 
+    print("\nBest Params:")
+    pdf = study.trials_dataframe(["value", "params"])
+    print(pdf.sort_values(by="value", ascending=False).head(10).T)
+
     optuna.visualization.plot_optimization_history(study) \
-        .write_image(studypath(ARGS.name, "optimization_history.png"), scale=2)
+        .write_image(studypath(args.name, "optimization_history.png"), scale=2)
     optuna.visualization.plot_param_importances(study) \
-        .write_image(studypath(ARGS.name, "param_importances.png"), scale=2)
+        .write_image(studypath(args.name, "param_importances.png"), scale=2)
     optuna.visualization.plot_slice(study) \
-        .write_image(studypath(ARGS.name, "slice_plot.png"), scale=2)
+        .write_image(studypath(args.name, "slice_plot.png"), scale=2)
 
 
 if __name__ == "__main__":
