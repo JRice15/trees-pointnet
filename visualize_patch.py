@@ -5,7 +5,7 @@ import open3d
 
 import numpy as np
 
-def viz_pointcloud(xyz, point_size=5, colors=None):
+def viz_pointcloud(xyz, point_size=6, colors=None):
     pcd = open3d.geometry.PointCloud()
     pcd.points = open3d.utility.Vector3dVector(xyz)
     if colors is not None:

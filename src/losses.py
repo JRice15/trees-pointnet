@@ -225,7 +225,7 @@ def point_to_point():
 
     cls_matched_metric = CustomMean(name="cls_m_loss")
     cls_unmatched_metric = CustomMean(name="cls_unm_loss")
-    loc_metric = CustomMean(name="loc_loss")            
+    loc_metric = CustomMean(name="loc_loss")
     all_metrics = [cls_matched_metric, cls_unmatched_metric, loc_metric]
 
     def matcher(pred, gt):

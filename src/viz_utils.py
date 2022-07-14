@@ -11,6 +11,7 @@ from pathlib import PurePath
 
 import matplotlib
 import matplotlib.pyplot as plt
+import matplotlib.colors
 import numpy as np
 import pandas as pd
 import rasterio
@@ -18,6 +19,17 @@ import rasterio
 
 from src import ARGS, DATA_DIR, REPO_ROOT, MODEL_SAVE_FMT
 
+def truncate_colormap(cmap, minval=0.0, maxval=1.0, n=256):
+    """
+    https://stackoverflow.com/questions/18926031/how-to-extract-a-subset-of-a-colormap-as-a-new-colormap-in-matplotlib
+    """
+    new_cmap = matplotlib.colors.LinearSegmentedColormap.from_list(
+        'trunc({n},{a:.2f},{b:.2f})'.format(n=cmap.name, a=minval, b=maxval),
+        cmap(np.linspace(minval, maxval, n)))
+    return new_cmap
+
+
+CMAP = truncate_colormap(plt.get_cmap("viridis"), maxval=0.95)
 
 # plot marker styles
 ALL_MARKER_STYLE = {
@@ -45,8 +57,88 @@ FP_MARKER_STYLE = {
     "color": "red",
 }
 
+MARKER_STYLE_MAP = {
+    # first key is gt/pred
+    "gt": {
+        # second key is whether these are correctly or incorrectly labelled by the model
+        # None means we don't have correctness info available
+        None: GT_POS_MARKER_STYLE,
+        True: GT_POS_MARKER_STYLE,
+        False: GT_NEG_MARKER_STYLE,
+    },
+    "pred": {
+        None: TP_MARKER_STYLE,
+        True: TP_MARKER_STYLE,
+        False: FP_MARKER_STYLE,
+    }
+}
 
-def plot_NAIP_with_markers(naip, bounds, filename, *, gt=None, preds=None, pointmatch_inds=None):
+MARKER_LABEL_MAP = {
+    "gt": {
+        None: "ground-truth trees",
+        True: "ground-truth tp",
+        False: "ground-truth fn",
+    },
+    "pred": {
+        None: "predicted trees",
+        True: "predicted tp",
+        False: "predicted fp"
+    }
+}
+
+
+def plot_markers(marker_dict, legend=True):
+    """
+    plot xy tree locations (predicted or actual) on a raster
+    args:
+        pts: shape (N,3)
+        kind: str, either "gt" or "pred"
+        correct: True, False, or None. Whether these are correct or incorrect for the model
+    """
+    if marker_dict is not None:
+        for (kind,correct), pts in marker_dict.items():
+            style = MARKER_STYLE_MAP[kind][correct]
+            label = MARKER_LABEL_MAP[kind][correct]
+            plt.scatter(
+                pts[:,0], pts[:,1], 
+                label=label,
+                **style,
+                **ALL_MARKER_STYLE,
+            )
+        if legend:
+            plt.legend()
+
+
+
+def make_marker_dict(gt=None, preds=None, pointmatch_inds=None):
+    """
+    make dictionary holding markers data
+    keys are 2-tuple: (kind,correct)
+    kind is one of "gt", "pred"
+    correct is one of True, False, None
+    """
+    if pointmatch_inds is None:
+        output = {}
+        if gt is not None:
+            output[("gt",None)] = gt
+        if preds is not None:
+            output[("pred",None)] = preds
+    else:
+        tp_gt = np.delete(gt, pointmatch_inds["fn"], axis=0)
+        fn_gt = gt[pointmatch_inds["fn"]]
+        tp_pred = preds[pointmatch_inds["tp"]]
+        fp_pred = preds[pointmatch_inds["fp"]]
+
+        output = {
+            ("gt",True): tp_gt,
+            ("gt",False): fn_gt,
+            ("pred",True): tp_pred,
+            ("pred",False): fp_pred,
+        }
+    return output
+
+
+def plot_NAIP(naip, bounds, filename, markers):
     """
     plot NAIP image with markers on gt/pred, optionally with pointmatching indexes
     to determine tp/fp/fn
@@ -54,9 +146,7 @@ def plot_NAIP_with_markers(naip, bounds, filename, *, gt=None, preds=None, point
         naip: (H,W,3+) image
         bounds: Bounds object
         filename: filename to save plot under (.png recommended)
-        gt: gt points (N,2)
-        preds: pred points (N,2)
-        (optional) pointmatch_inds: dict with keys tp,fp,fn
+        markers: markers dict
     """
     fig, ax = plt.subplots(figsize=(8,8))
 
@@ -66,38 +156,7 @@ def plot_NAIP_with_markers(naip, bounds, filename, *, gt=None, preds=None, point
     plt.xticks([])
     plt.yticks([])
 
-    if pointmatch_inds is None:
-        if gt is not None:
-            plt.scatter(gt[:,0], gt[:,1], label="gt",
-                    **GT_POS_MARKER_STYLE,
-                    **ALL_MARKER_STYLE,)
-        if preds is not None:
-            plt.scatter(preds[:,0], preds[:,1], label="pred",
-                    **TP_MARKER_STYLE,
-                    **ALL_MARKER_STYLE,)
-
-    else:
-        tp_gt = np.delete(gt, pointmatch_inds["fn"], axis=0)
-        plt.scatter(tp_gt[:,0], tp_gt[:,1], label="gt tp", 
-                **GT_POS_MARKER_STYLE, 
-                **ALL_MARKER_STYLE,)
-
-        fn_gt = gt[pointmatch_inds["fn"]]
-        plt.scatter(fn_gt[:,0], fn_gt[:,1], label="gt fn",
-                **GT_NEG_MARKER_STYLE, 
-                **ALL_MARKER_STYLE,)
-
-        tp_pred = preds[pointmatch_inds["tp"]]
-        plt.scatter(tp_pred[:,0], tp_pred[:,1], label="pred tp",
-                **TP_MARKER_STYLE, 
-                **ALL_MARKER_STYLE,)
-
-        fp_pred = preds[pointmatch_inds["fp"]]
-        plt.scatter(fp_pred[:,0], fp_pred[:,1], label="pred fp",
-                **FP_MARKER_STYLE, 
-                **ALL_MARKER_STYLE,)
-
-    plt.legend()
+    plot_markers(markers)
 
     plt.tight_layout()
     plt.savefig(filename)
@@ -210,14 +269,15 @@ def rasterize_pts_gaussian_blur(bounds, pts, weights, abs_sigma=None, rel_sigma=
 
 
 
-def rasterize_pts_pixelwise(bounds, pts, weights, mode="sum", resolution=64):
+def rasterize_pts_pixelwise(bounds, pts, weights, mode="sum", resolution=64,
+        empty_value=0.0):
     """
     rasterize weighted points to a grid based on which pixel they fall in (no blurring/smoothing)
     args:
         bounds: Bounds object
         pts: (x,y) locations within the bounds
         weights: corresponding weights, (negative weights will be set to zero)
-        mode: str, how to aggregate values at each grid location. options: max, sum, second-highest
+        mode: str, how to aggregate values at each grid location. options: max, sum, second-highest, absmax
         resolution: side length of grid
     returns:
         gridvals: N x M grid of weighted values
@@ -236,10 +296,10 @@ def rasterize_pts_pixelwise(bounds, pts, weights, mode="sum", resolution=64):
 
     # initialize grid for aggregation methods
     if mode == "second-highest":
-        gridvals_highest = np.zeros_like(x_grid)
-        gridvals_secondhighest = np.zeros_like(x_grid)
+        gridvals_highest = np.full_like(x_grid, empty_value)
+        gridvals_secondhighest = np.full_like(x_grid, empty_value)
     else:
-        gridvals = np.zeros_like(x_grid)
+        gridvals = np.full_like(x_grid, empty_value)
 
     x_locs = pts[:,0]
     y_locs = pts[:,1]
@@ -251,6 +311,9 @@ def rasterize_pts_pixelwise(bounds, pts, weights, mode="sum", resolution=64):
             gridvals[y,x] += weight
         elif mode == "max":
             gridvals[y,x] = max(gridvals[y,x], weight)
+        elif mode == "absmax":
+            if abs(weight) > abs(gridvals[y,x]):
+                gridvals[y,x] = weight
         elif mode == "second-highest":
             # collect all values
             if weight > gridvals_highest[y,x]:
@@ -269,30 +332,24 @@ def rasterize_pts_pixelwise(bounds, pts, weights, mode="sum", resolution=64):
 
 
 def plot_raster(gridvals, gridcoords, filename, *, colorbar_label=None, 
-        mark=None, title=None, grid_resolution=None, ticks=False, colorbar=True):
+        markers=None, title=None, grid_resolution=None, ticks=False, colorbar=True):
     """
-    create plot of a raster
+    create plot of a raster (for creating the raster from raw pts, see rasterize_and_plot)
     args:
         title: plot title
         colorbar_label: label on colorbar
-        mark: dict mapping names to points to mark with an x, array shape (n,2)
+        markers: markers dict
     """
+    shape = (10,8) if colorbar else (8,8)
+    fig, ax = plt.subplots(figsize=shape)
+
     x = gridcoords[...,0]
     y = gridcoords[...,1]
-    plt.pcolormesh(x,y,gridvals, shading="auto")
+    plt.pcolormesh(x,y,gridvals, shading="auto", cmap=CMAP)
     if colorbar:
         plt.colorbar(label=colorbar_label)
 
-    if mark is not None:
-        if isinstance(mark, dict):
-            # colors which are well visible overlayed over blues/greens
-            colors = ["red", "orange"]
-            markers = ["x", "o", "^", "s"]
-            for i,m in enumerate(mark.values()):
-                plt.scatter(m[:,0], m[:,1], c=colors[i], marker=markers[i])
-            plt.legend(mark.keys(), loc="upper left")
-        else:
-            plt.scatter(mark[:,0], mark[:,1], c="white", marker="x")
+    plot_markers(markers)
 
     if title is not None:
         plt.title(title)
@@ -306,9 +363,8 @@ def plot_raster(gridvals, gridcoords, filename, *, colorbar_label=None,
 
 
 def rasterize_and_plot(pts, bounds, filename, *, gaussian_blur=True, rel_sigma=None, abs_sigma=None, weights=None, 
-        title=None, clip=None, sqrt_scale=False, mode="sum", mark=None, 
-        weight_label=None, grid_resolution=None,
-        colorbar=True, ticks=False):
+        title=None, clip=None, sqrt_scale=False, mode="sum", markers=None, 
+        weight_label=None, grid_resolution=None, colorbar=True, ticks=False):
     """
     create raster plot of points, with optional weights
     args:
@@ -334,7 +390,7 @@ def rasterize_and_plot(pts, bounds, filename, *, gaussian_blur=True, rel_sigma=N
 
     plot_raster(gridvals, gridcoords, filename, 
         colorbar_label=weight_label,
-        mark=mark,
+        markers=markers,
         title=title,
         colorbar=colorbar,
         ticks=ticks)
@@ -369,11 +425,7 @@ def plot_one_example(outdir, patch_id, *, Y, bounds, X=None, pred=None, pred_pea
 
     gt_ntrees = len(ylocs)
 
-    markings = {
-        "gt trees": ylocs,
-    }
-    if pred_peaks is not None:
-        markings["predicted trees"] = pred_peaks[...,:2]
+    markers = make_marker_dict(gt=ylocs, preds=pred_peaks, pointmatch_inds=pointmatch_inds)
 
     if X is not None:
         x_locs = X[...,:2]
@@ -387,7 +439,7 @@ def plot_one_example(outdir, patch_id, *, Y, bounds, X=None, pred=None, pred_pea
             gaussian_blur=False,
             mode="second-highest", 
             filename=outdir.joinpath("{}_lidar_height".format(patchname)), 
-            mark=markings, 
+            markers=markers, 
             bounds=bounds,
             grid_resolution=grid_resolution)
         
@@ -400,9 +452,10 @@ def plot_one_example(outdir, patch_id, *, Y, bounds, X=None, pred=None, pred_pea
             mode="max",
             gaussian_blur=False,
             filename=outdir.joinpath("{}_lidar_ndvi".format(patchname)),
-            mark=markings, 
+            markers=markers, 
             bounds=bounds,
-            grid_resolution=grid_resolution)
+            grid_resolution=grid_resolution,
+            empty_value=-1.0)
 
     if pred is not None:
         # prediction confidence raster
@@ -415,18 +468,17 @@ def plot_one_example(outdir, patch_id, *, Y, bounds, X=None, pred=None, pred_pea
             gaussian_blur=False,
             filename=outdir.joinpath("{}_pred_raw".format(patchname)),
             mode="max", 
-            mark=markings, 
+            markers=markers, 
             bounds=bounds,
             grid_resolution=grid_resolution)
 
 
     if naip is not None:
-        plot_NAIP_with_markers(
-            naip, bounds,
+        plot_NAIP(
+            naip, 
+            bounds=bounds,
             filename=outdir.joinpath(patchname+"_NAIP_RGB.png"),
-            gt=ylocs,
-            preds=pred_peaks,
-            pointmatch_inds=pointmatch_inds,
+            markers=markers,
         )
 
 

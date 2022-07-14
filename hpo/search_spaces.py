@@ -167,7 +167,7 @@ class full(SearchSpace):
         flags = []
         params = {
             # data
-            "subdivide": trial.suggest_int("subdivide", 1, 7),
+            "subdivide": trial.suggest_int("subdivide", 1, 10), # 153.6 to 15.3 meter side length 
             "npoints": 100 * 2 ** trial.suggest_int("npoints-exp", 1, 4), # 200 to 3200
             "noise-sigma": trial.suggest_float("noise-sigma", 0.0, 2.0, step=0.1), # in meters
             "handle-small": trial.suggest_categorical("handle-small", ["drop", "fill", "repeat"]),

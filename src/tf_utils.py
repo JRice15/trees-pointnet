@@ -14,7 +14,6 @@ from tensorflow.keras.optimizers import Adam
 
 from src import ARGS, CUSTOM_LAYERS, DATA_DIR, MODEL_SAVE_FMT, REPO_ROOT
 from src.losses import get_loss
-from src.viz_utils import rasterize_and_plot
 
 
 class MyModelCheckpoint(tf.keras.callbacks.ModelCheckpoint):
