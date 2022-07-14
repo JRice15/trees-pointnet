@@ -71,7 +71,7 @@ if __name__ == '__main__':
     parser.add_argument('--dsm',required=True)
     parser.add_argument('--dtm',required=True)
     parser.add_argument('--chm',required=True)
-    parser.add_argument('--points',required=True)
+    parser.add_argument('--points')
     parser.add_argument('--trees',default='',help='csv file with trees to use as input')
     parser.add_argument('--area')
     parser.add_argument('--bldgs')
