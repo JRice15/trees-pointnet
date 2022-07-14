@@ -184,6 +184,14 @@ def optuna_worker(ARGS, gpu, worker_num, interrupt_event):
             except MyHpoError:
                 pass
             gc.collect()
+            # remove core dump files (they can be 20+ gb each)
+            for core_file in glob.glob(f"{ROOT}/hpo/core.*"):
+                try:
+                    os.remove(core_file)
+                    print("removed", core_file)
+                except FileNotFoundError:
+                    pass
+                
 
 
 
