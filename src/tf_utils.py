@@ -81,3 +81,10 @@ def output_model(model, directory, show=False):
         print("Failed to plot model: " + str(e))
 
 
+def checknans(*args):
+    print([
+        tf.reduce_any(
+            tf.logical_or(
+                tf.math.is_nan(x),
+                tf.math.is_inf(x))) for x in args
+    ])

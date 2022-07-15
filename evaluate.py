@@ -176,8 +176,6 @@ def postprocess_and_pointmatch(preds_overlapped, gt, bounds, params, gridsearch_
     else:
         raise ValueError(f"Unknown postprocess mode {postprocess_mode}")
 
-    timer.measure(f"postprocessing={postprocess_mode}")
-
     # Pointmatching on the results
     best_pointmatch_results = {"fscore": -1}
     best_gridparams = None
@@ -203,9 +201,9 @@ def postprocess_and_pointmatch(preds_overlapped, gt, bounds, params, gridsearch_
                 best_pts = thresholded_pts
                 if return_inds:
                     best_inds = pointmatch_inds
-
-    timer.measure(f"pointmatching x{len(processed_preds) * len(gridsearch_params['post_threshold'])}")
     
+    timer.measure()
+
     output = {
         "metrics": best_pointmatch_results,
         "gridparams": best_gridparams,
@@ -265,14 +263,10 @@ def build_postprocessing_objective(preds_overlapped, gt, bounds, min_dists, post
             params["pre_threshold_exp"] = trial.suggest_float("pre_threshold_exp", -5, 0, step=0.2)
             # with 'raw' postprocessing, we just use the post_threshold instead of both, since they are redundant in that case
 
-        print("Trial", trial.number)
-
         results = postprocess_and_pointmatch(preds_overlapped, gt, bounds, params, gridparams, return_inds=False)
 
         for key,value in results["gridparams"].items():
             trial.set_user_attr(key, value)
-
-        print(results["gridparams"])
 
         return results["metrics"]["fscore"]
 

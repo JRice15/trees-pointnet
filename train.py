@@ -95,16 +95,14 @@ modelgrp.add_argument("--batchnorm",dest="use_batchnorm",action="store_true",hel
 lossgrp = parser.add_argument_group("loss parameters")
 lossgrp.add_argument("--gaussian-sigma", "--sigma",type=float,default=3,
         help="mmd/gridmse: in meters, std dev of gaussian smoothing applied in the loss")
-lossgrp.add_argument("--mmd-kernel",default="gaussian",
-        help="mmd: type of kernel")
 lossgrp.add_argument("--gridmse-agg",choices=["max","sum"],default="sum",
         help="gridmse: how to aggregate predicted points during rasterization")
 
-lossgrp.add_argument("--p2p-conf-weight",type=float,default=1.0, #TODO p2p defaults
+lossgrp.add_argument("--p2p-conf-weight",type=float, # TODO set defaults once determined
         help="p2p: weight for confidence relative to distance in matching")
-lossgrp.add_argument("--p2p-unmatched-weight",type=float,default=0.5, #TODO
+lossgrp.add_argument("--p2p-unmatched-weight",type=float, 
         help="p2p: weight for loss on unmatched predictions (relative to matched) inside the classification loss")
-lossgrp.add_argument("--p2p-loc-weight",type=float,default=1.0, #TODO
+lossgrp.add_argument("--p2p-loc-weight",type=float,
         help="p2p: weight for location (regression) loss, relative to classification loss")
 
 lossgrp.add_argument("--ortho-weight",type=float,default=0.001,

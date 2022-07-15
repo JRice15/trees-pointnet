@@ -60,8 +60,8 @@ def get_study(name, assume_exists):
         group=True,
         warn_independent_sampling=True,
         constant_liar=True, # avoid very similar param combinations being tried simultaneously
-        n_startup_trials=25, # number of random sample trials to begin with
-        seed=1,
+        n_startup_trials=30, # number of random sample trials to begin with
+        seed=1234,
     )
 
     if assume_exists:

@@ -364,7 +364,8 @@ def plot_raster(gridvals, gridcoords, filename, *, colorbar_label=None,
 
 def rasterize_and_plot(pts, bounds, filename, *, gaussian_blur=True, rel_sigma=None, abs_sigma=None, weights=None, 
         title=None, clip=None, sqrt_scale=False, mode="sum", markers=None, 
-        weight_label=None, grid_resolution=None, colorbar=True, ticks=False):
+        weight_label=None, grid_resolution=None, colorbar=True, ticks=False,
+        empty_value=0.0):
     """
     create raster plot of points, with optional weights
     args:
@@ -381,7 +382,8 @@ def rasterize_and_plot(pts, bounds, filename, *, gaussian_blur=True, rel_sigma=N
                                 mode=mode, resolution=grid_resolution)
     else:
         gridvals, gridcoords = rasterize_pts_pixelwise(bounds, pts, weights, 
-                                mode=mode, resolution=grid_resolution)
+                                mode=mode, resolution=grid_resolution,
+                                empty_value=empty_value)
 
     if sqrt_scale:
         gridvals = np.sqrt(gridvals)
@@ -455,7 +457,7 @@ def plot_one_example(outdir, patch_id, *, Y, bounds, X=None, pred=None, pred_pea
             markers=markers, 
             bounds=bounds,
             grid_resolution=grid_resolution,
-            empty_value=-1.0)
+            empty_value=0.0)
 
     if pred is not None:
         # prediction confidence raster
