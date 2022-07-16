@@ -161,16 +161,16 @@ class p2p(SearchSpace):
         params = {
             # data
             "subdivide": 6,
-            "npoints-exp": 2,
+            "npoints-exp": 100 * (2 ** 2),
             "noise-sigma": 0.1,
             "handle-small": "fill",
             # training
             "optimizer": "adam",
-            "batchsize-exp": 3,
-            "lr-exp": -2.5,
+            "batchsize": 2 ** 3,
+            "lr-exp": 10 ** -2.5,
             # model arch
             "output-flow": trial.suggest_categorical("output-flow", ["seg", "dense"]),
-            "sm-exp": 0,
+            "sm": 2 ** 0,
             "conf-act": "sigmoid",
             # loss
             "loss": "p2p",
