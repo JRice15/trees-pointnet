@@ -156,7 +156,7 @@ class p2p(SearchSpace):
     defaults = {
         "p2p-conf-weight": 0.02,
         "p2p-unmatched-exp": 0,
-        "p2p-loc-exp": 0,
+        "p2p-loc-exp": -1,
     }
 
     @staticmethod
