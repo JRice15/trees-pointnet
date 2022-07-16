@@ -153,7 +153,11 @@ class pnet2(SearchSpace):
 
 class p2p(SearchSpace):
 
-    defaults = {}
+    defaults = {
+        "p2p-conf-weight": 0.02,
+        "p2p-unmatched-exp": 0,
+        "p2p-loc-exp": 0,
+    }
 
     @staticmethod
     def get_params(args, trial):
@@ -175,8 +179,8 @@ class p2p(SearchSpace):
             # loss
             "loss": "p2p",
             "p2p-conf-weight": trial.suggest_float("p2p-conf-weight", 0, 2.0, step=0.01),
-            "p2p-unmatched-weight": 10 ** trial.suggest_float("p2p-unmatched-exp", -3, 3, step=0.01),
-            "p2p-loc-weight": 10 ** trial.suggest_float("p2p-loc-exp", -3, 3, step=0.01),
+            "p2p-unmatched-weight": 10 ** trial.suggest_float("p2p-unmatched-exp", -1, 1, step=0.01),
+            "p2p-loc-weight": 10 ** trial.suggest_float("p2p-loc-exp", -1, 1, step=0.01),
         }
 
         # output flow

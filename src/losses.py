@@ -265,12 +265,15 @@ def point_to_point():
         # ismatched is acting as a true/false mask here
         matched_loss = (ismatched * bce)
         unmatched_loss = (unmatched_factor * (1-ismatched) * bce)
+        # scale to make it nicer number
+        matched_loss *= 100
+        unmatched_loss *= 100
         # update metrics
         cls_matched_metric.my_update_state(matched_loss)
         cls_unmatched_metric.my_update_state(unmatched_loss)
         # sum elementwise (only one will be non-zero in each element
         loss = matched_loss + unmatched_loss
-        return tf.reduce_mean(loss, axis=-1) * 100 # scale to make it a more convenient number
+        return tf.reduce_mean(loss, axis=-1)
 
     @tf.function
     def location_loss(pred, gt, matching):
