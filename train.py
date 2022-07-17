@@ -79,8 +79,7 @@ hypergrp.add_argument("--reducelr-patience",type=int,default=3,help="number of e
 
 # model parameters
 modelgrp = parser.add_argument_group("model parameters")
-modelgrp.add_argument("--npoints",type=int,default=500,help="number of points to run per patch. In ragged or non-ragged, "
-        "patches with fewer points will be skipped. Also in non-ragged, patches with more points with be subsampled to npoints")
+modelgrp.add_argument("--npoints",type=int,default=500,help="number of points to run per subpatch.")
 modelgrp.add_argument("--out-npoints",type=int,default=256,help="(dense output flow): number of output points")
 modelgrp.add_argument("--size-multiplier",type=float,default=1.0,help="number to multiply all default conv output filters by")
 modelgrp.add_argument("--dropout",dest="dropout_rate",type=float,default=0.0,help="dropout rate")

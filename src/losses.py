@@ -240,6 +240,8 @@ def point_to_point():
         ismatched = tf.stop_gradient( tf.constant(ismatched, dtype="int32") )
         return indices, ismatched
 
+    # multiply all losses by this value for a nicer overall number
+    LOSS_SCALE = 100
     # there are about 44 trees per full-sized patch on average
     trees_per_patch = 44 / (ARGS.subdivide ** 2)
 
@@ -266,8 +268,8 @@ def point_to_point():
         matched_loss = (ismatched * bce)
         unmatched_loss = (unmatched_factor * (1-ismatched) * bce)
         # scale to make it nicer number
-        matched_loss *= 100
-        unmatched_loss *= 100
+        matched_loss *= LOSS_SCALE
+        unmatched_loss *= LOSS_SCALE
         # update metrics
         cls_matched_metric.my_update_state(matched_loss)
         cls_unmatched_metric.my_update_state(unmatched_loss)
@@ -295,7 +297,7 @@ def point_to_point():
         count_valid = tf.reduce_sum(gt_isvalid, axis=-1)
         # handle div by zero when no valid gt trees in an example
         loss = tf.where(count_valid > 0, total / count_valid, 0.0)
-        loss *= ARGS.p2p_loc_weight * 100 # to make it a more convenient number
+        loss *= ARGS.p2p_loc_weight * LOSS_SCALE # to make it a more convenient number
         # update metric
         loc_metric.my_update_state(loss)
         return loss
