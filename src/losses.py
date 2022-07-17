@@ -197,6 +197,11 @@ def point_to_point():
     loc_metric = CustomMean(name="loc_loss")
     all_metrics = [cls_matched_metric, cls_unmatched_metric, loc_metric]
 
+    if ARGS.p2p_minmax_reg > 0:
+        minmax_metric = CustomMean(name="minmax_reg")
+        all_metrics.append(minmax_metric)
+
+
     # scale conf weight by subdivide so it has consistent effect independant of subdivide
     # ex: assume a dist of 0.3 when subdiv is 1. A conf of 0.1 will result in final cost of 0.2 (= 0.3 - 0.1), a 33% reduction
     #     however if subdiv is 3, dist is now 0.9. We still want this distance to be reduced the same amount, ie 33%, by the confidence. so we subtract conf * subdiv: 0.6 = 0.9 - (0.1 * 3)
@@ -312,7 +317,14 @@ def point_to_point():
         cls_loss = classification_loss(pred, ismatched)
         loc_loss = location_loss(pred, gt, matching)
         # final equation
-        return cls_loss + loc_loss
+        total_loss = cls_loss + loc_loss
+        # regularize not all confs being the same
+        if ARGS.p2p_minmax_reg > 0:
+            conf = pred[:,2]
+            minmax_loss = ARGS.p2p_minmax_reg * (1 + tf.reduce_min(conf) - tf.reduce_max(conf))
+            total_loss += minmax_loss
+            minmax_metric.my_update_state(minmax_loss)
+        return total_loss
 
     return p2p_loss, all_metrics
 
