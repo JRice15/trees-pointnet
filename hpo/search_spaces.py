@@ -185,7 +185,7 @@ class p2p(SearchSpace):
 
         # output flow
         if params["output-flow"] == "dense":
-            params["out-npoints"] = 2 ** 10 # 2048
+            params["out-npoints"] = trial.suggest_int("out-npoints", 10, 200, step=10)
             params["dropout"] = 0.0
         elif params["output-flow"] == "seg":
             params["dropout"] = 0.3

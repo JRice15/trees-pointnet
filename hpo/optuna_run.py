@@ -53,11 +53,6 @@ from hpo_utils import (ROOT, KilledTrialError, MyHpoError, TrialFailedError,
 WORKER_POLL_FREQ = 10
 
 
-valid_optimizers = ["adam", "adadelta", "nadam", "adamax"]
-valid_output_flows = ["seg", "dense"]
-valid_losses = ["mmd", "gridmse", "p2p"]
-
-
 def make_objective_func(ARGS, gpu, interrupt_event):
     # get search space
     space = getattr(search_spaces, ARGS.search_space)
@@ -123,7 +118,7 @@ def make_objective_func(ARGS, gpu, interrupt_event):
             model_dir = glob_modeldir(params["name"])
         except FileNotFoundError:
             raise optuna.TrialPruned("Model dir does not exist")
-        results_file = model_dir + "/results_test/results_pointmatch.json"
+        results_file = model_dir + "/results_validation/results_pointmatch.json"
         if not os.path.exists(results_file):
             raise optuna.TrialPruned(f"Results file does not exist:\n{results_file}")
 
