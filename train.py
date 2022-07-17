@@ -103,6 +103,8 @@ lossgrp.add_argument("--p2p-unmatched-weight",type=float,
         help="p2p: weight for loss on unmatched predictions (relative to matched) inside the classification loss")
 lossgrp.add_argument("--p2p-loc-weight",type=float,
         help="p2p: weight for location (regression) loss, relative to classification loss")
+lossgrp.add_argument("--p2p-minmax-reg",type=float,default=0.0,
+        help="p2p: weight for regularization to increase the seperation between max and min conf")
 
 lossgrp.add_argument("--ortho-weight",type=float,default=0.001,
         help="tnet2: orthogonality regularization loss weight, when using TNet2")
