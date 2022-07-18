@@ -298,7 +298,7 @@ OVERLAP_METHODS = {
 
 
 def viz_predictions(patchgen, outdir, *, X_subdiv, Y_full, Y_subdiv, 
-        preds_full, preds_full_peaks, bounds_full, # TODO pointmatch_inds,
+        preds_full, preds_full_peaks, bounds_full, pointmatch_inds=None,
         preds_subdiv=None):
     """
     data visualizations
@@ -306,6 +306,7 @@ def viz_predictions(patchgen, outdir, *, X_subdiv, Y_full, Y_subdiv,
         *_subdiv: subdivided, normalize versions of data
         *_full: full (overlapped), denormalize (original CRS) versions of data
         preds_full_peaks: post-processed version of raw preds that has final predicted locations
+        pointmatch_inds: dict with keys tp,fp,fn that has
     """
     print("Denormalizing & overlapping X...")
     # denormalize X
@@ -355,7 +356,8 @@ def viz_predictions(patchgen, outdir, *, X_subdiv, Y_full, Y_subdiv,
             pred_peaks=preds_full_peaks[p_id] if p_id in preds_full_peaks else None,
             naip=patchgen.get_naip(p_id), 
             grid_resolution=GRID_RESOLUTION,
-            bounds=bounds_full[p_id]
+            bounds=bounds_full[p_id],
+            pointmatch_inds=pointmatch_inds,
         )
     
 
