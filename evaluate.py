@@ -498,10 +498,10 @@ def main():
 
     if "test" in ARGS.eval_sets:
         # load best params estimated on val set from file
-        val_dir = MODEL_DIR.joinpath("results_validation", "results_pointmatch.json")
-        if not os.path.exists(val_dir):
+        val_path = MODEL_DIR.joinpath("results_validation", "results_pointmatch.json")
+        if not os.path.exists(val_path):
             raise FileNotFoundError("Validation pointmatch results file must exist to run eval on the test set. Supply 'val' as an arg to the --eval-sets command-line parameter")
-        with open(val_dir.joinpath("results_pointmatch.json")) as f:
+        with open(val_path) as f:
             val_results = json.load(f)
         params, gridparams = val_results["params"], val_results["gridparams"]
 
