@@ -357,7 +357,7 @@ def viz_predictions(patchgen, outdir, *, X_subdiv, Y_full, Y_subdiv,
             naip=patchgen.get_naip(p_id), 
             grid_resolution=GRID_RESOLUTION,
             bounds=bounds_full[p_id],
-            pointmatch_inds=pointmatch_inds,
+            pointmatch_inds=pointmatch_inds[p_id],
         )
     
 
