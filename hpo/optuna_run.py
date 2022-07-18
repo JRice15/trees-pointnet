@@ -66,12 +66,11 @@ def make_objective_func(ARGS, gpu, interrupt_event):
         constant_params = {
             "name": "hpo/{name}/{name}_trial{number}".format(name=ARGS.name, number=trial.number),
             "dsname": ARGS.dsname,
+            "eval-sets": ["val", "test"]
         }
         if ARGS.test:
             constant_params["epochs"] = 1
         constant_flags = [
-            # run evaluation
-            "eval",
             # don't compute losses or plots
             "noplot",
             "nolosses",

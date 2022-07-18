@@ -483,28 +483,38 @@ def main():
         # evaluate_pointmatching(train_gen, model, MODEL_DIR)
 
     # validation set evaluation
-    val_gen.summary()
-    val_dir = MODEL_DIR.joinpath("results_validation")
-    if not ARGS.nolosses:
-        evaluate_loss_metrics(val_gen, model, val_dir)
-    preds_val, X_val = generate_predictions(val_gen, model, val_dir)
+    if "val" in ARGS.eval_sets:
+        val_gen.summary()
+        val_dir = MODEL_DIR.joinpath("results_validation")
+        if not ARGS.nolosses:
+            evaluate_loss_metrics(val_gen, model, val_dir)
+        preds_val, X_val = generate_predictions(val_gen, model, val_dir)
 
-    # estimate best params on validation set
-    params, gridparams = estimate_postproc_params(preds_val, val_gen.gt_full, val_gen.bounds_full, val_dir)
-    # evaluate
-    evaluate_postproc_params(val_gen, val_dir, preds_val, X_val, 
-            params=params, gridparams=gridparams)
+        # estimate best params on validation set
+        params, gridparams = estimate_postproc_params(preds_val, val_gen.gt_full, val_gen.bounds_full, val_dir)
+        # evaluate
+        evaluate_postproc_params(val_gen, val_dir, preds_val, X_val, 
+                params=params, gridparams=gridparams)
 
-    # test set evaluation
-    test_gen.summary()
-    test_dir = MODEL_DIR.joinpath("results_test")
-    if not ARGS.nolosses:
-        evaluate_loss_metrics(test_gen, model, test_dir)
-    preds_test, X_test = generate_predictions(test_gen, model, test_dir)
+    if "test" in ARGS.eval_sets:
+        # load best params estimated on val set from file
+        val_dir = MODEL_DIR.joinpath("results_validation", "results_pointmatch.json")
+        if not os.path.exists(val_dir):
+            raise FileNotFoundError("Validation pointmatch results file must exist to run eval on the test set. Supply 'val' as an arg to the --eval-sets command-line parameter")
+        with open(val_dir.joinpath("results_pointmatch.json")) as f:
+            val_results = json.load(f)
+        params, gridparams = val_results["params"], val_results["gridparams"]
 
-    # use val-set estimated params on test set
-    evaluate_postproc_params(test_gen, test_dir, preds_test, X_test, 
-            params=params, gridparams=gridparams)
+        # test set evaluation
+        test_gen.summary()
+        test_dir = MODEL_DIR.joinpath("results_test")
+        if not ARGS.nolosses:
+            evaluate_loss_metrics(test_gen, model, test_dir)
+        preds_test, X_test = generate_predictions(test_gen, model, test_dir)
+
+        # use val-set estimated params on test set
+        evaluate_postproc_params(test_gen, test_dir, preds_test, X_test, 
+                params=params, gridparams=gridparams)
 
 
 if __name__ == "__main__":
@@ -513,7 +523,8 @@ if __name__ == "__main__":
     """
     parser = argparse.ArgumentParser()
     parser.add_argument("--name",required=True,help="name of model to run, with possible timestamp in front")
-    # parser.add_argument("--sets",dest="eval_sets",default=("val","test"),nargs="+",help="datasets to evaluate on: train, val, and/or test. test automatically selects val as well")
+    parser.add_argument("--sets",dest="eval_sets",default=("val","test"),nargs="+",choices=("val", "test"),
+                help="datasets to evaluate on: train, val, and/or test. test automatically selects val as well")
     parser.add_argument("--noplot",action="store_true",help="don't make plots (significantly improves speed)")
     parser.add_argument("--nolosses",action="store_true",help="do not compute loss metrics")
     parser.add_argument("--save-preds",action="store_true",help="save raw predictions as npy files")
