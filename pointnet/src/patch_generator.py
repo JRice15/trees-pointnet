@@ -17,7 +17,7 @@ from src import ARGS, DATA_DIR, LIDAR_CHANNELS
 from src.utils import rotate_pts, scale_meters_to_0_1
 
 from common.data_handling import (Bounds, get_all_regions, get_naip_bounds,
-                                  load_gt_trees, load_naip, get_tvt_split)
+                                  load_gt_trees, load_naip, get_data_splits)
 from common.utils import MyTimer
 
 # max height for pts in meters
@@ -426,18 +426,18 @@ def get_datasets(dsname, regions, sets=("train", "val", "test"), batchsize=None)
         list of LidarPatchGen
     """
     timer = MyTimer()
-    train, val, test = get_tvt_split(regions)
+    splits = get_data_splits(sets=sets, regions=regions)
 
     result = []
-    for name in sets:
+    for name, patch_ids in zip(sets, splits):
         if name == "train":
-            train_gen = LidarPatchGen(train, name="train", training=True, batchsize=batchsize)
+            train_gen = LidarPatchGen(patch_ids, name="train", training=True, batchsize=batchsize)
             result.append(train_gen)
         elif name == "val":
-            val_gen = LidarPatchGen(val, name="validation", batchsize=batchsize)
+            val_gen = LidarPatchGen(patch_ids, name="validation", batchsize=batchsize)
             result.append(val_gen)
         elif name == "test":
-            test_gen = LidarPatchGen(test, name="test", batchsize=batchsize)
+            test_gen = LidarPatchGen(patch_ids, name="test", batchsize=batchsize)
             result.append(test_gen)
         else:
             raise ValueError("Unknown ds set '{}'".format(name))

@@ -7,7 +7,7 @@ All code adapted from https://github.com/jonathanventura/lidar-processing/
 to create Pycrown env:
 
 ```
-conda create --name pycrown -c conda-forge python==3.6
+conda create --name pycrown -c conda-forge python==3.6.1
 conda run -n pycrown pip install -r pycrown_requirements.txt
 
 wget https://lastools.github.io/download/LAStools.zip
