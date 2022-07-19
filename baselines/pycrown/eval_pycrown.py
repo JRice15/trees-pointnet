@@ -3,6 +3,8 @@ import json
 import sys
 import argparse
 import time
+import glob
+from pathlib import PurePath
 
 import geopandas as gpd
 import numpy as np
@@ -16,7 +18,14 @@ from run_pycrown import pycrown_predict_treetops
 from common.pointmatch import pointmatch
 from common.data_handling import get_data_splits, load_gt_trees
 
-def make_objective(chms, dtms, dsms):
+def make_objective(raster_dirs, ground_truth):
+
+    def get_raster_path(region, patchnum, kind):
+        return os.path.join(
+            raster_dirs[region],
+            f"{kind}_{patchnum}.tif"
+        )
+
     def objective(trial):
         params = {
             "chm_smooth_pix": tf.suggest_int("chm_smooth_pix", 0, 15), # in pixels
@@ -30,30 +39,42 @@ def make_objective(chms, dtms, dsms):
             "cdl_th_maxcrown": tf.suggest_int("cdl_th_maxcrown", 1, 20), # width in meters
         }
 
-        outputs = {
+        preds = {
             "orig": {},
             "corrected": {},
         }
-        for key in tqdm(chms.keys()):
+        for p_id in tqdm(list(ground_truth.keys())):
+            region, patchnum = p_id
             PC = pycrown_predict_treetops(
-                    chm=chms[key],
-                    dtm=dtms[key],
-                    dsm=dsms[key],
+                    chm=get_raster_path(region, patchnum, "chm"),
+                    dtm=get_raster_path(region, patchnum, "dtm"),
+                    dsm=get_raster_path(region, patchnum, "dsm"),
                     outpath=None,
                     params=params)
             
-            outputs["orig"] = PC.trees["top"].to_numpy()
-            outputs["corrected"] = PC.trees["top_cor"].to_numpy()
+            preds["orig"] = PC.trees["top"].to_numpy()
+            preds["corrected"] = PC.trees["top_cor"].to_numpy()
         
-        pointmatch(all_gts, all_preds)
+        orig_fscore = pointmatch(ground_truth, preds["orig"])["fscore"]
+        corr_fscore = pointmatch(ground_truth, preds["corrected"])["fscore"]
+
+        print(orig_fscore, corr_fscore)
+        return max(orig_fscore, corr_fscore)
 
 
 
-def estimate_params(chms_dirs):
+def estimate_params(raster_dirs):
     """
     args:
-        
+        raster_dirs: dict mapping region to path of directory which holds rasters (chms, dsms, dtms)
     """
+    train_ids, test_ids = get_data_splits(sets=("train+val", "test"))
+
+    train_gt = load_gt_trees(train_ids)
+    test_gt = load_gt_trees(test_ids)
+
+    objective = make_objective(raster_dirs, train_gt)
+
     sampler = optuna.samplers.TPESampler(
         multivariate=True, # consider the relations between different parameters
         group=True,
@@ -63,19 +84,10 @@ def estimate_params(chms_dirs):
         seed=1234,
     )
 
-    train_ids, test_ids = get_data_splits(sets=("train+val", "test"))
-
-    train_gt = load_gt_trees(train_ids)
-    test_gt = load_gt_trees(test_ids)
-
-    # TODO get chm etc paths
-
-    objective = make_objective(chms, dtms, dsms)
-
     study = optuna.create_study(sampler=sampler, name="pycrown", direction="maximize")
     study.optimize(n_trials=1)
 
-    print("Best trial:")
+    print("\nBest trial:")
     print("fscore:", study.best_value)
     print(study.best_params)
 
@@ -83,7 +95,7 @@ def estimate_params(chms_dirs):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--specs",required=True)
+    parser.add_argument("--specs",required=True,help="json, mapping region names to directory paths which contains raster tifs")
     args = parser.parse_args()
 
     with open(args.specs, "r") as f:
