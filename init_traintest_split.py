@@ -6,7 +6,7 @@ import numpy as np
 import os
 import json
 
-from common.data_handling import get_all_patch_ids
+from common.data_handling import get_all_patch_ids, get_all_regions
 
 """
 Constants
