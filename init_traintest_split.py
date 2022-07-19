@@ -16,7 +16,7 @@ TEST_SPLIT = 0.10
 
 
 if os.path.exists("data/traintest_split.json"):
-    raise ValueError("Train-test split is already initialized!")
+    raise FileExistsError("Train-test split is already initialized!")
 
 
 
@@ -50,5 +50,5 @@ data = {
     "test_split": TEST_SPLIT,
 }
 
-with open("data/traintest_split.json") as f:
-    json.dump(data, f)
+with open("data/traintest_split.json", "w") as f:
+    json.dump(data, f, indent=1)
