@@ -68,13 +68,14 @@ def make_objective_func(ARGS, gpu, interrupt_event):
             "dsname": ARGS.dsname,
             "eval-sets": ["val", "test"]
         }
-        if ARGS.test:
-            constant_params["epochs"] = 1
         constant_flags = [
             # don't compute losses or plots
             "noplot",
             "nolosses",
         ]
+        if ARGS.test:
+            constant_params["epochs"] = 1
+            constant_flags.append("test")
 
         # search space params
         params, flags = space.get_params(ARGS, trial)
