@@ -12,6 +12,17 @@ import rasterio
 from common import REPO_ROOT, DATA_DIR
 
 
+"""
+Constants
+"""
+VAL_SPLIT = 0.10
+TEST_SPLIT = 0.10
+
+
+"""
+Useful data classes
+"""
+
 class Bounds:
     """
     unambigous bounds. Two formats available:
@@ -76,6 +87,43 @@ class Bounds:
         """
         return Bounds.from_minmax([0, 0, 1, 1])
 
+
+"""
+train val test splitting
+"""
+
+def get_tvt_split(regions=None):
+    """
+    returns patch ids for the train, val, and test datasets
+    it selects the same patches every time given the same split, by selecting 
+    every Nth patch from a deterministically shuffled list from each region
+    args:
+        regions: list(str), or None which defaults ot all regions
+    """
+    if regions is None:
+        regions = get_all_regions()
+
+    val_step = int(1/VAL_SPLIT)
+    test_step = int(1/TEST_SPLIT)
+
+    train = []
+    val = []
+    test = []
+    for region in regions:
+        patch_ids = get_all_patch_ids(regions=[region])
+        # deterministic shuffle of sorted list
+        np.random.default_rng(999).shuffle(patch_ids)
+        test += patch_ids[::test_step]
+        rest_patch_ids = [x for x in patch_ids if x not in test]
+        val += rest_patch_ids[::val_step]
+        train += [x for x in rest_patch_ids if x not in val]
+    return train, val, test
+
+
+
+"""
+Data loading & utils
+"""
 
 def get_default_dsname():
     """
@@ -206,7 +254,7 @@ def load_gt_trees_region(region):
     return gt_pts
 
 
-def load_gt_trees(regions):
+def load_gt_trees(patch_ids):
     """
     load all ground truth trees, in proper patches
     args:
@@ -214,8 +262,8 @@ def load_gt_trees(regions):
     returns:
         dict mapping patch_id to tree locations array, shape (N,2)
     """
+    regions = list(set([p_id[0] for p_id in patch_ids]))
     raw_trees = {r: load_gt_trees_region(r) for r in regions}
-    patch_ids = get_all_patch_ids(regions=regions)
     patched_trees = {}
     for region, patch_num in patch_ids:
         bounds = get_naip_bounds(region, patch_num)
