@@ -75,6 +75,8 @@ def estimate_params(chms_dirs):
     study = optuna.create_study(sampler=sampler, name="pycrown", direction="maximize")
     study.optimize(n_trials=1)
 
+    print("Best trial:")
+    print("fscore:", study.best_value)
     print(study.best_params)
 
 

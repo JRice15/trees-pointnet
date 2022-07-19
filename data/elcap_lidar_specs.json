@@ -1,6 +1,6 @@
 {
     "santamonica": {
-        "lidar": "/data2/urban-forest/pointnet_data/samo/SantaMonica_HAG_epsg:26911.laz"
+        "lidar": "/data2/urban-forest/pointnet_data/santamonica/SantaMonica_HAG_epsg:26911.laz"
     },
     "longbeach": {
         "lidar": "/data2/urban-forest/pointnet_data/longbeach/LongBeach_HAG_epsg:26911.laz"

@@ -1,0 +1,6 @@
+{
+    "santamonica": "/data2/urban-forest/pointnet_data/santamonica/chm_patches",
+    "longbeach": "/data2/urban-forest/pointnet_data/longbeach/chm_patches",
+    "riverside": "/data2/urban-forest/pointnet_data/riverside/chm_patches",
+    "claremont": "/data2/urban-forest/pointnet_data/claremont/chm_patches"
+}
