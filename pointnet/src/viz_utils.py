@@ -17,7 +17,7 @@ import pandas as pd
 import rasterio
 # import numba
 
-from src import ARGS, DATA_DIR, REPO_ROOT, MODEL_SAVE_FMT
+from src import ARGS, DATA_DIR
 
 def truncate_colormap(cmap, minval=0.0, maxval=1.0, n=256):
     """
@@ -97,15 +97,16 @@ def plot_markers(marker_dict, legend=True):
     """
     if marker_dict is not None:
         for (kind,correct), pts in marker_dict.items():
-            style = MARKER_STYLE_MAP[kind][correct]
-            label = MARKER_LABEL_MAP[kind][correct]
-            plt.scatter(
-                pts[:,0], pts[:,1], 
-                label=label,
-                **style,
-                **ALL_MARKER_STYLE,
-            )
-        if legend:
+            if len(pts):
+                style = MARKER_STYLE_MAP[kind][correct]
+                label = MARKER_LABEL_MAP[kind][correct]
+                plt.scatter(
+                    pts[:,0], pts[:,1], 
+                    label=label,
+                    **style,
+                    **ALL_MARKER_STYLE,
+                )
+        if legend and any(map(len, marker_dict.values())):
             plt.legend()
 
 
@@ -125,9 +126,9 @@ def make_marker_dict(gt=None, preds=None, pointmatch_inds=None):
             output[("pred",None)] = preds
     else:
         tp_gt = np.delete(gt, pointmatch_inds["fn"], axis=0)
-        fn_gt = gt[pointmatch_inds["fn"]]
-        tp_pred = preds[pointmatch_inds["tp"]]
-        fp_pred = preds[pointmatch_inds["fp"]]
+        fn_gt = gt[pointmatch_inds["fn"].astype(int)]
+        tp_pred = preds[pointmatch_inds["tp"].astype(int)]
+        fp_pred = preds[pointmatch_inds["fp"].astype(int)]
 
         output = {
             ("gt",True): tp_gt,

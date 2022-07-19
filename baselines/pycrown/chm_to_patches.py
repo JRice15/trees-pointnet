@@ -4,8 +4,8 @@ import os
 import subprocess
 import tempfile
 from pathlib import PurePath
+from os.path import dirname as dirn
 
-dirn = os.path.dirname
 ROOT = PurePath(dirn(dirn(os.path.abspath(__file__))))
 
 parser = argparse.ArgumentParser()
@@ -14,8 +14,7 @@ parser.add_argument("--chm-dir",required=True)
 parser.add_argument("--out-dir",required=True)
 ARGS = parser.parse_args()
 
-outdir = os.path.join(ARGS.out_dir)
-os.makedirs(outdir, exist_ok=True)
+os.makedirs(ARGS.out_dir, exist_ok=True)
 
 bounds_file = "_TEMP_CHM_TILE_BOUNDS_TEMP.gpkg"
 if os.path.exists(bounds_file):

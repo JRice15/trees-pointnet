@@ -4,16 +4,16 @@ __init__.py: initializes constants and sets random seeds
 
 import argparse
 import datetime
-import random
-import os
-import shutil
-import time
 import json
-from pprint import pprint
+import os
+import random
+import shutil
+import sys
+import time
 from pathlib import PurePath
+from pprint import pprint
 
 import numpy as np
-
 
 """ define global ARGS object """
 
@@ -24,9 +24,15 @@ ARGS = argparse.Namespace()
 
 LIDAR_CHANNELS = ('x', 'y', 'height', 'red', 'green', 'blue', 'nir', 'ndvi')
 
-REPO_ROOT = PurePath(os.path.dirname(os.path.dirname(__file__)))
+from os.path import dirname as dirn
+# up three steps: src -> pointnet -> tree-pointnet
+REPO_ROOT = PurePath(dirn(dirn(dirn(__file__))))
 DATA_DIR = REPO_ROOT.joinpath("data")
-os.makedirs(REPO_ROOT.joinpath("models"), exist_ok=True)
+os.makedirs(REPO_ROOT.joinpath("pointnet/models"), exist_ok=True)
+# add root to path so 'shared' dir is visible
+sys.path.append(REPO_ROOT.as_posix())
+# also add pointnet root
+sys.path.append(REPO_ROOT.joinpath("pointnet").as_posix())
 
 MODEL_SAVE_FMT = ".h5"
 

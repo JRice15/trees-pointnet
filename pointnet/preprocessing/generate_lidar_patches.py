@@ -22,7 +22,8 @@ dn = os.path.dirname
 sys.path.append(dn(dn(os.path.abspath(__file__))))
 
 from src import DATA_DIR
-from src.utils import Bounds
+
+from common.data_handling import Bounds
 
 def naip2ndvi(im):
     nir = im[...,3]

@@ -466,9 +466,9 @@ class PyCrown:
         zmask = (self.chm < 0.5) | np.isnan(self.chm) | (self.chm > 60.)
         self.chm[zmask] = 0
 
-    def tree_detection(self, raster, resolution=None, ws=5, hmin=20,
+    def tree_detection(self, raster, resolution=None, ws=5, #hmin=20,
                        return_trees=False, ws_in_pixels=False,
-                       min_dist=None, threshold_rel=None):
+                       min_dist=None, threshold_abs=None):
         ''' Detect individual trees from CHM raster based on a maximum filter.
         Identified trees are either stores as list in the tree dataframe or
         returned as ndarray.
@@ -507,22 +507,22 @@ class PyCrown:
             else:
                 ws = int(ws / resolution)
 
-        if min_dist is None or threshold_rel is None:
-            # Maximum filter to find local peaks
-            raster_maximum = filters.maximum_filter(
-                raster, footprint=self._get_kernel(ws, circular=True))
-            tree_maxima = raster == raster_maximum
-        else:
-            # alternative using skimage peak_local_max
-            raster[np.isnan(raster)] = 0.
-            # tree_maxima = peak_local_max(chm, indices=False, footprint=kernel)
-            # tree_maxima = peak_local_max(chm, indices=False, footprint=self._get_kernel(ws, circular=True))
-            tree_maxima = peak_local_max(raster, indices=False,
-                                         min_distance=min_dist,
-                                         threshold_rel=threshold_rel)
+        # if min_dist is None or threshold_rel is None:
+        #     # Maximum filter to find local peaks
+        #     raster_maximum = filters.maximum_filter(
+        #         raster, footprint=self._get_kernel(ws, circular=True))
+        #     tree_maxima = raster == raster_maximum
+        # else:
+        # alternative using skimage peak_local_max
+        raster[np.isnan(raster)] = 0.
+        # tree_maxima = peak_local_max(chm, indices=False, footprint=kernel)
+        # tree_maxima = peak_local_max(chm, indices=False, footprint=self._get_kernel(ws, circular=True))
+        tree_maxima = peak_local_max(raster, indices=False,
+                                        min_distance=min_dist,
+                                        threshold_abs=threshold_abs)
 
         # remove tree tops lower than minimum height
-        tree_maxima[raster <= hmin] = 0
+        # tree_maxima[raster <= hmin] = 0
 
         # label each tree
         self.tree_markers, num_objects = ndimage.label(tree_maxima)
@@ -550,6 +550,7 @@ class PyCrown:
             self.trees = self.trees.append(df)
 
         self._check_empty()
+
 
     def crown_delineation(self, algorithm, loc='top', **kwargs):
         """ Function calling external crown delineation algorithms
@@ -658,7 +659,7 @@ class PyCrown:
             lon_min, lon_max, lat_min, lat_max = bbox
         elif inbuf:
             lat_max = self.ul_lat - inbuf
-            lat_min = self.ul_lat - (self.chm.shape[0] * self.resolution) - inbuf
+            lat_min = self.ul_lat - (self.chm.shape[0] * self.resolution) + inbuf # NOTE I fixed a bug here. Used to be -inbuf instead of plus
             lon_min = self.ul_lon + inbuf
             lon_max = self.ul_lon + (self.chm.shape[1] * self.resolution) - inbuf
         elif f_tiles:

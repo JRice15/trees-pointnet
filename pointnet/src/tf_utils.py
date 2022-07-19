@@ -12,7 +12,7 @@ from tensorflow.keras import backend as K
 from tensorflow.keras import layers
 from tensorflow.keras.optimizers import Adam
 
-from src import ARGS, CUSTOM_LAYERS, DATA_DIR, MODEL_SAVE_FMT, REPO_ROOT
+from src import ARGS, CUSTOM_LAYERS, DATA_DIR, MODEL_SAVE_FMT
 from src.losses import get_loss
 
 

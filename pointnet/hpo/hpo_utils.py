@@ -14,9 +14,10 @@ import numpy as np
 import pandas as pd
 import optuna
 
-dirn = os.path.dirname
+from os.path import dirname as dirn
 # root of repository
-ROOT = dirn(dirn(os.path.abspath(__file__)))
+#   up three levels: hpo -> pointnet -> trees-pointnet
+ROOT = dirn(dirn(dirn(os.path.abspath(__file__))))
 
 class MyHpoError(Exception): pass
 class TrialTimeoutError(MyHpoError): pass
@@ -40,8 +41,8 @@ class ignore_kbint():
 
 def studypath(study_name, filename=None):
     if filename is None:
-        return f"{ROOT}/hpo/studies/{study_name}/"
-    return f"{ROOT}/hpo/studies/{study_name}/{filename}"
+        return f"{ROOT}/pointnet/hpo/studies/{study_name}/"
+    return f"{ROOT}/pointnet/hpo/studies/{study_name}/{filename}"
 
 def get_study(name, assume_exists):
     """
@@ -90,7 +91,7 @@ def get_last_trial_status(study):
     return series.iloc[-1]
 
 def glob_modeldir(modelname):
-    glob_path = f"{ROOT}/models/{modelname}-??????-??????"
+    glob_path = f"{ROOT}/pointnet/models/{modelname}-??????-??????"
 
     matching_models = glob.glob(glob_path)
 

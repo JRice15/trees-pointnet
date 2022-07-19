@@ -83,7 +83,7 @@ def make_objective_func(ARGS, gpu, interrupt_event):
         params = dict(**params, **constant_params)
         flags = flags + constant_flags
 
-        cmd = [f"{ROOT}/docker_run.sh", str(gpu), "python", f"{ROOT}/train.py"]
+        cmd = [f"{ROOT}/docker_run.sh", str(gpu), "python", f"{ROOT}/pointnet/train.py"]
         for name, val in params.items():
             if not isinstance(val, list):
                 val = [val]
@@ -179,7 +179,7 @@ def optuna_worker(ARGS, gpu, worker_num, interrupt_event):
                 pass
             gc.collect()
             # remove core dump files (they can be 20+ gb each)
-            for core_file in glob.glob(f"{ROOT}/hpo/core.*"):
+            for core_file in glob.glob(f"{ROOT}/pointnet/hpo/core.*"):
                 try:
                     os.remove(core_file)
                     print("removed", core_file)

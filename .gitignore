@@ -148,7 +148,7 @@ models/
 
 # other outputs
 output/
-hpo/studies
+pointnet/hpo/studies
 
 # temp files
 temp.py

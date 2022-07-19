@@ -13,12 +13,13 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import backend as K
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from src import ARGS, DATA_DIR, LIDAR_CHANNELS
+from src.utils import rotate_pts, scale_meters_to_0_1
 
-from src import ARGS, DATA_DIR, LIDAR_CHANNELS, REPO_ROOT
-from src.utils import (Bounds, MyTimer, get_all_regions, get_naip_bounds,
-                       get_naipfile_path, load_gt_trees, load_naip, rotate_pts,
-                       scale_meters_to_0_1)
+from common.data_handling import (Bounds, get_all_patch_ids, get_all_regions,
+                                  get_naip_bounds, get_naipfile_path,
+                                  load_gt_trees, load_naip)
+from common.utils import MyTimer
 
 VAL_SPLIT = 0.10
 TEST_SPLIT = 0.10
@@ -134,9 +135,7 @@ class LidarPatchGen(keras.utils.Sequence):
         NAIP_DIR = DATA_DIR.joinpath("NAIP_patches")
 
         # load ground-truth trees
-        orig_gt_trees = {}
-        for region in self.regions:
-            orig_gt_trees[region] = load_gt_trees(region)
+        self.gt_full = load_gt_trees(self.regions)
 
         # load bounds and lidar
         self.bounds_full = {}
@@ -150,18 +149,14 @@ class LidarPatchGen(keras.utils.Sequence):
             pts = pts[(z > Z_MIN_CLIP) & (z <= Z_MAX_CLIP)]
             lidar_full[(region,patch_num)] = pts
 
-        # get full gt trees
-        self.gt_full = filter_pts(self.bounds_full, orig_gt_trees, keyfunc=lambda x: x[0]) # selected region
-
         # subdivide bounds
         self.bounds_subdiv = subdivide_bounds(self.bounds_full, self.n_subdivide)
-        # subdivide he lidar
+        # subdivide lidar
         self.lidar_subdiv = filter_pts(self.bounds_subdiv, lidar_full, keyfunc=lambda key: (key[0], key[1]) ) # keyfunc selects region and patchnum
         # subdivide gt trees
         self.gt_subdiv = filter_pts(self.bounds_subdiv, self.gt_full, lambda key: (key[0], key[1]) ) # keyfunc selects region and patchnum
         # free up space
         del lidar_full
-        del orig_gt_trees
 
         self.max_trees = max(len(x) for x in self.gt_subdiv.values())        
 
@@ -430,12 +425,17 @@ class LidarPatchGen(keras.utils.Sequence):
 
 
 
-def get_tvt_split(dsname, regions):
+def get_tvt_split(regions=None):
     """
     returns patch ids for the train, val, and test datasets
     it selects the same patches every time given the same split, by selecting 
     every Nth patch from a deterministically shuffled list from each region
+    args:
+        regions: list(str), or None which defaults ot all regions
     """
+    if regions is None:
+        regions = get_all_regions()
+
     val_step = int(1/VAL_SPLIT)
     test_step = int(1/TEST_SPLIT)
 
@@ -443,19 +443,13 @@ def get_tvt_split(dsname, regions):
     val = []
     test = []
     for region in regions:
-        naipfiles_path = DATA_DIR.joinpath("NAIP_patches", region, "*.tif").as_posix()
-        patch_nums = []
-        naipfiles = sorted(glob.glob(naipfiles_path))
+        patch_ids = get_all_patch_ids(regions=[region])
         # deterministic shuffle of sorted list
-        np.random.default_rng(999).shuffle(naipfiles)
-        for filename in naipfiles:
-            patch_num = int(PurePath(filename).stem.split("_")[-1])
-            patch_nums.append(patch_num)
-        patches = [(region, x) for x in patch_nums]
-        test += patches[::test_step]
-        rest_patches = [x for x in patches if x not in test]
-        val += rest_patches[::val_step]
-        train += [x for x in rest_patches if x not in val]
+        np.random.default_rng(999).shuffle(patch_ids)
+        test += patch_ids[::test_step]
+        rest_patch_ids = [x for x in patch_ids if x not in test]
+        val += rest_patch_ids[::val_step]
+        train += [x for x in rest_patch_ids if x not in val]
     return train, val, test
 
 
@@ -467,7 +461,7 @@ def get_datasets(dsname, regions, sets=("train", "val", "test"), batchsize=None)
         list of LidarPatchGen
     """
     timer = MyTimer()
-    train, val, test = get_tvt_split(dsname, regions)
+    train, val, test = get_tvt_split(regions)
 
     result = []
     for name in sets:

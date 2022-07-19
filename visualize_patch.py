@@ -5,6 +5,10 @@ import open3d
 
 import numpy as np
 
+from common import DATA_DIR
+from common.data_handling import get_default_dsname, get_all_regions
+
+
 def viz_pointcloud(xyz, point_size=6, colors=None):
     pcd = open3d.geometry.PointCloud()
     pcd.points = open3d.utility.Vector3dVector(xyz)
@@ -27,15 +31,14 @@ def viz_pointcloud(xyz, point_size=6, colors=None):
 
 
 def viz_from_ds(args):
-    from src import DATA_DIR, ARGS
-    from src.utils import get_default_dsname, get_all_regions
-    from src.patch_generator import LidarPatchGen
+    from pointnet.src.patch_generator import LidarPatchGen
 
     if args.name is None:
         args.name = get_default_dsname()
 
     ### visualize pts from training dataset loader
 
+    ARGS = argparse.Namespace()
     # set fake dataset params
     ARGS.dsname = args.name
     ARGS.handle_small = "drop"
@@ -78,9 +81,6 @@ def viz_from_ds(args):
 
 
 def viz_from_raw_ds(args):
-    from src import DATA_DIR
-    from src.utils import get_default_dsname, get_all_regions
-
     if args.name is None:
         args.name = get_default_dsname()
 
@@ -97,7 +97,7 @@ def viz_from_raw_ds(args):
 
 
 def viz_from_preds(args):
-    from src.utils import glob_modeldir
+    from pointnet.src.utils import glob_modeldir
 
     path = glob_modeldir(args.name).joinpath("results_test", "raw_preds.npz")
     npz = np.load(path.as_posix())

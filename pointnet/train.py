@@ -27,8 +27,9 @@ from src.losses import get_loss
 from src.models import pointnet
 from src.patch_generator import get_datasets
 from src.tf_utils import MyModelCheckpoint, load_saved_model, output_model
-from src.utils import Bounds, get_all_regions, get_default_dsname
 from src.viz_utils import plot_one_example
+
+from common.data_handling import Bounds, get_all_regions, get_default_dsname
 
 """
 parse args
@@ -131,7 +132,7 @@ pprint(vars(ARGS))
 # create model output dir
 now = datetime.datetime.now()
 modelname = ARGS.name + now.strftime("-%y%m%d-%H%M%S")
-MODEL_DIR = REPO_ROOT.joinpath("models/"+modelname)
+MODEL_DIR = REPO_ROOT.joinpath("pointnet/models/"+modelname)
 os.makedirs(MODEL_DIR, exist_ok=False)
 
 if ARGS.dsname is None:

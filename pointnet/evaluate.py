@@ -23,16 +23,18 @@ from tensorflow.keras import backend as K
 from tqdm import tqdm
 from sklearn.cluster import DBSCAN, KMeans, MiniBatchKMeans
 
-from src import ARGS, DATA_DIR, MODEL_SAVE_FMT, REPO_ROOT
-from src.eval_utils import (OVERLAP_METHODS, find_local_maxima, pointmatch,
+from src import ARGS, DATA_DIR
+from src.eval_utils import (OVERLAP_METHODS, find_local_maxima,
                             rasterize_preds, viz_predictions)
 from src.losses import get_loss
 from src.models import pointnet
 from src.patch_generator import get_datasets
 from src.tf_utils import load_saved_model
-from src.utils import MyTimer, glob_modeldir, load_params_into_ARGS
+from src.utils import glob_modeldir, load_params_into_ARGS
 from src.viz_utils import rasterize_pts_gaussian_blur, plot_one_example
 
+from common.pointmatch import pointmatch
+from common.utils import MyTimer
 
 def clustering_postprocessing(pred_dict, algo_initializer, cluster_aggs):
     """
@@ -147,7 +149,6 @@ def postprocess_and_pointmatch(preds_overlapped, gt, bounds, params, gridsearch_
         pre_threshold = 10 ** params["pre_threshold_exp"]
         preds = filter_by_conf_threshold(preds, pre_threshold)
         new_len = sum(map(len, preds.values()))
-        print("  pre-thresholding filtered {}% of points".format(round((orig_len - new_len) / orig_len * 100), 2))
 
     # Post processing
     if postprocess_mode == "raw":
@@ -352,8 +353,9 @@ def estimate_postproc_params(preds_overlapped_dict, gt_dict, bounds_dict, outdir
                     min_dists=ALL_MIN_DISTS, 
                     post_thresholds=ALL_POST_THRESHOLDS)
 
+    n_trials = 4 if ARGS.test else 200
     study.optimize(objective, 
-        n_trials=200,  # max trials, timeout supersedes
+        n_trials=n_trials,  # max trials, timeout supersedes
         timeout=60*10, # 10 minute timeout
     )
 
@@ -528,6 +530,7 @@ if __name__ == "__main__":
     parser.add_argument("--noplot",action="store_true",help="don't make plots (significantly improves speed)")
     parser.add_argument("--nolosses",action="store_true",help="do not compute loss metrics")
     parser.add_argument("--save-preds",action="store_true",help="save raw predictions as npy files")
+    parser.add_argument("--test",action="store_true",help="just do a test run to make sure imports and such are working")
     parser.parse_args(namespace=ARGS)
 
     main()

@@ -10,3 +10,5 @@ Shapely
 rasterio
 laspy==1.5.1
 numpy==1.16.4
+optuna
+scikit-learn

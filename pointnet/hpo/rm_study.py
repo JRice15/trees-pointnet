@@ -10,4 +10,4 @@ ARGS = parser.parse_args()
 
 
 shutil.rmtree(studypath(ARGS.name))
-shutil.rmtree(f"{ROOT}/models/hpo/{ARGS.name}/")
+shutil.rmtree(f"{ROOT}/pointnet/models/hpo/{ARGS.name}/")
