@@ -31,6 +31,7 @@ def viz_pointcloud(xyz, point_size=6, colors=None):
 
 
 def viz_from_ds(args):
+    from pointnet.src import ARGS
     from pointnet.src.patch_generator import LidarPatchGen
 
     if args.name is None:
@@ -38,7 +39,6 @@ def viz_from_ds(args):
 
     ### visualize pts from training dataset loader
 
-    ARGS = argparse.Namespace()
     # set fake dataset params
     ARGS.dsname = args.name
     ARGS.handle_small = "drop"
@@ -113,7 +113,7 @@ def viz_from_preds(args):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--source",choices=("raw", "ds", "preds"),help="source of pts to load from")
+    parser.add_argument("--source",choices=("raw", "ds", "preds"),default="raw",help="source of pts to load from")
     parser.add_argument("--name",help="name of particular source; dsname for `raw` and `ds`, or model name for `preds`")
     parser.add_argument("--pid","-p",nargs=2,required=True)
     parser.add_argument("--minz",type=float,default=-10)

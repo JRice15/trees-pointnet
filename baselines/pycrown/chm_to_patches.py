@@ -6,7 +6,7 @@ import tempfile
 from pathlib import PurePath
 from os.path import dirname as dirn
 
-ROOT = PurePath(dirn(dirn(os.path.abspath(__file__))))
+from __init__ import ROOT
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--region",required=True)
@@ -20,14 +20,18 @@ bounds_file = "_TEMP_CHM_TILE_BOUNDS_TEMP.gpkg"
 if os.path.exists(bounds_file):
     os.remove(bounds_file)
 
-for naip_path in glob.glob((ROOT / f"data/NAIP_patches/{ARGS.region}/*.tif").as_posix()):
+all_naip = glob.glob((ROOT / f"data/NAIP_patches/{ARGS.region}/*.tif").as_posix())
+assert len(all_naip)
+for naip_path in all_naip:
     patch_num = PurePath(naip_path).stem.split("_")[-1]
 
+    # create bounds file from NAIP tile bounds
     subprocess.run(
         f"gdaltindex {bounds_file} {naip_path}",
         shell=True,
     )
 
+    # crop chms to NAIP tile bounds
     for chm_path in glob.glob(os.path.join(ARGS.chm_dir, "*.tif")):
         chm_name = PurePath(chm_path).stem
         out_file = os.path.join(ARGS.out_dir, chm_name + "_" + patch_num + ".tif")

@@ -1,5 +1,6 @@
 import os
 import sys
+import argparse
 import time
 
 import geopandas as gpd
@@ -12,7 +13,7 @@ from __init__ import ROOT
 from run_pycrown import pycrown_predict_treetops
 
 from common.pointmatch import pointmatch
-
+from common.data_handling import get_tvt_split, load_gt_trees
 
 def make_objective(chms, dtms, dsms):
     def objective(trial):
@@ -47,7 +48,11 @@ def make_objective(chms, dtms, dsms):
 
 
 
-def estimate_params():
+def estimate_params(chms_dirs):
+    """
+    args:
+        
+    """
     sampler = optuna.samplers.TPESampler(
         multivariate=True, # consider the relations between different parameters
         group=True,
@@ -57,13 +62,30 @@ def estimate_params():
         seed=1234,
     )
 
+    train_ids, val_ids, test_ids = get_tvt_split()
+    train_ids = train_ids + val_ids # no need for a val set, just add to train
+
+    train_gt = load_gt_trees(train_ids)
+    test_gt = load_gt_trees(test_ids)
+
+    # TODO get chm etc paths
+
     objective = make_objective(chms, dtms, dsms)
 
     study = optuna.create_study(sampler=sampler, name="pycrown", direction="maximize")
-    study.optimize(n_trials=200)
+    study.optimize(n_trials=1)
+
+    print(study.best_params)
 
 
 
 if __name__ == "__main__":
-    estimate_params()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--specs",required=True)
+    args = parser.parse_args()
+
+    with open(args.specs, "r") as f:
+        specs = json.load(f)
+
+    estimate_params(specs)
 
