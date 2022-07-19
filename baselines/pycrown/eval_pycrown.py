@@ -13,7 +13,7 @@ from __init__ import ROOT
 from run_pycrown import pycrown_predict_treetops
 
 from common.pointmatch import pointmatch
-from common.data_handling import get_tvt_split, load_gt_trees
+from common.data_handling import get_data_splits, load_gt_trees
 
 def make_objective(chms, dtms, dsms):
     def objective(trial):
@@ -62,8 +62,7 @@ def estimate_params(chms_dirs):
         seed=1234,
     )
 
-    train_ids, val_ids, test_ids = get_tvt_split()
-    train_ids = train_ids + val_ids # no need for a val set, just add to train
+    train_ids, test_ids = get_data_splits(sets=("train+val", "test"))
 
     train_gt = load_gt_trees(train_ids)
     test_gt = load_gt_trees(test_ids)

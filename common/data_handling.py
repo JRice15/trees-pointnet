@@ -12,12 +12,6 @@ import rasterio
 from common import REPO_ROOT, DATA_DIR
 
 
-"""
-Constants
-"""
-VAL_SPLIT = 0.10
-TEST_SPLIT = 0.10
-
 
 """
 Useful data classes
@@ -92,7 +86,7 @@ class Bounds:
 train val test splitting
 """
 
-def get_tvt_split(regions=None):
+def get_data_splits(sets=("train", "val", "test"), regions=None):
     """
     returns patch ids for the train, val, and test datasets
     it selects the same patches every time given the same split, by selecting 
@@ -100,26 +94,20 @@ def get_tvt_split(regions=None):
     args:
         regions: list(str), or None which defaults ot all regions
     """
-    if regions is None:
-        regions = get_all_regions()
+    with open(REPO_ROOT.joinpath("traintest_split.py"), "r") as f:
+        splits = json.load(f)
 
-    val_step = int(1/VAL_SPLIT)
-    test_step = int(1/TEST_SPLIT)
+    # select desired splits
+    splits = [splits[name] for name in sets]
 
-    train = []
-    val = []
-    test = []
-    for region in regions:
-        patch_ids = get_all_patch_ids(regions=[region])
-        # deterministic shuffle of sorted list
-        np.random.default_rng(999).shuffle(patch_ids)
-        test += patch_ids[::test_step]
-        rest_patch_ids = [x for x in patch_ids if x not in test]
-        val += rest_patch_ids[::val_step]
-        train += [x for x in rest_patch_ids if x not in val]
-    return train, val, test
+    if regions is not None:
+        # filter by regions
+        splits = [
+            [p_id for p_id in set_ids if p_id[0] in regions] 
+            for set_ids in splits
+        ]
 
-
+    return splits
 
 """
 Data loading & utils
