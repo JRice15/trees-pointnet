@@ -74,7 +74,6 @@ def make_objective_func(ARGS, gpu, interrupt_event):
             "nolosses",
         ]
         if ARGS.test:
-            constant_params["epochs"] = 1
             constant_flags.append("test")
 
         # search space params
