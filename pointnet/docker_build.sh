@@ -1,8 +1,10 @@
 #!/bin/bash
 
+# Creates docker container & compiles tf ops
+
 echo
 echo "Building docker image"
-docker build envs/ -t trees2.2.2
+docker build ../envs/ -t trees2.2.2
 
 echo 
 echo "Compiling TensorFlow ops"
