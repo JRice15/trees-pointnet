@@ -24,20 +24,6 @@ class TrialTimeoutError(MyHpoError): pass
 class KilledTrialError(MyHpoError): pass
 class TrialFailedError(MyHpoError): pass
 
-class ignore_kbint():
-    """
-    ignore keyboard interrupts
-    """
-
-    def __enter__(self):
-        self.old_handler = signal.signal(signal.SIGINT, self.handler)
-                
-    def handler(self, sig, frame):
-        logging.debug('SIGINT received. Ignoring.')
-    
-    def __exit__(self, type, value, traceback):
-        signal.signal(signal.SIGINT, self.old_handler)
-
 
 def studypath(study_name, filename=None):
     if filename is None:
@@ -52,12 +38,12 @@ def get_study(name, assume_exists):
         assume_exists: bool
     """
     os.makedirs(studypath(name), exist_ok=True)
-    heartbeat = 2*60 # 2 minutes, in seconds
+    heartbeat = 5*60 # 5 minutes, in seconds
     storage = optuna.storages.RDBStorage(
         url="sqlite:///" + studypath(name, "study.db"),
         engine_kwargs={"connect_args": {"timeout": 15}}, # longer than usual timeout is ok, because 15s is insignificant compared to the time each trial takes
         heartbeat_interval=heartbeat,
-        grace_period=3*heartbeat,
+        grace_period=3*heartbeat, # trials fail after 15 minutes of inactivity
     )
     sampler = optuna.samplers.TPESampler(
         multivariate=True, # consider the relations between different parameters
@@ -70,7 +56,7 @@ def get_study(name, assume_exists):
 
     if assume_exists:
         try:
-            return optuna.load_study(
+            study = optuna.load_study(
                 study_name=name,
                 storage=storage,
                 sampler=sampler,
@@ -79,7 +65,7 @@ def get_study(name, assume_exists):
             raise ValueError(f"Error loading study '{name}': {str(e)}")
     else:
         try:
-            return optuna.create_study(
+            study = optuna.create_study(
                 study_name=name,
                 storage=storage,
                 direction="maximize",
@@ -87,6 +73,9 @@ def get_study(name, assume_exists):
             )
         except optuna.exceptions.DuplicatedStudyError:
             raise ValueError(f"Study named '{name}' already exists. Supply the --resume flag if you want to resume it")
+
+    optuna.storages.fail_stale_trials(study)
+    return study
 
 def get_last_trial_status(study):
     series = study.trials_dataframe(["state"])["state"]

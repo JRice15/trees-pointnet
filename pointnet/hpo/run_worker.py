@@ -1,31 +1,3 @@
-"""
-
-Creates a three-level system for parallelized hyper-parameter optimization
-For example, with 2 GPUs and 2 workers per GPU:
-
-                 master
-    ________________|_________________
-    |          |          |          |
-    |          |          |          |
-worker0-0  worker0-1  worker1-0  worker1-1
-    |-- GPU0 --|          |-- GPU1 --|
-    |          |          |          |
-  trial      trial      trial      trial
-
-
-The master persists, essentially just sitting and waiting for a keyboard interrupt,
-or for the study to finish
-
-The master spins up N workers (N = num GPUS * workers per GPU), which spawn trials
-repeatedly. The workers also persist until killed by keyboard interrupt, or the study
-finishes.
-
-Trials are a subprocess of the worker, which runs the actual training. Trial run until
-complete, and then are replaced. They can error out without hurting the study as well.
-"""
-
-
-
 import argparse
 import gc
 import glob
@@ -53,7 +25,7 @@ from hpo_utils import (ROOT, KilledTrialError, MyHpoError, TrialFailedError,
 WORKER_POLL_FREQ = 10
 
 
-def make_objective_func(ARGS, gpu, interrupt_event):
+def make_objective_func(ARGS):
     # get search space
     space = getattr(search_spaces, ARGS.search_space)
     assert issubclass(space, search_spaces.SearchSpace)
@@ -83,7 +55,7 @@ def make_objective_func(ARGS, gpu, interrupt_event):
         params = dict(**params, **constant_params)
         flags = flags + constant_flags
 
-        cmd = [f"{ROOT}/pointnet/docker_run.sh", str(gpu), "python", f"{ROOT}/pointnet/train.py"]
+        cmd = [f"{ROOT}/pointnet/docker_run.sh", str(ARGS.gpu), "python", f"{ROOT}/pointnet/train.py"]
         for name, val in params.items():
             if not isinstance(val, list):
                 val = [val]
@@ -151,40 +123,33 @@ class NoImprovementStopping:
             self.interrupt_event.set()
 
 
-def optuna_worker(ARGS, gpu, worker_num, interrupt_event):
+def optuna_worker(ARGS, study):
     """
     worker process
     """
-    worker_id = "{}-{}".format(gpu, worker_num)
-    # study already created by main process
-    study = get_study(ARGS.name, assume_exists=True)
-
-    objective = make_objective_func(ARGS, gpu, interrupt_event)
-
+    objective = make_objective_func(ARGS)
     callbacks = [
         NoImprovementStopping(ARGS.mintrials, ARGS.earlystop, interrupt_event),
     ]
 
-    print("Running worker", worker_id)
-    with ignore_kbint():
-        # run one step at a time
-        while not interrupt_event.is_set():
+    # run one step at a time
+    while True:
+        try:
+            study.optimize(
+                objective,
+                n_trials=1,
+                callbacks=callbacks,
+            )
+        except MyHpoError as e:
+            print(e.__class__.__name__, e)
+        gc.collect()
+        # remove core dump files (they can be 20+ gb each)
+        for core_file in glob.glob(f"{ROOT}/pointnet/hpo/core.*"):
             try:
-                study.optimize(
-                    objective,
-                    n_trials=1,
-                    callbacks=callbacks,
-                )
-            except MyHpoError:
+                os.remove(core_file)
+                print("removed", core_file)
+            except FileNotFoundError:
                 pass
-            gc.collect()
-            # remove core dump files (they can be 20+ gb each)
-            for core_file in glob.glob(f"{ROOT}/pointnet/hpo/core.*"):
-                try:
-                    os.remove(core_file)
-                    print("removed", core_file)
-                except FileNotFoundError:
-                    pass
                 
 
 
@@ -195,13 +160,10 @@ def main():
     """
     parser = argparse.ArgumentParser()
     parser.add_argument("--name",required=True,help="study name: subdirectory inside models/ to save these trials under")
-
-    # resources
-    parser.add_argument("--gpus",required=True,type=int,nargs="+",help="GPU IDs to use")
-    parser.add_argument("--per-gpu",type=int,default=1,help="number of concurrent models to train on each GPU")
+    parser.add_argument("--gpu",required=True,type=int,help="GPU ID to use")
 
     # overwrite/resume
-    parser.add_argument("--resume",action="store_true",help="resume the study of the given name, otherwise will raise an error if this study already exists")
+    parser.add_argument("--resume",action="store_true",help="resume (or run another workr for) the study of the given name, otherwise will raise an error if this study already exists")
     parser.add_argument("--overwrite",action="store_true",help="overwrite study of the given name if it exists")
 
     # searching params
@@ -256,33 +218,11 @@ def main():
         print("Enqueueing default trial")
         study.enqueue_trial(default_params)
 
-    # flag to signal keyboard interrupt to the workers
-    intrpt_event = multiprocessing.Manager().Event()
-
-    procs = []
-    for gpu in ARGS.gpus:
-        for i in range(ARGS.per_gpu):
-            kwargs = {
-                "gpu": gpu,
-                "worker_num": i,
-                "interrupt_event": intrpt_event,
-                "ARGS": ARGS,
-            }
-            p = multiprocessing.Process(target=optuna_worker, kwargs=kwargs)
-            procs.append(p)
-            p.start()
-            # stagger start times
-            time.sleep(2)
-    
     try:
-        for p in procs: 
-            p.join()
+        optuna_worker(ARGS, study)
     except KeyboardInterrupt:
-        print("\nStopping processes. This may take up to {} seconds\n".format(WORKER_POLL_FREQ))
-        intrpt_event.set()
-        for p in procs:
-            p.join()
-        
+        print("\nEnding hpo worker")
+
 
 
 
