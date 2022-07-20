@@ -4,5 +4,7 @@ from os.path import dirname as dirn
 
 # three steps up: pycrown, baselines, root
 ROOT = PurePath(dirn(dirn(dirn(os.path.abspath(__file__)))))
+# one step up
+MY_PYCROWN_DIR = PurePath(dirn(os.path.abspath(__file__)))
 # make 'shared' visible
 sys.path.append(ROOT.as_posix())

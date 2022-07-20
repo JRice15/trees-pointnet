@@ -94,6 +94,8 @@ def get_data_splits(sets=("train", "val", "test"), regions=None):
     args:
         regions: list(str), or None which defaults ot all regions
     """
+    assert isinstance(sets, (list, tuple))
+
     with open(REPO_ROOT.joinpath("data/traintest_split.json"), "r") as f:
         splits = json.load(f)
 

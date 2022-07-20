@@ -1,4 +1,4 @@
-name: pycrown-env
+name: pycrown
 channels:
   - conda
 dependencies:
@@ -16,5 +16,6 @@ dependencies:
   - GDAL>=2.2.2
   - Shapely>=1.6.4
   - rasterio>=0.36.0
+  - ray-core==1.6.0
   - pip:
     - laspy==1.5.1

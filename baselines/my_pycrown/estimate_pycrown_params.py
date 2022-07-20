@@ -13,10 +13,13 @@ import ray
 
 from run_pycrown import pycrown_predict_treetops
 
-from __init__ import ROOT
+from __init__ import ROOT, MY_PYCROWN_DIR
 from common.utils import MyTimer
 from common.pointmatch import pointmatch
 from common.data_handling import get_data_splits, load_gt_trees
+
+
+STUDY_LOCATION = MY_PYCROWN_DIR.joinpath("study_pycrown.db").as_posix()
 
 
 def make_objective(raster_dirs, ground_truth):
@@ -103,15 +106,13 @@ def estimate_params(raster_dirs, ntrials):
     args:
         raster_dirs: dict mapping region to path of directory which holds rasters (chms, dsms, dtms)
     """
-    train_ids, test_ids = get_data_splits(sets=("train+val", "test"))
-
+    (train_ids,) = get_data_splits(sets=("train+val",))
     train_gt = load_gt_trees(train_ids)
-    test_gt = load_gt_trees(test_ids)
 
     objective = make_objective(raster_dirs, train_gt)
 
     storage = optuna.storages.RDBStorage(
-        url="sqlite:///study_pycrown.db",
+        url="sqlite:///" + STUDY_LOCATION,
         engine_kwargs={"connect_args": {"timeout": 10}},
     )
 
@@ -140,14 +141,41 @@ def estimate_params(raster_dirs, ntrials):
 
 
 
+def evaluate_params(raster_dirs):
+    (test_ids,) = get_data_splits(sets=("test",))
+    test_gt = load_gt_trees(test_ids)
+    
+    objective = make_objective(raster_dirs, test_gt)
+
+    storage = optuna.storages.RDBStorage(
+        url="sqlite:///" + STUDY_LOCATION,
+        engine_kwargs={"connect_args": {"timeout": 10}},
+    )
+
+    study = optuna.load_study(storage=storage)
+
+    print("Best params:", study.best_params)
+    print("Best train fscore (found so far):", study.best_value)
+
+    fscore = objective(study.best_trial)
+    print("Test-set fscore:", fscore)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    grp = parser.add_mutually_exclusive_group(required=True)
+    grp.add_argument("--train",action="store_true",help="run `ntrials` more trials of hyperoptimization training")
+    grp.add_argument("--eval",action="store_true",help="evaluate the best-performing params on the test set")
     parser.add_argument("--specs",required=True,help="json, mapping region names to directory paths which contains raster tifs")
     parser.add_argument("--ntrials",type=int,default=100)
     args = parser.parse_args()
 
     with open(args.specs, "r") as f:
-        specs = json.load(f)
+        raster_dirs = json.load(f)
 
-    estimate_params(specs, args.ntrials)
-
+    if args.train:
+        estimate_params(raster_dirs, args.ntrials)
+    elif args.test:
+        evaluate_params(raster_dirs)
+    else:
+        raise ValueError()

@@ -659,7 +659,7 @@ class PyCrown:
             lon_min, lon_max, lat_min, lat_max = bbox
         elif inbuf:
             lat_max = self.ul_lat - inbuf
-            lat_min = self.ul_lat - (self.chm.shape[0] * self.resolution) - inbuf
+            lat_min = self.ul_lat - (self.chm.shape[0] * self.resolution) + inbuf # NOTE I (jr) fixed a bug here. It used to be -inbuf instead of +inbuf
             lon_min = self.ul_lon + inbuf
             lon_max = self.ul_lon + (self.chm.shape[1] * self.resolution) - inbuf
         elif f_tiles:
