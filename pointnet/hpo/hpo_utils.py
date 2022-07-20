@@ -52,7 +52,7 @@ def get_study(name, assume_exists):
         assume_exists: bool
     """
     os.makedirs(studypath(name), exist_ok=True)
-    heartbeat = 30*60 # 30 minutes, in seconds
+    heartbeat = 2*60 # 2 minutes, in seconds
     storage = optuna.storages.RDBStorage(
         url="sqlite:///" + studypath(name, "study.db"),
         engine_kwargs={"connect_args": {"timeout": 15}}, # longer than usual timeout is ok, because 15s is insignificant compared to the time each trial takes
