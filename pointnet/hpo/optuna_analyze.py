@@ -50,6 +50,9 @@ def main():
     pdf = study.trials_dataframe(["value", "params"])
     print(pdf.sort_values(by="value", ascending=False).head(10).T)
 
+    running = (df["state"] == "RUNNING").sum()
+    print(running, "trials are still running")
+
     optuna.visualization.plot_optimization_history(study) \
         .write_image(studypath(args.name, "optimization_history.png"), scale=2)
     optuna.visualization.plot_param_importances(study) \
@@ -57,8 +60,6 @@ def main():
     optuna.visualization.plot_slice(study) \
         .write_image(studypath(args.name, "slice_plot.png"), scale=2)
 
-    print(running, "trials are still running")
-    running = (df["state"] == "RUNNING").sum()
 
 
 if __name__ == "__main__":
