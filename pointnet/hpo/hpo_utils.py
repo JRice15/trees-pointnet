@@ -56,7 +56,7 @@ def get_study(name, assume_exists):
     storage = optuna.storages.RDBStorage(
         url="sqlite:///" + studypath(name, "study.db"),
         engine_kwargs={"connect_args": {"timeout": 15}}, # longer than usual timeout is ok, because 15s is insignificant compared to the time each trial takes
-        heartbeat=heartbeat,
+        heartbeat_interval=heartbeat,
         grace_period=3*heartbeat,
     )
     sampler = optuna.samplers.TPESampler(
