@@ -114,6 +114,7 @@ def estimate_params(raster_dirs, ntrials):
     storage = optuna.storages.RDBStorage(
         url="sqlite:///" + STUDY_LOCATION,
         engine_kwargs={"connect_args": {"timeout": 10}},
+        heartbeat=10, # heartbeat in seconds
     )
 
     sampler = optuna.samplers.TPESampler(
@@ -175,7 +176,7 @@ if __name__ == "__main__":
 
     if args.train:
         estimate_params(raster_dirs, args.ntrials)
-    elif args.test:
+    elif args.eval:
         evaluate_params(raster_dirs)
     else:
         raise ValueError()
