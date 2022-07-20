@@ -75,8 +75,6 @@ def pycrown_predict_treetops(chm, dtm, dsm, outpath, params, area=None, bldgs=No
             plm_ws: peak local max windowsize (pixels)
             plm_min_dist: min pixels between tree peaks
             plm_threshold_abs: meters, min height of trees
-            inbuf_m: meters inward to disallow trees
-            cdl_*: crown deliniation parameters:
                 tree: 0-1
                 seed: 0-1
                 crown: 0-1
@@ -96,13 +94,14 @@ def pycrown_predict_treetops(chm, dtm, dsm, outpath, params, area=None, bldgs=No
     PC.tree_detection(PC.chm, 
                         ws=params["plm_ws"],
                         ws_in_pixels=True,
-                        # hmin=1.,
-                        min_dist=params["plm_min_dist"],
-                        threshold_abs=params["plm_threshold_abs"])
+                        hmin=5.,
+                        #min_dist=params["plm_min_dist"],
+                        #threshold_abs=params["plm_threshold_abs"]
+                    )
 
     # Clip trees to bounding box (no trees on image edge)
     if params["inbuf_m"] > 0:
-        PC.clip_trees_to_bbox(inbuf=params["inbuf_m"]) # inward buffer of 11 metre
+        PC.clip_trees_to_bbox(inbuf=params["inbuf_m"]) # inward buffer of X meters
     
     # remove trees outside of area
     if area is not None:

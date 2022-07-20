@@ -23,12 +23,13 @@ from scipy.spatial.distance import cdist
 
 from skimage.morphology import watershed
 from skimage.filters import threshold_otsu
-from skimage.feature import peak_local_max
+# from skimage.feature import peak_local_max
+
+import gdal
+import osr
 
 from shapely.geometry import mapping, Point, Polygon
 
-import rasterio
-from affine import Affine
 from rasterio.features import shapes as rioshapes
 
 import fiona
@@ -39,15 +40,22 @@ import laspy
 try:
     from pycrown import _crown_dalponte_cython
 except ImportError:
-    print("WARNING: Cython module not compiled. 'crown_dalponte_cython' not available")
+    #print("WARNING: Cython module not compiled. 'crown_dalponte_cython' not available")
+    pass
 from pycrown import _crown_dalponte_numba
 from pycrown import _crown_dalponteCIRC_numba
 
+gdal.UseExceptions()
 warnings.filterwarnings('ignore')
 
 
 class NoTreesException(Exception):
     """ Raised when no tree detected """
+    pass
+
+
+class GDALFileNotFoundException(Exception):
+    """ Raised when GDAL file not found """
     pass
 
 
@@ -110,38 +118,37 @@ class PyCrown:
         # Load the CHM
         self.chm_file = Path(chm_file)
         try:
-            chm_gdal = rasterio.open(str(self.chm_file))
+            chm_gdal = gdal.Open(str(self.chm_file), gdal.GA_ReadOnly)
         except RuntimeError as e:
             raise IOError(e)
-        meta = chm_gdal.meta
-        #proj = osr.SpatialReference(wkt=chm_gdal.GetProjection())
-        #self.epsg = int(proj.GetAttrValue('AUTHORITY', 1))
-        self.epsg = chm_gdal.meta['crs'].to_epsg()
-        self.srs = chm_gdal.meta['crs'].to_wkt() #from_epsg(self.epsg)
-        self.geotransform = chm_gdal.transform #GetGeoTransform()
-        self.resolution = abs(self.geotransform.e)
-        self.ul_lon = self.geotransform.c #chm_gdal.GetGeoTransform()[0]
-        self.ul_lat = self.geotransform.f #chm_gdal.GetGeoTransform()[3]
-        self.chm0 = chm_gdal.read(1) #GetRasterBand(1).ReadAsArray()
+        proj = osr.SpatialReference(wkt=chm_gdal.GetProjection())
+        self.epsg = int(proj.GetAttrValue('AUTHORITY', 1))
+        self.srs = from_epsg(self.epsg)
+        self.geotransform = chm_gdal.GetGeoTransform()
+        self.resolution = abs(self.geotransform[-1])
+        self.ul_lon = chm_gdal.GetGeoTransform()[0]
+        self.ul_lat = chm_gdal.GetGeoTransform()[3]
+        self.chm0 = chm_gdal.GetRasterBand(1).ReadAsArray()
         chm_gdal = None
 
-        # Load the DSM
-        try:
-            self.dsm_file = Path(dsm_file)
-        except RuntimeError as e:
-            raise IOError(e)
-        with rasterio.open(str(self.dsm_file)) as dsm:
-            with rasterio.vrt.WarpedVRT(dsm,**meta) as dsm_vrt:
-                self.dsm = dsm_vrt.read(1)
 
         # Load the DTM
         try:
             self.dtm_file = Path(dtm_file)
         except RuntimeError as e:
             raise IOError(e)
-        with rasterio.open(str(self.dtm_file)) as dtm:
-            with rasterio.vrt.WarpedVRT(dtm,**meta) as dtm_vrt:
-                self.dtm = dtm_vrt.read(1)
+        dtm_gdal = gdal.Open(str(self.dtm_file), gdal.GA_ReadOnly)
+        self.dtm = dtm_gdal.GetRasterBand(1).ReadAsArray()
+        dtm_gdal = None
+
+        # Load the DSM
+        try:
+            self.dsm_file = Path(dsm_file)
+        except RuntimeError as e:
+            raise IOError(e)
+        dsm_gdal = gdal.Open(str(self.dsm_file), gdal.GA_ReadOnly)
+        self.dsm = dsm_gdal.GetRasterBand(1).ReadAsArray()
+        dsm_gdal = None
 
         # Load the LiDAR point cloud
         self.lidar_in_crowns = None
@@ -466,9 +473,8 @@ class PyCrown:
         zmask = (self.chm < 0.5) | np.isnan(self.chm) | (self.chm > 60.)
         self.chm[zmask] = 0
 
-    def tree_detection(self, raster, resolution=None, ws=5, #hmin=20,
-                       return_trees=False, ws_in_pixels=False,
-                       min_dist=None, threshold_abs=None):
+    def tree_detection(self, raster, resolution=None, ws=5, hmin=20,
+                       return_trees=False, ws_in_pixels=False):
         ''' Detect individual trees from CHM raster based on a maximum filter.
         Identified trees are either stores as list in the tree dataframe or
         returned as ndarray.
@@ -507,22 +513,18 @@ class PyCrown:
             else:
                 ws = int(ws / resolution)
 
-        # if min_dist is None or threshold_rel is None:
-        #     # Maximum filter to find local peaks
-        #     raster_maximum = filters.maximum_filter(
-        #         raster, footprint=self._get_kernel(ws, circular=True))
-        #     tree_maxima = raster == raster_maximum
-        # else:
+        # Maximum filter to find local peaks
+        raster_maximum = filters.maximum_filter(
+            raster, footprint=self._get_kernel(ws, circular=True))
+        tree_maxima = raster == raster_maximum
+
         # alternative using skimage peak_local_max
-        raster[np.isnan(raster)] = 0.
+        # chm = inraster.copy()
+        # chm[np.isnan(chm)] = 0.
         # tree_maxima = peak_local_max(chm, indices=False, footprint=kernel)
-        # tree_maxima = peak_local_max(chm, indices=False, footprint=self._get_kernel(ws, circular=True))
-        tree_maxima = peak_local_max(raster, indices=False,
-                                        min_distance=min_dist,
-                                        threshold_abs=threshold_abs)
 
         # remove tree tops lower than minimum height
-        # tree_maxima[raster <= hmin] = 0
+        tree_maxima[raster <= hmin] = 0
 
         # label each tree
         self.tree_markers, num_objects = ndimage.label(tree_maxima)
@@ -550,7 +552,6 @@ class PyCrown:
             self.trees = self.trees.append(df)
 
         self._check_empty()
-
 
     def crown_delineation(self, algorithm, loc='top', **kwargs):
         """ Function calling external crown delineation algorithms
@@ -591,7 +592,6 @@ class PyCrown:
         if kwargs.get('max_crown'):
             max_crown = kwargs['max_crown'] / self.resolution
 
-        print('inraster size: ',inraster.shape)
         if algorithm == 'dalponte_cython':
             tt = time.time()
             crowns = _crown_dalponte_cython._crown_dalponte(
@@ -601,7 +601,7 @@ class PyCrown:
                 th_tree=float(kwargs['th_tree']),
                 max_crown=float(max_crown)
             )
-            print(timeit.format(time.time() - tt))
+            #print(timeit.format(time.time() - tt))
 
         elif algorithm == 'dalponte_numba':
             tt = time.time()
@@ -612,7 +612,7 @@ class PyCrown:
                 th_tree=float(kwargs['th_tree']),
                 max_crown=float(max_crown)
             )
-            print(timeit.format(time.time() - tt))
+            #print(timeit.format(time.time() - tt))
 
         elif algorithm == 'dalponteCIRC_numba':
             tt = time.time()
@@ -623,14 +623,14 @@ class PyCrown:
                 th_tree=float(kwargs['th_tree']),
                 max_crown=float(max_crown)
             )
-            print(timeit.format(time.time() - tt))
+            #print(timeit.format(time.time() - tt))
 
         elif algorithm == 'watershed_skimage':
             tt = time.time()
             crowns = self._watershed(
                 inraster, th_tree=float(kwargs['th_tree'])
             )
-            print(timeit.format(time.time() - tt))
+            #print(timeit.format(time.time() - tt))
 
         self.crowns = np.array(crowns, dtype=np.int32)
 
@@ -659,7 +659,7 @@ class PyCrown:
             lon_min, lon_max, lat_min, lat_max = bbox
         elif inbuf:
             lat_max = self.ul_lat - inbuf
-            lat_min = self.ul_lat - (self.chm.shape[0] * self.resolution) + inbuf # NOTE I fixed a bug here. Used to be -inbuf instead of plus
+            lat_min = self.ul_lat - (self.chm.shape[0] * self.resolution) - inbuf
             lon_min = self.ul_lon + inbuf
             lon_max = self.ul_lon + (self.chm.shape[1] * self.resolution) - inbuf
         elif f_tiles:
@@ -701,7 +701,7 @@ class PyCrown:
                        whether they are located on steep terrain
         """
 
-        print(f'Number of trees: {len(self.trees)}')
+        #print(f'Number of trees: {len(self.trees)}')
 
         # calculate center of mass of crowns
         comass = np.array(
@@ -718,11 +718,6 @@ class PyCrown:
             col, row = self._to_colrow(tree['top'].x, tree['top'].y,
                                        self.resolution)
             rcindices = np.where(self.crowns == tidx + 1)
-            #print('crowns',self.crowns.shape)
-            #print('dtm',self.dtm.shape)
-            #print('dsm',self.dsm.shape)
-            #print('crowns',self.crowns)
-            #print('tidx+1',tidx+1)
             dtm_mean = np.nanmean(self.dtm[rcindices])
             dtm_std = np.nanstd(self.dtm[rcindices])
             dsm_max = np.nanmax(self.dsm[rcindices])
@@ -766,11 +761,11 @@ class PyCrown:
             else:
                 self.trees.tt_corrected.iloc[tidx] = 0
 
-        print(f'Tree tops corrected: {corr_n}')
-        if len(self.trees) > 0:
-            print(f'Tree tops corrected: {100 * corr_n / len(self.trees)}%')
-            print(f'DSM correction: {corr_dsm}')
-            print(f'COM correction: {corr_com}')
+        #print(f'Tree tops corrected: {corr_n}')
+        #if len(self.trees) > 0:
+            #print(f'Tree tops corrected: {100 * corr_n / len(self.trees)}%')
+            #print(f'DSM correction: {corr_dsm}')
+            #print(f'COM correction: {corr_com}')
         return corr_dsm, corr_com
 
     def screen_small_trees(self, hmin=20., loc='top'):
@@ -940,7 +935,7 @@ class PyCrown:
             'properties': {'DN': 'int', 'TH': 'float', 'COR': 'int'}
         }
         with fiona.collection(
-            str(outfile), 'w', 'ESRI Shapefile', schema, crs_wkt=self.srs
+            str(outfile), 'w', 'ESRI Shapefile', schema, crs=self.srs
         ) as output:
             for tidx in range(len(self.trees)):
                 feat = {}
@@ -974,14 +969,12 @@ class PyCrown:
         }
         with fiona.collection(
             str(outfile), 'w', 'ESRI Shapefile',
-            schema, crs_wkt=self.srs
+            schema, crs=self.srs
         ) as output:
             for tidx in range(len(self.trees)):
                 feat = {}
                 tree = self.trees.iloc[tidx]
                 feat['geometry'] = mapping(tree[crowntype])
-                if feat['geometry']['type'] != 'Polygon':
-                  continue
                 feat['properties'] = {
                     'DN': tidx,
                     'TTH': float(tree.top_height),
@@ -1008,31 +1001,20 @@ class PyCrown:
 
         fname.parent.mkdir(parents=True, exist_ok=True)
 
+        driver = gdal.GetDriverByName('GTIFF')
         y_pixels, x_pixels = raster.shape
-        meta = {
-            'width':x_pixels,
-            'height':y_pixels,
-            'dtype':'float32',
-            'count':1,
-            'nodata':0,
-            'crs':rasterio.crs.CRS.from_string(self.srs),
-            'transform':Affine(res,0.,self.ul_lon,0.,-res,self.ul_lat)
-        }
-        with rasterio.open(fname,'w',**meta,driver='GTiff') as f:
-            f.write(raster,1)
-        #driver = gdal.GetDriverByName('GTIFF')
-        #gdal_file = driver.Create(
-            #f'{fname}', x_pixels, y_pixels, 1, gdal.GDT_Float32
-        #)
-        #gdal_file.SetGeoTransform(
-            #(self.ul_lon, res, 0., self.ul_lat, 0., -res)
-        #)
-        #dataset_srs = gdal.osr.SpatialReference()
-        #dataset_srs.ImportFromEPSG(self.epsg)
-        #gdal_file.SetProjection(dataset_srs.ExportToWkt())
-        #band = gdal_file.GetRasterBand(1)
-        #band.SetDescription(title)
-        #band.SetNoDataValue(0.)
-        #band.WriteArray(raster)
-        #gdal_file.FlushCache()
-        #gdal_file = None
+        gdal_file = driver.Create(
+            f'{fname}', x_pixels, y_pixels, 1, gdal.GDT_Float32
+        )
+        gdal_file.SetGeoTransform(
+            (self.ul_lon, res, 0., self.ul_lat, 0., -res)
+        )
+        dataset_srs = gdal.osr.SpatialReference()
+        dataset_srs.ImportFromEPSG(self.epsg)
+        gdal_file.SetProjection(dataset_srs.ExportToWkt())
+        band = gdal_file.GetRasterBand(1)
+        band.SetDescription(title)
+        band.SetNoDataValue(0.)
+        band.WriteArray(raster)
+        gdal_file.FlushCache()
+        gdal_file = None

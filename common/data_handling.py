@@ -230,11 +230,11 @@ def load_gt_trees_region(region):
     y_col = None
     for col in x_column_options:
         if col in table:
-            x_col = table[col].to_numpy()
+            x_col = np.array(table[col])
             break
     for col in y_column_options:
         if col in table:
-            y_col = table[col].to_numpy()
+            y_col = np.array(table[col])
             break
     if x_col is None or y_col is None:
         raise ValueError("Could not find correct gt columns for {}".format(region))

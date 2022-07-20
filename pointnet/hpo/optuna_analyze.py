@@ -57,6 +57,9 @@ def main():
     optuna.visualization.plot_slice(study) \
         .write_image(studypath(args.name, "slice_plot.png"), scale=2)
 
+    print(running, "trials are still running")
+    running = (df["state"] == "RUNNING").sum()
+
 
 if __name__ == "__main__":
     main()
