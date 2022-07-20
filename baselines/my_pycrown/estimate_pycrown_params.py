@@ -63,10 +63,10 @@ def make_objective(raster_dirs, ground_truth):
             "plm_ws": trial.suggest_int("plm_ws", 1, 15),  # in pixels
             "plm_min_dist": trial.suggest_int("plm_min_dist", 1, 15),  # in pixels
             "plm_threshold_abs": trial.suggest_float("plm_threshold_abs", 0, 20, step=0.5), # height in meters
-            "inbuf_m": trial.suggest_int("inbuf_m", 0, 15), # in pixels
-            "cdl_th_tree": trial.suggest_float("cdl_th_tree", 0, 1),
-            "cdl_th_seed": trial.suggest_float("cdl_th_seed", 0, 1),
-            "cdl_th_crown": trial.suggest_float("cdl_th_crown", 0, 1),
+            "inbuf_m": trial.suggest_int("inbuf_m", 0, 15), # in meters
+            "cdl_th_tree": trial.suggest_float("cdl_th_tree", 0, 1, step=0.01),
+            "cdl_th_seed": trial.suggest_float("cdl_th_seed", 0, 1, step=0.01),
+            "cdl_th_crown": trial.suggest_float("cdl_th_crown", 0, 1, step=0.01),
             "cdl_th_maxcrown": trial.suggest_float("cdl_th_maxcrown", 10, 30, step=0.5), # width in meters
         }
 
@@ -122,7 +122,7 @@ def estimate_params(raster_dirs, ntrials):
         group=True,
         warn_independent_sampling=True,
         constant_liar=True, # avoid very similar param combinations being tried simultaneously
-        n_startup_trials=20, # number of random sample trials to begin with
+        n_startup_trials=30, # number of random sample trials to begin with
         seed=1234,
     )
 
@@ -153,7 +153,7 @@ def evaluate_params(raster_dirs):
         engine_kwargs={"connect_args": {"timeout": 10}},
     )
 
-    study = optuna.load_study(storage=storage)
+    study = optuna.load_study(study_name="pycrown", storage=storage)
 
     print("Best params:", study.best_params)
     print("Best train fscore (found so far):", study.best_value)
