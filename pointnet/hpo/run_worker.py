@@ -65,24 +65,23 @@ def make_objective_func(ARGS):
             cmd.append("--"+flag)
 
         p = subprocess.Popen(cmd)
-
         start_time = time.perf_counter()
-        # wait for process to finish
-        while True:
-            time.sleep(WORKER_POLL_FREQ)
-            poll_val = p.poll()
-            # check if we should interrupt
-            if interrupt_event.is_set():
-                # kill the proc
-                p.terminate()
-                p.wait()
-                raise KilledTrialError()
-            # check if process finished
-            if poll_val is not None:
-                break
-            # check if we've timed out
-            if (time.perf_counter() - start_time) / 60 > ARGS.timeout_mins:
-                raise optuna.TrialPruned("Timeout")
+
+        try:
+            # wait for process to finish
+            while True:
+                time.sleep(WORKER_POLL_FREQ)
+                # check if process finished
+                if p.poll() is not None:
+                    break
+                # check if we've timed out
+                if (time.perf_counter() - start_time) / 60 > ARGS.timeout_mins:
+                    raise optuna.TrialPruned("Timeout")
+        except KeyboardInterrupt:
+            # make sure subprocess dies
+            p.terminate()
+            p.wait()
+            raise
         
         # try to read results
         try:
@@ -103,24 +102,26 @@ def make_objective_func(ARGS):
 
 class NoImprovementStopping:
     """
-    optuna callback to stop trials after no improvement for many trials
+    stop optimization after no improvement for many trials
     """
 
-    def __init__(self, min_trials, stopping_trials, interrupt_event):
+    def __init__(self, study, min_trials, stopping_trials):
+        self.study = study
         self.min_trials = min_trials
         self.stopping_trials = stopping_trials
-        self.interrupt_event = interrupt_event
     
-    def __call__(self, study, trial):
-        current_trialnum = trial.number
+    def should_stop(self):
+        current_trialnum = self.study.trials[-1].number
+        # check min trials
+        if current_trialnum < self.min_trials:
+            return False
+        # get num since best trial
         try:
-            best_trialnum = study.best_trial.number
+            best_trialnum = self.study.best_trial.number
         except ValueError:
-            return # no best trial yet exists
+            return False # no best trial yet exists
         trials_since_best = current_trialnum - best_trialnum
-        if best_trialnum >= self.min_trials and trials_since_best >= self.stopping_trials:
-            print("NoImprovementStopping triggered.")
-            self.interrupt_event.set()
+        return trials_since_best > self.stopping_trials
 
 
 def optuna_worker(ARGS, study):
@@ -128,17 +129,14 @@ def optuna_worker(ARGS, study):
     worker process
     """
     objective = make_objective_func(ARGS)
-    callbacks = [
-        NoImprovementStopping(ARGS.mintrials, ARGS.earlystop, interrupt_event),
-    ]
+    condition = NoImprovementStopping(study, ARGS.mintrials, ARGS.earlystop),
 
     # run one step at a time
-    while True:
+    while not condition.should_stop():
         try:
             study.optimize(
                 objective,
                 n_trials=1,
-                callbacks=callbacks,
             )
         except MyHpoError as e:
             print(e.__class__.__name__, e)
@@ -150,6 +148,7 @@ def optuna_worker(ARGS, study):
                 print("removed", core_file)
             except FileNotFoundError:
                 pass
+
                 
 
 
@@ -218,10 +217,7 @@ def main():
         print("Enqueueing default trial")
         study.enqueue_trial(default_params)
 
-    try:
-        optuna_worker(ARGS, study)
-    except KeyboardInterrupt:
-        print("\nEnding hpo worker")
+    optuna_worker(ARGS, study)
 
 
 
