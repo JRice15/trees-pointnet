@@ -19,7 +19,7 @@ import pandas as pd
 import search_spaces
 from hpo_utils import (ROOT, KilledTrialError, MyHpoError, TrialFailedError,
                        TrialTimeoutError, get_study, glob_modeldir,
-                       ignore_kbint, studypath)
+                       studypath)
 
 # frequency (seconds) with which workers check their subprocesses
 WORKER_POLL_FREQ = 10
