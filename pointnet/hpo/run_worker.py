@@ -129,7 +129,7 @@ def optuna_worker(ARGS, study):
     worker process
     """
     objective = make_objective_func(ARGS)
-    condition = NoImprovementStopping(study, ARGS.mintrials, ARGS.earlystop),
+    condition = NoImprovementStopping(study, ARGS.mintrials, ARGS.earlystop)
 
     # run one step at a time
     while not condition.should_stop():
