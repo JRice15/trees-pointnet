@@ -38,9 +38,9 @@ plt.xlabel("Validation set F1-score")
 plt.ylabel("Test set F1-score")
 plt.xlim(0.0, data_max+0.1)
 plt.ylim(0.0, data_max+0.1)
-plt.annotate("$y=x$", (data_max, data_max+0.07))
+plt.annotate("$y=x$", (data_max+0.01, data_max+0.07), size=8)
 plt.annotate("$R^2$={:.3f}".format(r2), (0.02, data_max+0.05))
 plt.tight_layout()
-plt.savefig("valtest.png")
+plt.savefig(f"studies/{name}/val_v_test_fscore.png")
 
 
