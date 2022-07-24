@@ -2,9 +2,11 @@
 use pdal env
 """
 
+import sys
 from copy import copy
 import argparse
 import glob
+import time
 import os
 import subprocess
 import json
@@ -14,27 +16,35 @@ import tempfile
 from shapely.geometry import box
 from pathlib import PurePath
 
-def run_pdal(pipeline):
+dirn = os.path.dirname
+sys.path.append(dirn(dirn(dirn(os.path.abspath(__file__)))))
+from common.utils import MyTimer
+
+def run_pdal(pipeline, nostream=False):
+    print(pipeline)
     with tempfile.NamedTemporaryFile('w', delete=False) as f:
         json.dump({"pipeline": pipeline}, f)
     print(f.name)
-    subprocess.run(['pdal', 'pipeline', f.name])
+    cmd = ["pdal", "pipeline"]
+    if nostream:
+        cmd.append("--nostream")
+    cmd.append(f.name)
+    subprocess.run(cmd)
 
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--las',nargs="+",required=True)
 parser.add_argument("--naip-dir", required=True)
 parser.add_argument("--out-format",required=True)
+parser.add_argument("--nostream",action="store_true")
 ARGS = parser.parse_args()
-
-assert "#" in ARGS.out_format
 
 # get bounds of NAIP
 all_bounds = {}
-for naip_path in glob.glob(ARGS.naip_dir):
+for naip_path in glob.glob(os.path.join(ARGS.naip_dir, "*.tif")):
     patchnum = int(PurePath(naip_path).stem.split("_")[-1])
     with rasterio.open(naip_path) as raster:
-        left, bott, right, top = raster.bounds
+        left, bottom, right, top = raster.bounds
         all_bounds[patchnum] = ([left, right], [bottom, top])
 
 # make sure every index from 0 to N exists
@@ -48,14 +58,10 @@ laz_pipeline.append(
         "bounds": all_bounds
     }
 )
-laz_pipeline.append(
-    {
-        "type": "writers.las",
-        "filename": ARGS.out_format,
-        "compression":"lazperf"
-    })
+laz_pipeline.append(ARGS.out_format)
 
 print('running laz pipeline...')
-run_pdal(laz_pipeline)
+timer = MyTimer()
+run_pdal(laz_pipeline, nostream=ARGS.nostream)
 
-print("done")
+timer.measure("done")

@@ -51,7 +51,8 @@ def main():
     print(pdf.sort_values(by="value", ascending=False).head(10).T)
 
     running = (df["state"] == "RUNNING").sum()
-    print(running, "trials are still running")
+    print(running, "trials are still running:")
+    print(df[df["state"] == "RUNNING"])
 
     optuna.visualization.plot_optimization_history(study) \
         .write_image(studypath(args.name, "optimization_history.png"), scale=2)

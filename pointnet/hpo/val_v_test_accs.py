@@ -32,6 +32,7 @@ r2 = r2_score(test, val)
 
 print("val, test max:", val.max(), test.max())
 data_max = max(val.max(), test.max())
+
 plt.plot(np.linspace(0, 1.0), np.linspace(0, 1.0), c="black", label="$y=x$", linestyle="dashed", linewidth=1)
 plt.scatter(val, test, label="fscore", zorder=3, c="green")
 plt.xlabel("Validation set F1-score")
@@ -43,4 +44,12 @@ plt.annotate("$R^2$={:.3f}".format(r2), (0.02, data_max+0.05))
 plt.tight_layout()
 plt.savefig(f"studies/{name}/val_v_test_fscore.png")
 
-
+# zoomed on highest portion
+plt.plot(np.linspace(0, 1.0), np.linspace(0, 1.0), c="black", label="$y=x$", linestyle="dashed", linewidth=1)
+plt.scatter(val, test, label="fscore", zorder=3, c="green")
+plt.xlabel("Validation set F1-score")
+plt.ylabel("Test set F1-score")
+plt.xlim(0.6, data_max+0.1)
+plt.ylim(0.6, data_max+0.1)
+plt.tight_layout()
+plt.savefig(f"studies/{name}/peak_val_v_test_fscore.png")
