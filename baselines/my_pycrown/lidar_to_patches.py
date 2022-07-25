@@ -5,6 +5,7 @@ use pdal env
 import sys
 from copy import copy
 import argparse
+import re
 import glob
 import time
 import os
@@ -21,7 +22,6 @@ sys.path.append(dirn(dirn(dirn(os.path.abspath(__file__)))))
 from common.utils import MyTimer
 
 def run_pdal(pipeline, nostream=False):
-    print(pipeline)
     with tempfile.NamedTemporaryFile('w', delete=False) as f:
         json.dump({"pipeline": pipeline}, f)
     print(f.name)
@@ -65,3 +65,19 @@ timer = MyTimer()
 run_pdal(laz_pipeline, nostream=ARGS.nostream)
 
 timer.measure("done")
+
+# change numbering from 1 to 0 based
+if "#" in ARGS.out_format:
+    index = ARGS.out_format.index("#")
+    prefix = ARGS.out_format[:index]
+    suffix = ARGS.out_format[index+1:]
+    globpath = re.sub(r"#", "*", ARGS.out_format)
+    keyfunc = lambda x: (len(x), x)
+    for path in sorted(glob.glob(globpath), key=keyfunc):
+        num = int(path[len(prefix):-len(suffix)])
+        target_num = num - 1
+        assert target_num >= 0
+        target_path = prefix + str(target_num) + suffix
+        assert not os.path.exists(target_path), target_path
+        os.rename(path, target_path)
+
