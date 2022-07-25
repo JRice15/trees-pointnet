@@ -68,6 +68,7 @@ def make_objective_func(ARGS):
             cmd.append("--"+flag)
 
         # stdout and stderr to a file
+        print("starting process...")
         log_path = studypath(ARGS.name, f"logs/trial_{trial.number}.out")
         with open(log_path, "w") as log_fp:
             # run the command
@@ -86,11 +87,14 @@ def make_objective_func(ARGS):
                 if (time.perf_counter() - start_time) / 60 > ARGS.timeout_mins:
                     raise optuna.TrialPruned("Timeout")
         except KeyboardInterrupt:
+            print("run_worker.py recieved keyboard interrupt. waiting for subprocess to terminate...")
             # make sure subprocess dies
             p.terminate()
             p.wait()
             raise
         
+        print("subprocess finished. reading results...")
+
         # try to read results
         try:
             model_dir = glob_modeldir(params["name"])

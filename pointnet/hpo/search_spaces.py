@@ -24,7 +24,7 @@ class pnet1(SearchSpace):
     # defaults are fed in as trial params to the get_params function on the 1st trial
     defaults = {
         # data
-        "subdivide": 6,
+        "subdivide": 8,
         "npoints-exp": 2,
         "noise-sigma": 0.1,
         "handle-small": "fill",
@@ -47,6 +47,7 @@ class pnet1(SearchSpace):
 
     @staticmethod
     def get_params(args, trial):
+        #### PNET 1
         flags = []
         params = {
             # data
@@ -87,13 +88,13 @@ class pnet2(SearchSpace):
     # defaults are fed in as trial params to the get_params function on the 1st trial
     defaults = {
         # data
-        "subdivide": 6,
+        "subdivide": 8,
         "npoints-exp": 2,
         "noise-sigma": 0.1,
         "handle-small": "fill",
         # training
         "optimizer": "adam",
-        "batchsize-exp": 3,
+        "batchsize-exp": 4,
         "lr-exp": -2.5,
         # model arch
         "output-flow": "seg",
@@ -110,6 +111,7 @@ class pnet2(SearchSpace):
 
     @staticmethod
     def get_params(args, trial):
+        ### PNET 2
         flags = [
             "pnet2",
         ]
@@ -126,7 +128,7 @@ class pnet2(SearchSpace):
             "reducelr-patience": 3,
             # model arch
             "output-flow": trial.suggest_categorical("output-flow", ["dense", "seg"]),
-            "size-multiplier": 2 ** trial.suggest_int("sm-exp", -1, 2), # 0.5 to 4
+            "size-multiplier": 2 ** trial.suggest_int("sm-exp", -2, 2), # 0.5 to 4
             "conf-act": trial.suggest_categorical("conf-act", ["relu", "sigmoid"]),
             # loss
             "loss": trial.suggest_categorical("loss", ["mmd", "gridmse"]),
@@ -143,7 +145,6 @@ class pnet2(SearchSpace):
         elif params["output-flow"] == "seg":
             params["dropout"] = trial.suggest_float("seg-dropout", 0.0, 0.7, step=0.05)
 
-        # pnet 1 vs 2
         if trial.suggest_categorical("batchnorm", [False, True]):
             flags.append("batchnorm")
         
