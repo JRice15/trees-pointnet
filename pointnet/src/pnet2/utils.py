@@ -49,16 +49,18 @@ def sample_and_group_all(xyz, points, use_xyz=True):
 
     idx = tf.constant(np.tile(np.array(range(nsample)).reshape((1,1,nsample)), (batch_size,1,1)))
 
-    xyz_batchsize = xyz.get_shape()[0]
-    grouped_xyz = tf.reshape(xyz, (xyz_batchsize, 1, nsample, 3)) # (batch_size, npoint=1, nsample, 3)
+    #xyz_batchsize = xyz.get_shape()[0]
+    #grouped_xyz = tf.reshape(xyz, (xyz_batchsize, 1, nsample, 3)) # (batch_size, npoint=1, nsample, 3)
     
-    if points is not None:
-        if use_xyz:
-            new_points = tf.concat([xyz, points], axis=2) # (batch_size, 16, 259)
-        else:
-            new_points = points
-        new_points = tf.expand_dims(new_points, 1) # (batch_size, 1, 16, 259)
+    #if points is not None:
+    if use_xyz:
+        new_points = tf.concat([xyz, points], axis=2) # (batch_size, 16, 259)
     else:
-        new_points = grouped_xyz
+        new_points = points
+    new_points = tf.expand_dims(new_points, 1) # (batch_size, 1, 16, 259)
+    #else:
+    #    new_points = grouped_xyz
+
+    grouped_xyz = None
     return new_xyz, new_points, idx, grouped_xyz
 

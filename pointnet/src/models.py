@@ -157,16 +157,12 @@ def dense_output_flow_2(global_feature, out_npoints, out_channels):
     """
     x = global_feature
 
-    input_size = x.shape[-1]
-    target_size = out_npoints * out_channels
-    intermediate_size = (input_size + target_size) // 2
-
-    x = pointnet_dense(intermediate_size, "outmlp_dense1")(x)
     if ARGS.dropout_rate > 0:
         x = layers.Dropout(ARGS.dropout_rate, name="outmlp_dropout1")(x)
-    x = pointnet_dense(target_size, "outmlp_dense2")(x)
+    intermediate_channels = out_channels * 8
+    x = pointnet_dense(out_npoints * intermediate_channels, bn=False, name="outmlp_dense1")(x)
     
-    x = layers.Reshape((out_npoints, out_channels), name="outmlp_reshape")(x)
+    x = layers.Reshape((out_npoints, intermediate_channels), name="outmlp_reshape")(x)
     if ARGS.dropout_rate > 0:
         x = layers.Dropout(ARGS.dropout_rate, name="outmlp_dropout2")(x)
 

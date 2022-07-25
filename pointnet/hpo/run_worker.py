@@ -132,7 +132,7 @@ def optuna_worker(ARGS, study):
     condition = NoImprovementStopping(study, ARGS.mintrials, ARGS.earlystop)
 
     # run one step at a time
-    while not condition.should_stop():
+    while True:
         try:
             study.optimize(
                 objective,
@@ -148,6 +148,10 @@ def optuna_worker(ARGS, study):
                 print("removed", core_file)
             except FileNotFoundError:
                 pass
+
+        # check stopping
+        if condition.should_stop():
+            return
 
                 
 
