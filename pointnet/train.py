@@ -22,7 +22,7 @@ from tensorflow.keras import backend as K
 from tensorflow.keras import callbacks, layers, optimizers
 
 import evaluate
-from src import ARGS, DATA_DIR, MODEL_SAVE_FMT, REPO_ROOT
+from src import ARGS, DATA_DIR, MODEL_SAVE_FMT, REPO_ROOT, LIDAR_CHANNELS
 from src.losses import get_loss
 from src.models import pointnet
 from src.patch_generator import get_datasets
@@ -147,6 +147,37 @@ with open(MODEL_DIR.joinpath("params.json"), "w") as f:
 
 
 """
+create model
+"""
+print("Building model")
+
+# map loss modes to number of output features and points
+output_channels_map = {
+    "gridmse": 3,   # x,y,confidence
+    "mmd": 3,       # x,y,confidence
+    "p2p": 3        # x,y,confidence
+}
+
+inpt_shape = (ARGS.npoints, len(LIDAR_CHANNELS))
+
+model = pointnet(
+    inpt_shape=inpt_shape,
+    size_multiplier=ARGS.size_multiplier,
+    output_channels=output_channels_map[ARGS.loss],
+)
+output_model(model, MODEL_DIR, show=ARGS.show_summary)
+
+loss, metrics = get_loss()
+
+optim = optimizer_options[ARGS.optimizer]
+model.compile(
+    loss=loss, 
+    metrics=metrics,
+    optimizer=optim(ARGS.lr)
+)
+
+
+"""
 load data
 """
 
@@ -154,7 +185,8 @@ train_gen, val_gen = get_datasets(ARGS.dsname, ARGS.regions, ("train", "val"))
 train_gen.summary()
 val_gen.summary()
 x_shape, y_shape = train_gen.get_batch_shape()
-inpt_shape = x_shape[1:]
+data_shape = x_shape[1:]
+assert data_shape == inpt_shape, f"data generator shape is different than expected: {data_shape} {inpt_shape}"
 
 
 if not ARGS.noplot:
@@ -191,32 +223,8 @@ if not ARGS.noplot:
 
 
 """
-create model
+train model
 """
-print("Building model")
-
-# map loss modes to number of output features and points
-output_channels_map = {
-    "gridmse": 3,   # x,y,confidence
-    "mmd": 3,       # x,y,confidence
-    "p2p": 3        # x,y,confidence
-}
-
-model = pointnet(
-    inpt_shape=inpt_shape,
-    size_multiplier=ARGS.size_multiplier,
-    output_channels=output_channels_map[ARGS.loss],
-)
-output_model(model, MODEL_DIR, show=ARGS.show_summary)
-
-loss, metrics = get_loss()
-
-optim = optimizer_options[ARGS.optimizer]
-model.compile(
-    loss=loss, 
-    metrics=metrics,
-    optimizer=optim(ARGS.lr)
-)
 
 callback_dict = {
     "history": callbacks.History(),
@@ -226,10 +234,6 @@ callback_dict = {
     "modelcheckpoint": MyModelCheckpoint(MODEL_DIR, verbose=1, 
         epoch_per_save=1, save_best_only=True)
 }
-
-"""
-train model
-"""
 
 try:
     H = model.fit(

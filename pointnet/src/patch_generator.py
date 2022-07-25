@@ -179,6 +179,9 @@ class LidarPatchGen(keras.utils.Sequence):
                     pts = np.concatenate([pts, filler_pts], axis=0)
                 # duplicate points
                 elif ARGS.handle_small == "repeat":
+                    if len(pts) == 0:
+                        # no points to duplicate, just drop this patch
+                        continue
                     selected = self.random.choice(pts, needed, axis=0)
                     pts = np.concatenate([pts, selected], axis=0)
                 else:
