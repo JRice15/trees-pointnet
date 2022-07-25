@@ -30,6 +30,9 @@ def make_objective_func(ARGS):
     space = getattr(search_spaces, ARGS.search_space)
     assert issubclass(space, search_spaces.SearchSpace)
 
+    log_dir = studypath(ARGS.name, "logs")
+    os.makedirs(log_dir, exist_ok=True)
+
     def objective(trial):
         """
         function that spawns a trial process
@@ -64,7 +67,12 @@ def make_objective_func(ARGS):
         for flag in flags:
             cmd.append("--"+flag)
 
-        p = subprocess.Popen(cmd)
+        # stdout and stderr to a file
+        log_path = studypath(ARGS.name, f"logs/trial_{trial.number}.out")
+        with open(log_path, "w") as log_fp:
+            # run the command
+            p = subprocess.Popen(cmd, stdout=log_fp, stderr=subprocess.STDOUT)
+
         start_time = time.perf_counter()
 
         try:
