@@ -64,12 +64,13 @@ if not os.path.exists(dsm_path):
             "type":"filters.range",
             "limits":"returnnumber[1:1]"
         })
-    dsm_pipeline.append(
-        {
-            "type":"filters.reprojection",
-            "in_srs":args.input_srs,
-            "out_srs":args.output_srs
-        })
+    if ARGS.input_srs != ARGS.output_srs:
+        dsm_pipeline.append(
+            {
+                "type":"filters.reprojection",
+                "in_srs":args.input_srs,
+                "out_srs":args.output_srs
+            })
     #dsm_pipeline.append(
         #{
             #"type":"filters.outlier",
@@ -112,12 +113,13 @@ if not os.path.exists(dtm_path):
             "type":"filters.range",
             "limits":"Classification[2:2]"
         })
-    dtm_pipeline.append(
-        {
-            "type":"filters.reprojection",
-            "in_srs":args.input_srs,
-            "out_srs":args.output_srs
-        })
+    if ARGS.input_srs != ARGS.output_srs:
+        dtm_pipeline.append(
+            {
+                "type":"filters.reprojection",
+                "in_srs":args.input_srs,
+                "out_srs":args.output_srs
+            })
     if args.delaunay:
         dtm_pipeline.append(
         {
@@ -136,14 +138,14 @@ if not os.path.exists(dtm_path):
             })
     else:
         # get bounds of DSM
-        with rasterio.open(dsm_path) as dsm:
-            left = dsm.bounds.left
-            bottom = dsm.bounds.bottom
-            right = dsm.bounds.right
-            top = dsm.bounds.top
-            H,W = dsm.height,dsm.width
-            origin_x = dsm.transform.c
-            origin_y = dsm.transform.f
+        # with rasterio.open(dsm_path) as dsm:
+        #     left = dsm.bounds.left
+        #     bottom = dsm.bounds.bottom
+        #     right = dsm.bounds.right
+        #     top = dsm.bounds.top
+        #     H,W = dsm.height,dsm.width
+        #     origin_x = dsm.transform.c
+        #     origin_y = dsm.transform.f
 
         dtm_pipeline.append(
             {
