@@ -201,12 +201,12 @@ if __name__ == "__main__":
     parser.add_argument("--spectral",action="store_true")
     ARGS = parser.parse_args()
 
-    with open(args.specs, "r") as f:
+    with open(ARGS.specs, "r") as f:
         raster_dirs = json.load(f)
 
-    if args.train:
+    if ARGS.train:
         estimate_params(ARGS, raster_dirs)
-    elif args.eval:
+    elif ARGS.eval:
         evaluate_params(ARGS, raster_dirs)
     else:
         raise ValueError()
