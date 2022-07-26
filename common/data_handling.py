@@ -183,6 +183,18 @@ def get_naipfile_path(region, patch_num):
         raise ValueError("{} matching NAIP files found for '{} {}'. Expected exactly 1".format(len(found), region, patch_num))
     return found[0]
 
+
+def naip2ndvi(im):
+    """
+    convert a NAIP tile into an NDVI image, shape (256,256)
+    """
+    nir = im[...,3]
+    red = im[...,0]
+    ndvi = (nir - red) / (nir + red)
+    ndvi = np.nan_to_num(ndvi, nan=0.0)
+    return ndvi
+
+
 def load_naip(region, patch_num, bounds=None):
     """
     load a NAIP tile, or a subsection of it

@@ -71,7 +71,7 @@ class PyCrown:
     __status__ = "Development"
 
     def __init__(self, chm_file, dtm_file, dsm_file, las_file=None,
-                 outpath=None, suffix=None):
+                 outpath=None, suffix=None, spectral_mask=None):
         """ PyCrown class
 
         Parameters
@@ -88,6 +88,7 @@ class PyCrown:
                     Output directory
         suffix   :  str, optional
                     text appended to output file names
+        spectral_mask: array of 1s or 0s, same shape as chm, where 1 is valid and 0 is invalid (JR)
 
         Example
         -------
@@ -114,7 +115,7 @@ class PyCrown:
         suffix = f'_{suffix}' if suffix else ''
 
         self.outpath = Path(outpath) if outpath else Path('./')
-
+        
         # Load the CHM
         self.chm_file = Path(chm_file)
         try:
@@ -130,7 +131,6 @@ class PyCrown:
         self.ul_lat = chm_gdal.GetGeoTransform()[3]
         self.chm0 = chm_gdal.GetRasterBand(1).ReadAsArray()
         chm_gdal = None
-
 
         # Load the DTM
         try:
@@ -149,6 +149,18 @@ class PyCrown:
         dsm_gdal = gdal.Open(str(self.dsm_file), gdal.GA_ReadOnly)
         self.dsm = dsm_gdal.GetRasterBand(1).ReadAsArray()
         dsm_gdal = None
+
+        # Spectral Mask (JR EDIT)
+        if spectral_mask is not None:
+            spectral_mask = spectral_mask.astype(float)
+            assert np.logical_or(
+                np.isclose(spectral_mask, 0),
+                np.isclose(spectral_mask, 1)
+            ).all(), "spectral mask is not 0/1"
+
+            self.chm0 *= spectral_mask
+            self.dsm *= spectral_mask
+            # self.dtm *= spectral_mask ### dtm doesn't measure above-ground things anyway
 
         # Load the LiDAR point cloud
         self.lidar_in_crowns = None
@@ -659,7 +671,7 @@ class PyCrown:
             lon_min, lon_max, lat_min, lat_max = bbox
         elif inbuf:
             lat_max = self.ul_lat - inbuf
-            lat_min = self.ul_lat - (self.chm.shape[0] * self.resolution) + inbuf # NOTE I (jr) fixed a bug here. It used to be -inbuf instead of +inbuf
+            lat_min = self.ul_lat - (self.chm.shape[0] * self.resolution) + inbuf # NOTE JR EDIT: fixed a bug here. It used to be -inbuf instead of +inbuf
             lon_min = self.ul_lon + inbuf
             lon_max = self.ul_lon + (self.chm.shape[1] * self.resolution) - inbuf
         elif f_tiles:
