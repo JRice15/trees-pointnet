@@ -28,7 +28,7 @@ def make_objective(raster_dirs, ground_truth, return_metrics=False):
     def get_raster_path(region, patchnum, kind):
         return os.path.join(
             raster_dirs[region],
-            f"{kind}_{patchnum}.tif"
+            f"{region}_{kind}_{patchnum}.tif"
         )
 
     def predict_patch(patch_id, params):

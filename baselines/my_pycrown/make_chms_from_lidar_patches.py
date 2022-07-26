@@ -54,7 +54,10 @@ def make_dsm(args, inputs, dsm_path, write_params):
             "type":"filters.range",
             "limits":"returnnumber[1:1]"
         })
-    dtm_pipeline.append({
+    dsm_pipeline.append({
+        "type": "filters.hag_nn"
+    })
+    dsm_pipeline.append({
         "type": "filters.range",
         "limits": "HeightAboveGround[-10.0:50]" # -10 <= hag <= 50
     })
@@ -91,6 +94,9 @@ def make_dtm(args, inputs, dtm_path, write_params):
         os.remove(dtm_path)
     
     dtm_pipeline = copy(inputs)
+    dtm_pipeline.append({
+        "type": "filters.hag_nn"
+    })
     dtm_pipeline.append({
         "type": "filters.range",
         "limits": "HeightAboveGround[-10.0:50]" # -10 <= hag <= 50
