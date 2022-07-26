@@ -43,19 +43,14 @@ def make_objective(ARGS, raster_dirs, ground_truth, return_metrics=False):
             f"{region}_{kind}_{patchnum}.tif"
         )
     
-    NDVI_IMS = {}
 
     def predict_patch(patch_id, params):
         region, patchnum = patch_id
 
         if ARGS.spectral:
-            # get NDVI (cached between trials for performance)
-            if patch_id in NDVI_IMS:
-                ndvi = NDVI_IMS[patch_id]
-            else:
-                ndvi = naip2ndvi(load_naip(region, patch_num))
-                NDVI_IMS[patch_id] = ndvi
-            
+            # get NDVI
+            ndvi = naip2ndvi(load_naip(region, patch_num))
+            # create mask with ndvi threshold
             threshold = params.pop("ndvi_thresh")
             spectral_mask = (ndvi >= threshold)
         else:
