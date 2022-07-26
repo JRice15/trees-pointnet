@@ -15,6 +15,10 @@ import numpy as np
 
 from common import DATA_DIR
 
+
+DPI = 200
+matplotlib.rcParams.update({'font.size': 15})
+
 def truncate_colormap(cmap, minval=0.0, maxval=1.0, n=256):
     """
     https://stackoverflow.com/questions/18926031/how-to-extract-a-subset-of-a-colormap-as-a-new-colormap-in-matplotlib
@@ -24,32 +28,32 @@ def truncate_colormap(cmap, minval=0.0, maxval=1.0, n=256):
         cmap(np.linspace(minval, maxval, n)))
     return new_cmap
 
-
+# clip at 95% so it doesn't interfere with gt markers
 CMAP = truncate_colormap(plt.get_cmap("viridis"), maxval=0.95)
 
 # plot marker styles
 ALL_MARKER_STYLE = {
     "edgecolors": 'black',
-    "linewidths": 0.5,
+    "linewidths": 1.0,
 }
 GT_POS_MARKER_STYLE = {
     "marker": "o",
-    "s": 65,
+    "s": 75,
     "color": "gold",
 }
 GT_NEG_MARKER_STYLE = {
     "marker": "o",
-    "s": 60,
+    "s": 70,
     "color": "red",
 }
 TP_MARKER_STYLE = {
     "marker": "P",
-    "s": 60,
+    "s": 70,
     "color": "gold",
 }
 FP_MARKER_STYLE = {
     "marker": "X",
-    "s": 60,
+    "s": 70,
     "color": "red",
 }
 
@@ -156,7 +160,7 @@ def plot_NAIP(naip, bounds, filename, markers):
     plot_markers(markers)
 
     plt.tight_layout()
-    plt.savefig(filename)
+    plt.savefig(filename, dpi=DPI)
     plt.clf()
     plt.close()
 
@@ -174,9 +178,13 @@ def plot_raster(gridvals, gridcoords, filename, *, colorbar_label=None,
     shape = (10,8) if colorbar else (8,8)
     fig, ax = plt.subplots(figsize=shape)
 
-    x = gridcoords[...,0]
-    y = gridcoords[...,1]
-    plt.pcolormesh(x,y,gridvals, shading="auto", cmap=CMAP)
+    if gridcoords is None:
+        plt.pcolormesh(gridvals, shading="auto", cmap=CMAP)
+    else:
+        x = gridcoords[...,0]
+        y = gridcoords[...,1]
+        plt.pcolormesh(x,y,gridvals, shading="auto", cmap=CMAP)
+
     if colorbar:
         plt.colorbar(label=colorbar_label)
 
@@ -188,7 +196,7 @@ def plot_raster(gridvals, gridcoords, filename, *, colorbar_label=None,
         plt.xticks([])
         plt.yticks([])
     plt.tight_layout()
-    plt.savefig(filename)
+    plt.savefig(filename, dpi=DPI)
     plt.clf()
     plt.close()
 

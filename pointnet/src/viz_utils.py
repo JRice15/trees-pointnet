@@ -211,7 +211,9 @@ def rasterize_and_plot(pts, bounds, filename, *, gaussian_blur=True, rel_sigma=N
     if clip is not None:
         gridvals = np.clip(gridvals, None, clip)
 
-    plot_raster(gridvals, gridcoords, filename, 
+    plot_raster(gridvals, 
+        gridcoords=gridcoords, 
+        filename=filename, 
         colorbar_label=weight_label,
         markers=markers,
         title=title,
