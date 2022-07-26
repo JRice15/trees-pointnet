@@ -140,10 +140,14 @@ def get_all_patch_ids(regions=None):
     """
     if regions is None:
         regions = get_all_regions()
+    assert isinstance(regions, (list, tuple))
+
     p_ids = []
     for region in regions:
         naipfiles_path = DATA_DIR.joinpath("NAIP_patches", region, "*.tif").as_posix()
         naipfiles = sorted(glob.glob(naipfiles_path))
+        if not len(naipfiles):
+            raise ValueError(f"No NAIP tiles found for region {region}")
         for filename in naipfiles:
             patch_num = int(PurePath(filename).stem.split("_")[-1])
             p_ids.append( (region, patch_num) )

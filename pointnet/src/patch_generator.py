@@ -399,6 +399,11 @@ class LidarPatchGen(keras.utils.Sequence):
         print(" ", self.npoints, "points per patch.")
         total_pts = sum([x.shape[0] for x in self.lidar_subdiv.values()])
         print(" ", "{:.3e}".format(total_pts), "potential input points in dataset (not all get used every epoch)")
+        total_trees = sum([x.shape[0] for x in self.gt_subdiv.values()])
+        print(" ", total_trees, "total trees. ({:.2f} per patch)".format(total_trees / self.num_ids))
+        min_trees = min([x.shape[0] for x in self.gt_subdiv.values()])
+        max_trees = max([x.shape[0] for x in self.gt_subdiv.values()])
+        print(" ", "min trees:", min_trees, "max trees:", max_trees)
         if ARGS.handle_small == "drop":
             print("   ", self.num_small_patches, "patches dropped for having too few lidar points")
         else:

@@ -88,24 +88,24 @@ class pnet2(SearchSpace):
     # defaults are fed in as trial params to the get_params function on the 1st trial
     defaults = {
         # data
-        "subdivide": 8,
-        "npoints-exp": 2,
-        "noise-sigma": 0.1,
-        "handle-small": "fill",
+        "subdivide": 4,
+        "npoints-exp": 3,
+        "noise-sigma": 0.5,
+        "handle-small": "drop",
         # training
         "optimizer": "adam",
         "batchsize-exp": 4,
         "lr-exp": -2.5,
         # model arch
         "output-flow": "seg",
-        "sm-exp": 0,
+        "sm-exp": -1,
         "conf-act": "sigmoid",
-        "seg-dropout": 0.3,
-        # "batchnorm": False,
+        "seg-dropout": 0.05,
+        "batchnorm": True,
         # loss
         "loss": "gridmse",
-        "gridmse-agg": "sum",
-        "gaussian-sigma": 1.5,
+        "gridmse-agg": "max",
+        "gaussian-sigma": 2.5,
     }
 
 

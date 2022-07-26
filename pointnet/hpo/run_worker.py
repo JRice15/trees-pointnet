@@ -186,7 +186,7 @@ def main():
     parser.add_argument("--dsname",help="(if not resuming:) name of dataset to use ")
     parser.add_argument("--earlystop",type=int,default=50,help="number of trials with no improvement when earlystopping occurs")
     parser.add_argument("--mintrials",type=int,default=200,help="number of trials for which earlystopping is not allowed to occur")
-    parser.add_argument("--timeout-mins",type=float,default=(60*5),help="timeout for individual trials, in minutes (default 5 hours)")
+    parser.add_argument("--timeout-mins",type=float,default=(60*4),help="timeout for individual trials, in minutes (default 4 hours)")
 
     # misc
     parser.add_argument("--test",action="store_true",help="just run one-epoch trials")
