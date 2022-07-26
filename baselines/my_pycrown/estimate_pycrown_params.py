@@ -17,7 +17,7 @@ from run_pycrown import pycrown_predict_treetops
 from __init__ import ROOT, MY_PYCROWN_DIR
 from common.utils import MyTimer
 from common.pointmatch import pointmatch
-from common.data_handling import get_data_splits, load_gt_trees, load_naip, naip2ndvi
+from common.data_handling import get_data_splits, load_gt_trees, load_naip, naip2ndvi, get_all_patch_ids
 
 
 def get_study_storage(ARGS):
@@ -35,26 +35,16 @@ def get_study_storage(ARGS):
     return storage
 
 
-def make_objective(ARGS, raster_dirs, ground_truth, return_metrics=False):
+def make_objective(raster_dirs, ground_truth, return_metrics=False, spectral=False):
 
     def get_raster_path(region, patchnum, kind):
         return os.path.join(
             raster_dirs[region],
             f"{region}_{kind}_{patchnum}.tif"
         )
-    
 
-    def predict_patch(patch_id, params):
+    def predict_patch(patch_id, params, spectral_mask=None):
         region, patchnum = patch_id
-
-        if ARGS.spectral:
-            # get NDVI
-            ndvi = naip2ndvi(load_naip(region, patch_num))
-            # create mask with ndvi threshold
-            threshold = params.pop("ndvi_thresh")
-            spectral_mask = (ndvi >= threshold)
-        else:
-            spectral_mask = None
 
         try:
             PC = pycrown_predict_treetops(
@@ -81,6 +71,12 @@ def make_objective(ARGS, raster_dirs, ground_truth, return_metrics=False):
 
     timer = MyTimer()
 
+    # get ndvi images
+    if spectral:
+        ALL_NDVI = {}
+        for p_id in ground_truth.keys():
+            ALL_NDVI[p_id] = naip2ndvi(load_naip(*p_id))
+
     def objective(trial):
         timer.start()
         params = {
@@ -94,13 +90,25 @@ def make_objective(ARGS, raster_dirs, ground_truth, return_metrics=False):
             "cdl_th_crown": trial.suggest_float("cdl_th_crown", 0, 1, step=0.01),
             "cdl_th_maxcrown": trial.suggest_float("cdl_th_maxcrown", 10, 30, step=0.5), # width in meters
         }
-        if ARGS.spectral:
-            params["ndvi_thresh"] = trial.suggest_float("ndvi_thresh", -1, 1, step=0.01)
 
-        print(params)
+        # build pred func
+        if spectral:
+            threshold = trial.suggest_float("ndvi_thresh", -1, 1, step=0.01)
+            spectral_masks = {p_id: (ndvi >= threshold) for p_id,ndvi in ALL_NDVI.items()}
+            def pred_func(p_id):
+                return ray_predict_patch.remote(
+                    p_id, params, spectral_mask=spectral_masks[p_id]
+                )
+        else:
+            def pred_func(p_id):
+                return ray_predict_patch.remote(
+                    p_id, params, spectral_mask=None,
+                )
+
+        # print(params)
 
         patch_ids = list(ground_truth.keys())
-        preds = ray.get( [ray_predict_patch.remote(p_id, params) for p_id in patch_ids] )
+        preds = ray.get( [pred_func(p_id) for p_id in patch_ids] )
         # unpack corrected/uncorrected
         top, top_cor = zip(*preds)
         # associate with respective patch ids
@@ -136,7 +144,7 @@ def estimate_params(ARGS, raster_dirs):
     (train_ids,) = get_data_splits(sets=("train+val",))
     train_gt = load_gt_trees(train_ids)
 
-    objective = make_objective(ARGS, raster_dirs, train_gt)
+    objective = make_objective(raster_dirs, train_gt, spectral=ARGS.spectral)
 
     storage = get_study_storage(ARGS)
 
@@ -169,7 +177,8 @@ def evaluate_params(ARGS, raster_dirs):
     (test_ids,) = get_data_splits(sets=("test",))
     test_gt = load_gt_trees(test_ids)
     
-    objective = make_objective(ARGS, raster_dirs, test_gt, return_metrics=True)
+    objective = make_objective(raster_dirs, test_gt, return_metrics=True, 
+                    spectral=ARGS.spectral)
 
     storage = get_study_storage(ARGS)
 
