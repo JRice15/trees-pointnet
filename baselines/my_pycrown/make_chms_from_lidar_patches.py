@@ -135,7 +135,8 @@ naip_files = glob.glob(os.path.join(args.naip_dir, "*.tif"))
 
 for naip in naip_files:
     num = PurePath(naip).stem.split("_")[-1]
-    print("patch", num)
+    region = PurePath(naip).stem.split("_")[0]
+    print("patch", region, num)
     with rasterio.open(naip) as raster:
         left = raster.bounds.left
         bottom = raster.bounds.bottom
@@ -154,9 +155,9 @@ for naip in naip_files:
 
     inputs = [os.path.join(args.lidar_dir, f"lidar_{num}.las")]
 
-    dsm_path = os.path.join(args.output_dir, f"dsm_{num}.tif")
-    dtm_path = os.path.join(args.output_dir, f"dtm_{num}.tif")
-    chm_path = os.path.join(args.output_dir, f"chm_{num}.tif")
+    dsm_path = os.path.join(args.output_dir, f"{region}_dsm_{num}.tif")
+    dtm_path = os.path.join(args.output_dir, f"{region}_dtm_{num}.tif")
+    chm_path = os.path.join(args.output_dir, f"{region}_chm_{num}.tif")
 
     make_dsm(args, inputs, dsm_path=dsm_path, write_params=write_params)
     make_dtm(args, inputs, dtm_path=dtm_path, write_params=write_params)
