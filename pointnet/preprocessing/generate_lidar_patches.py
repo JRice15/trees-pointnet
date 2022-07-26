@@ -92,7 +92,7 @@ def process_region(regionname, spec, outdir):
         # convert to float
         naip = np.array([val for val in naip]) / 256
         assert len(naip) == len(pts)
-        ndvi = naip2ndvi(naip)
+        ndvi = naip2ndvi(naip)[...,np.newaxis]
         pts = np.concatenate([pts, naip, ndvi], axis=-1)
         outfile = outdir.joinpath("lidar_patch_"+str(patch_id)+".npy").as_posix()
         np.save(outfile, pts)

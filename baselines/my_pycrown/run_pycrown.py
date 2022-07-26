@@ -67,9 +67,12 @@ def read_trees(PC, path):
 
 
 
-def pycrown_predict_treetops(chm, dtm, dsm, outpath, params, area=None, bldgs=None):
+def pycrown_predict_treetops(chm, dtm, dsm, outpath, params, area=None, bldgs=None,
+        spectral_mask=None):
     """
     args:
+        chm, dtm, dsm: paths
+        spectral_mask: array of zeros and ones, 1==valid
         params: dict with these keys:
             chm_smooth_ws: windows size of chm medium smoothing (pixels) 
             plm_ws: peak local max windowsize (pixels)
@@ -81,7 +84,8 @@ def pycrown_predict_treetops(chm, dtm, dsm, outpath, params, area=None, bldgs=No
                 maxcrown: max width of crown in meters
     """
 
-    PC = PyCrown(chm_file=chm, dtm_file=dtm, dsm_file=dsm, las_file=None, outpath=outpath)
+    PC = PyCrown(chm_file=chm, dtm_file=dtm, dsm_file=dsm, las_file=None, 
+            outpath=outpath, spectral_mask=spectral_mask)
 
     # Smooth CHM with median filter
     if params["chm_smooth_pix"] > 0:
