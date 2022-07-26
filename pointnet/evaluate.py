@@ -523,6 +523,8 @@ def main():
         evaluate_postproc_params(test_gen, test_dir, preds_test, X_test, 
                 params=params, gridparams=gridparams)
 
+    print("done evaluating.")
+
 
 if __name__ == "__main__":
     """

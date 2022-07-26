@@ -4,6 +4,7 @@ import sys
 import argparse
 import time
 import glob
+from pprint import pprint
 from pathlib import PurePath
 
 import numpy as np
@@ -22,7 +23,7 @@ from common.data_handling import get_data_splits, load_gt_trees
 STUDY_LOCATION = MY_PYCROWN_DIR.joinpath("study_pycrown.db").as_posix()
 
 
-def make_objective(raster_dirs, ground_truth):
+def make_objective(raster_dirs, ground_truth, return_metrics=False):
 
     def get_raster_path(region, patchnum, kind):
         return os.path.join(
@@ -85,8 +86,10 @@ def make_objective(raster_dirs, ground_truth):
         top = dict(zip(patch_ids, top))
         top_cor = dict(zip(patch_ids, top_cor))
 
-        orig_fscore = pointmatch(ground_truth, top)["fscore"]
-        corr_fscore = pointmatch(ground_truth, top_cor)["fscore"]
+        orig_results = pointmatch(ground_truth, top)
+        corr_results = pointmatch(ground_truth, top_cor)
+        orig_fscore = orig_results["fscore"]
+        corr_fscore = corr_results["fscore"]
 
         if orig_fscore == corr_fscore:
             trial.set_user_attr("method", "both")
@@ -94,9 +97,12 @@ def make_objective(raster_dirs, ground_truth):
             trial.set_user_attr("method", "orig")
         else:
             trial.set_user_attr("method", "corr")
+        fscore = max(orig_fscore, corr_fscore)
 
         timer.measure()
-        return max(orig_fscore, corr_fscore)
+        if return_metrics:
+            return fscore, orig_results, corr_results
+        return fscore
 
     return objective
 
@@ -146,7 +152,7 @@ def evaluate_params(raster_dirs):
     (test_ids,) = get_data_splits(sets=("test",))
     test_gt = load_gt_trees(test_ids)
     
-    objective = make_objective(raster_dirs, test_gt)
+    objective = make_objective(raster_dirs, test_gt, return_metrics=True)
 
     storage = optuna.storages.RDBStorage(
         url="sqlite:///" + STUDY_LOCATION,
@@ -158,8 +164,12 @@ def evaluate_params(raster_dirs):
     print("Best params:", study.best_params)
     print("Best train fscore (found so far):", study.best_value)
 
-    fscore = objective(study.best_trial)
+    fscore, orig, corr = objective(study.best_trial)
     print("Test-set fscore:", fscore)
+    print("Corrected results:")
+    pprint(corr)
+    print("Uncorrected results:")
+    pprint(orig)
 
 
 if __name__ == "__main__":

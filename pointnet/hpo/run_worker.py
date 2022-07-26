@@ -68,12 +68,12 @@ def make_objective_func(ARGS):
             cmd.append("--"+flag)
 
         # stdout and stderr to a file
-        print("starting process...")
         log_path = studypath(ARGS.name, f"logs/trial_{trial.number}.out")
         with open(log_path, "w") as log_fp:
             # run the command
             p = subprocess.Popen(cmd, stdout=log_fp, stderr=subprocess.STDOUT)
 
+        print(f"running trial {trial.number} process {p.pid} on gpu {ARGS.gpu}...")
         start_time = time.perf_counter()
 
         try:
@@ -86,12 +86,16 @@ def make_objective_func(ARGS):
                 # check if we've timed out
                 if (time.perf_counter() - start_time) / 60 > ARGS.timeout_mins:
                     raise optuna.TrialPruned("Timeout")
-        except KeyboardInterrupt:
-            print("run_worker.py recieved keyboard interrupt. waiting for subprocess to terminate...")
+        except:
+            print("run_worker.py recieved exception. waiting for subprocess to terminate...")
             # make sure subprocess dies
             p.terminate()
             p.wait()
-            raise
+            raise # re-raise the error
+
+        # should already be dead, but just to double check
+        p.terminate()
+        p.wait()
         
         print("subprocess finished. reading results...")
 

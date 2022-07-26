@@ -16,18 +16,20 @@ import tempfile
 def run_pdal(pipeline):
     with tempfile.NamedTemporaryFile('w', delete=False) as f:
         json.dump({"pipeline": pipeline}, f)
-    print(f.name)
+    #print(f.name)
     subprocess.run(['pdal', 'pipeline', f.name])
 
 
 def calc_chm(dsm_path,dtm_path,chm_path,block_size=1024):
+    if os.path.exists(chm_path):
+        os.remove(chm_path)
     with rasterio.open(dsm_path) as dsm:
         meta = dsm.meta
         nodata = dsm.nodata
         H,W = dsm.height,dsm.width
         with rasterio.open(dtm_path) as dtm:
             with rasterio.vrt.WarpedVRT(dtm,**meta) as dtm_vrt:
-                print(dsm.height,dsm.width,dtm.height,dtm.width)
+                assert dsm.height == dsm.width == dtm.height == dtm.width == 256, f"{dsm.height}, {dsm.width}, {dtm.height}, {dtm.width}"
                 with rasterio.open(chm_path,'w',**meta) as chm:
                     for r in range(0,H,block_size):
                         for c in range(0,W,block_size):
@@ -44,7 +46,7 @@ def calc_chm(dsm_path,dtm_path,chm_path,block_size=1024):
 
 def make_dsm(args, inputs, dsm_path, write_params):
     if os.path.exists(dsm_path):
-        return
+        os.remove(dsm_path)
 
     dsm_pipeline = copy(inputs)
     dsm_pipeline.append(
@@ -82,14 +84,14 @@ def make_dsm(args, inputs, dsm_path, write_params):
             **write_params,
         })
 
-    print('running dsm pipeline...')
+    print('  running dsm pipeline...')
     run_pdal(dsm_pipeline)
 
 
 def make_dtm(args, inputs, dtm_path, write_params):
     # dtm pipeline
     if os.path.exists(dtm_path):
-        return
+        os.remove(dtm_path)
     
     dtm_pipeline = copy(inputs)
     dtm_pipeline.append(
@@ -109,7 +111,7 @@ def make_dtm(args, inputs, dtm_path, write_params):
             **write_params,
         })
 
-    print('running dtm pipeline...')
+    print('  running dtm pipeline...')
     run_pdal(dtm_pipeline)
 
 
@@ -133,7 +135,7 @@ naip_files = glob.glob(os.path.join(args.naip_dir, "*.tif"))
 
 for naip in naip_files:
     num = PurePath(naip).stem.split("_")[-1]
-    print(num)
+    print("patch", num)
     with rasterio.open(naip) as raster:
         left = raster.bounds.left
         bottom = raster.bounds.bottom
@@ -142,19 +144,19 @@ for naip in naip_files:
         bounds = ([left, right], [bottom, top])
 
         write_params = {
-            "bounds": str(bounds),
+            #"bounds": str(bounds),
             "resolution": args.resolution,
             "width": raster.width,
             "height": raster.height,
-            "origin_x": raster.transform.c,
-            "origin_y": raster.transform.f,
+            "origin_x": left,
+            "origin_y": bottom,
         }
 
     inputs = [os.path.join(args.lidar_dir, f"lidar_{num}.las")]
 
     dsm_path = os.path.join(args.output_dir, f"dsm_{num}.tif")
     dtm_path = os.path.join(args.output_dir, f"dtm_{num}.tif")
-    chm_path = os.path.join(args.output_dir,f"chm_{num}.tif")
+    chm_path = os.path.join(args.output_dir, f"chm_{num}.tif")
 
     make_dsm(args, inputs, dsm_path=dsm_path, write_params=write_params)
     make_dtm(args, inputs, dtm_path=dtm_path, write_params=write_params)
