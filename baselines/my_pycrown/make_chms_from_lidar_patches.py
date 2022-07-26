@@ -54,13 +54,10 @@ def make_dsm(args, inputs, dsm_path, write_params):
             "type":"filters.range",
             "limits":"returnnumber[1:1]"
         })
-    #dsm_pipeline.append(
-        #{
-            #"type":"filters.outlier",
-            #"method":"statistical",
-            #"mean_k":12,
-            #"multiplier":2.2
-        #})
+    dtm_pipeline.append({
+        "type": "filters.range",
+        "limits": "HeightAboveGround[-10.0:50]" # -10 <= hag <= 50
+    })
     dsm_pipeline.append(
         {
             "type":"filters.outlier",
@@ -94,12 +91,15 @@ def make_dtm(args, inputs, dtm_path, write_params):
         os.remove(dtm_path)
     
     dtm_pipeline = copy(inputs)
+    dtm_pipeline.append({
+        "type": "filters.range",
+        "limits": "HeightAboveGround[-10.0:50]" # -10 <= hag <= 50
+    })
     dtm_pipeline.append(
         {
             "type":"filters.range",
             "limits":"Classification[2:2]"
         })
-
     dtm_pipeline.append(
         {
             "type": "writers.gdal",

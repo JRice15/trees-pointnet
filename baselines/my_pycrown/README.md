@@ -29,7 +29,20 @@ conda run -n pdal pip install osmnx>=1.0.0
 
 # Data setup
 
-1. Run `make_chm.py` for the Las files for each region to generate CHM, DSM, and DTM
-2. Run `chm_to_patches.py` on the outputs to create raster tiles corresponding to our annotated NAIP tiles
-3. Run `estimate_pycrown_params.py --train --specs <FILENAME> --ntrials <N>` to run N hyperoptimization trials to estimate the best pycrown parameters on the training dataset. Specs should be a file like `elcap_chm_specs.json`, which lists directories containing the outputs frm the previous step.
-4. Run `estimate_pycrown_params.py --test --specs <FILENAME>` to evaluate the best found parameters on the test set.
+Get only the LIDAR that falls within a NAIP tile (~1 hr):
+```
+python3 lidar_to_patches.py --las <REGION LAS> --naip-dir <REGION NAIP DIR> --out-format REGION-all-patches.las
+```
+
+Split into individual tiles using no-stream mode (~1 min)
+```
+python3 lidar_to_patches.py --las REGION-all-patches.las --naip-dir <REGION NAIP DIR> --out-format lidar_patches/lidar_#.las
+```
+(The # is a placeholder than will be filled in with the patch number)
+
+Make DST, DTM, and CHM tiles:
+```
+python3 make_chms_from_lidar_patches.py --lidar-dir lidar_patches/ --naip-dir <REGION NAIP DIR> --output-dir chms/
+```
+
+Adapt paths as nescessary, you might need to create target directories beforehand
