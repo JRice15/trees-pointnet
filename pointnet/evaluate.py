@@ -353,11 +353,19 @@ def estimate_postproc_params(preds_overlapped_dict, gt_dict, bounds_dict, outdir
                     min_dists=ALL_MIN_DISTS, 
                     post_thresholds=ALL_POST_THRESHOLDS)
 
-    n_trials = 4 if ARGS.test else 200
+    # initial batch of trials
+    n_trials = 4 if ARGS.test else 40
     study.optimize(objective, 
-        n_trials=n_trials,  # max trials, timeout supersedes
-        timeout=60*15, # 15 minute timeout
+        n_trials=n_trials, # max trials, timeout supersedes
+        timeout=(10*60), # 10 minute timeout
     )
+
+    # second batch, if first are promising
+    if study.best_value >= 0.50 and (not ARGS.test):
+        study.optimize(objective,
+            n_trials=100, # run 100 more trials, timeout supersedes
+            timeout=(25*60), # 25 min timout
+        )
 
     study_dir = outdir.joinpath("postprocessing_param_estimation/")
     os.makedirs(study_dir, exist_ok=True)
