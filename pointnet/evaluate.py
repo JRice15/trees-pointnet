@@ -475,6 +475,8 @@ def evaluate_loss_metrics(patchgen, model, outdir):
 
 
 def main():
+    timer = MyTimer()
+
     MODEL_DIR = glob_modeldir(ARGS.name)
     load_params_into_ARGS(MODEL_DIR, ARGS, false_params=["test", "noplot"])
     pprint(vars(ARGS))
@@ -531,7 +533,7 @@ def main():
         evaluate_postproc_params(test_gen, test_dir, preds_test, X_test, 
                 params=params, gridparams=gridparams)
 
-    print("done evaluating.")
+    timer.measure("done evaluating " + ARGS.name)
 
 
 if __name__ == "__main__":
