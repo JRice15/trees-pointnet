@@ -186,15 +186,17 @@ def evaluate_params(ARGS, raster_dirs):
 
     study = optuna.load_study(study_name="pycrown", storage=storage)
 
+    print("Best trial:", study.best_trial.number, "of", len(study.trials))
     print("Best params:", study.best_params)
     print("Best train fscore (found so far):", study.best_value)
 
     fscore, orig, corr = objective(study.best_trial)
     print("Test-set fscore:", fscore)
-    print("Corrected results:")
-    pprint(corr)
-    print("Uncorrected results:")
-    pprint(orig)
+    results = {"corrected": corr, "uncorrected": orig}
+    pprint(results)
+    out_name = "results_spectral.json" if ARGS.spectral else "results.json"
+    with open(out_name, "w") as f:
+        json.dump(results, f, indent=2)
 
 
 if __name__ == "__main__":
@@ -202,7 +204,7 @@ if __name__ == "__main__":
     grp = parser.add_mutually_exclusive_group(required=True)
     grp.add_argument("--train",action="store_true",help="run `ntrials` more trials of hyperoptimization training")
     grp.add_argument("--eval",action="store_true",help="evaluate the best-performing params on the test set")
-    parser.add_argument("--specs",required=True,help="json, mapping region names to directory paths which contains raster tifs")
+    parser.add_argument("--specs",default="elcap_chm_specs.json",help="json, mapping region names to directory paths which contains raster tifs")
     parser.add_argument("--ntrials",type=int,default=100)
     parser.add_argument("--spectral",action="store_true")
     ARGS = parser.parse_args()
