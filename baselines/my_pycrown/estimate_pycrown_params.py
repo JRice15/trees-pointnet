@@ -19,7 +19,7 @@ from __init__ import ROOT, MY_PYCROWN_DIR
 from common.utils import MyTimer
 from common.pointmatch import pointmatch
 from common.data_handling import get_data_splits, load_gt_trees, load_naip, naip2ndvi, get_all_patch_ids
-
+from common.visualization import make_marker_dict, plot_NAIP
 
 def get_study_storage(ARGS):
     name = "study_pycrown"
@@ -36,7 +36,7 @@ def get_study_storage(ARGS):
     return storage
 
 
-def make_objective(raster_dirs, ground_truth, return_metrics=False, spectral=False):
+def make_objective(raster_dirs, ground_truth, return_results=False, spectral=False):
 
     def get_raster_path(region, patchnum, kind):
         return os.path.join(
@@ -117,8 +117,11 @@ def make_objective(raster_dirs, ground_truth, return_metrics=False, spectral=Fal
         top = dict(zip(patch_ids, top))
         top_cor = dict(zip(patch_ids, top_cor))
 
-        orig_results = pointmatch(ground_truth, top)
-        corr_results = pointmatch(ground_truth, top_cor)
+        orig_results = pointmatch(ground_truth, top, return_inds=return_results)
+        corr_results = pointmatch(ground_truth, top_cor, return_inds=return_results)
+        if return_results:
+            orig_results, orig_inds = orig_results
+            corr_results, corr_inds = corr_results
         orig_fscore = orig_results["fscore"]
         corr_fscore = corr_results["fscore"]
 
@@ -131,8 +134,8 @@ def make_objective(raster_dirs, ground_truth, return_metrics=False, spectral=Fal
         fscore = max(orig_fscore, corr_fscore)
 
         timer.measure()
-        if return_metrics:
-            return fscore, orig_results, corr_results
+        if return_results:
+            return fscore, orig_results, corr_results, top_cor, corr_inds
         return fscore
 
     return objective
@@ -179,7 +182,7 @@ def evaluate_params(ARGS, raster_dirs):
     (test_ids,) = get_data_splits(sets=("test",))
     test_gt = load_gt_trees(test_ids)
     
-    objective = make_objective(raster_dirs, test_gt, return_metrics=True, 
+    objective = make_objective(raster_dirs, test_gt, return_results=True, 
                     spectral=ARGS.spectral)
 
     storage = get_study_storage(ARGS)
@@ -190,13 +193,25 @@ def evaluate_params(ARGS, raster_dirs):
     print("Best params:", study.best_params)
     print("Best train fscore (found so far):", study.best_value)
 
-    fscore, orig, corr = objective(study.best_trial)
+    method_name = "pycrown_spectral" if ARGS.spectral else "pycrown"
+    dirname = "results_" + method_name
+    outdir = MY_PYCROWN_DIR.joinpath(dirname)
+    os.makedirs(outdir, exist_ok=True)
+
+    fscore, orig, corr, preds, pmatch_inds = objective(study.best_trial)
     print("Test-set fscore:", fscore)
-    results = {"corrected": corr, "uncorrected": orig}
+    results = {"corrected": corr, "uncorrected": orig, "spectral": ARGS.spectral}
     pprint(results)
-    out_name = "results_spectral.json" if ARGS.spectral else "results.json"
-    with open(out_name, "w") as f:
+    with open(outdir.joinpath("results.json"), "w") as f:
         json.dump(results, f, indent=2)
+    
+    print("Plotting...")
+    for p_id, pred in tqdm(list(preds.items())):
+        markers = make_marker_dict(gt=test_gt[p_id], preds=pred, pointmatch_inds=pmatch_inds[p_id])
+        filename = outdir.joinpath("plots/" + method_name + "_" + "_".join(p_id) + ".png")
+        plot_NAIP(filename, markers=markers, patch_id=p_id)
+
+
 
 
 if __name__ == "__main__":

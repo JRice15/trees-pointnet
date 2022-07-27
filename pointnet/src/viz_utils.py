@@ -300,7 +300,7 @@ def plot_one_example(outdir, patch_id, *, Y, bounds, X=None, pred=None, pred_pea
 
     if naip is not None:
         plot_NAIP(
-            naip, 
+            naip=naip, 
             bounds=bounds,
             filename=outdir.joinpath(patchname+"_NAIP_RGB.png"),
             markers=markers,

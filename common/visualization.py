@@ -14,6 +14,7 @@ import matplotlib.colors
 import numpy as np
 
 from common import DATA_DIR
+from common.data_handling import load_naip, get_naip_bounds
 
 
 DPI = 200
@@ -139,7 +140,7 @@ def make_marker_dict(gt=None, preds=None, pointmatch_inds=None):
     return output
 
 
-def plot_NAIP(naip, bounds, filename, markers):
+def plot_NAIP(filename, markers, *, patch_id=None, naip=None, bounds=None):
     """
     plot NAIP image with markers on gt/pred, optionally with pointmatching indexes
     to determine tp/fp/fn
@@ -149,6 +150,13 @@ def plot_NAIP(naip, bounds, filename, markers):
         filename: filename to save plot under (.png recommended)
         markers: markers dict
     """
+    if naip is None or bounds is None:
+        assert patch_id is not None, "patch_id is required when naip or bounds is None"
+    if naip is None:
+        naip = load_naip(*patch_id[:2])
+    if bounds is None:
+        bounds = get_naip_bounds(*patch_id[:2])
+
     fig, ax = plt.subplots(figsize=(8,8))
 
     plt.imshow(

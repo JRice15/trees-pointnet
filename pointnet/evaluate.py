@@ -374,7 +374,7 @@ def estimate_postproc_params(preds_overlapped_dict, gt_dict, bounds_dict, outdir
         optuna.visualization.plot_optimization_history(study) \
             .write_image(study_dir.joinpath("optimization_history.png").as_posix(), scale=2)
     except Exception as e:
-        print("could not make opt history plot:", str(e))    
+        print("could not make opt history plot:", str(e))
     try:
         optuna.visualization.plot_param_importances(study) \
             .write_image(study_dir.joinpath("param_importances.png").as_posix(), scale=2)
