@@ -128,7 +128,7 @@ class pnet2(SearchSpace):
             "reducelr-patience": 3,
             # model arch
             "output-flow": trial.suggest_categorical("output-flow", ["dense", "seg"]),
-            "size-multiplier": 2 ** trial.suggest_int("sm-exp", -2, 2), # 0.5 to 4
+            "size-multiplier": 2 ** trial.suggest_float("sm-exp", -3, 2, step=0.5), # 0.125 to 2
             "conf-act": trial.suggest_categorical("conf-act", ["relu", "sigmoid"]),
             # loss
             "loss": trial.suggest_categorical("loss", ["mmd", "gridmse"]),
