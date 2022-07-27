@@ -13,6 +13,7 @@ from tqdm import tqdm
 import ray
 
 from run_pycrown import pycrown_predict_treetops
+from pycrown.pycrown import NoTreesException
 
 from __init__ import ROOT, MY_PYCROWN_DIR
 from common.utils import MyTimer
@@ -55,7 +56,8 @@ def make_objective(raster_dirs, ground_truth, return_metrics=False, spectral=Fal
                     params=params,
                     spectral_mask=spectral_mask)
         except Exception as e:
-            print(f"Exception predicting {region} {patchnum}:", e.__class__.__name__, str(e))
+            if not isinstance(e, NoTreesException):
+                print(f"Exception predicting {region} {patchnum}:", e.__class__.__name__, str(e))
             return np.array([]), np.array([])
             
         top = np.array([(p.x, p.y) for p in PC.trees["top"]])

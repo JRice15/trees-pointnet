@@ -191,7 +191,7 @@ def naip2ndvi(im):
     nir = im[...,3]
     red = im[...,0]
     ndvi = (nir - red) / (nir + red)
-    ndvi = np.nan_to_num(ndvi, nan=0.0)
+    ndvi = np.nan_to_num(ndvi)
     return ndvi
 
 
