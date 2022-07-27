@@ -107,7 +107,11 @@ def pointmatch(all_gts, all_preds, return_inds=False):
         rmse = np.sqrt(np.mean(all_tp_dists**2))
     else:
         rmse = -1
-    
+    if all_tp + all_fn > 0:
+        bias = ((all_tp + all_fp) / (all_tp + all_fn)) - 1
+    else:
+        bias = 0
+
     # calling float/int on a lot of these because json doesn't like numpy dtypes
     results = {
         'pruned': pruned,
@@ -118,6 +122,7 @@ def pointmatch(all_gts, all_preds, return_inds=False):
         'recall': float(recall),
         'fscore': float(fscore),
         'rmse': float(rmse),
+        'bias': float(bias),
     }
     if return_inds:
         return results, all_inds
