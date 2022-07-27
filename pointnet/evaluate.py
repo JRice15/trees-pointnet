@@ -248,7 +248,7 @@ def build_postprocessing_objective(preds_overlapped, gt, bounds, min_dists, post
             gridparams["grid_agg"] = ["max", "sum"]
         elif postprocess_mode == "dbscan":
             params["eps"] = trial.suggest_float("eps", 0.25, 5.0, step=0.25) # max distance between neighbors, in meters
-            params["min_samples"] = trial.suggest_float("min_samples", 0, 10, step=0.2) # min total confidence in cluster
+            params["min_samples"] = trial.suggest_float("min_samples", 0, 20, step=0.2) # min total confidence in cluster
         elif postprocess_mode == "kmeans":
             #params["minibatch"] = trial.suggest_categorical("minibatch", [False, True])
             params["minibatch"] = True # regular kmeans is too slow
@@ -331,7 +331,7 @@ def estimate_postproc_params(preds_overlapped_dict, gt_dict, bounds_dict, outdir
                 group=True,
                 constant_liar=True,
                 warn_independent_sampling=True,
-                n_startup_trials=6, # 4 will be pre-set, 2 will be random
+                n_startup_trials=25, # 4 will be pre-set, 21 will be random
                 seed=0)
     study = optuna.create_study(
                 sampler=sampler,
@@ -356,7 +356,7 @@ def estimate_postproc_params(preds_overlapped_dict, gt_dict, bounds_dict, outdir
     n_trials = 4 if ARGS.test else 200
     study.optimize(objective, 
         n_trials=n_trials,  # max trials, timeout supersedes
-        timeout=60*10, # 10 minute timeout
+        timeout=60*15, # 15 minute timeout
     )
 
     study_dir = outdir.joinpath("postprocessing_param_estimation/")
