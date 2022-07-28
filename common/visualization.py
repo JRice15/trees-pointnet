@@ -147,7 +147,7 @@ def plot_NAIP(filename, markers, *, patch_id=None, naip=None, bounds=None):
     args:
         naip: (H,W,3+) image
         bounds: Bounds object
-        filename: filename to save plot under (.png recommended)
+        filename: filename to save plot under. DO NOT INCLUDE EXTENSION
         markers: markers dict
     """
     if naip is None or bounds is None:
@@ -165,10 +165,16 @@ def plot_NAIP(filename, markers, *, patch_id=None, naip=None, bounds=None):
     plt.xticks([])
     plt.yticks([])
 
+    # plot without markers
+    plt.tight_layout()
+    plt.savefig(filename + ".png", dpi=DPI)
+
+    # plot with markers
     plot_markers(markers)
 
     plt.tight_layout()
-    plt.savefig(filename, dpi=DPI)
+    plt.savefig(filename + "_annotated.png", dpi=DPI)
+
     plt.clf()
     plt.close()
 
@@ -196,15 +202,21 @@ def plot_raster(gridvals, gridcoords, filename, *, colorbar_label=None,
     if colorbar:
         plt.colorbar(label=colorbar_label)
 
-    plot_markers(markers)
-
     if title is not None:
         plt.title(title)
     if not ticks:
         plt.xticks([])
         plt.yticks([])
+
+    # without markers
     plt.tight_layout()
-    plt.savefig(filename, dpi=DPI)
+    plt.savefig(filename + ".png", dpi=DPI)
+
+    # with markers
+    plot_markers(markers)
+    plt.tight_layout()
+    plt.savefig(filename + "_annotated.png", dpi=DPI)
+
     plt.clf()
     plt.close()
 
