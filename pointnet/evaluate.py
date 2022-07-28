@@ -243,16 +243,16 @@ def build_postprocessing_objective(preds_overlapped, gt, bounds, min_dists, post
         if postprocess_mode == "raw":
             pass
         elif postprocess_mode == "peaklocalmax":
-            params["gaussian_sigma"] = trial.suggest_float("gaussian_sigma", max(0.5, ARGS.gaussian_sigma-2.0), ARGS.gaussian_sigma+1.0, step=0.5) # in meters
+            params["gaussian_sigma"] = trial.suggest_float("gaussian_sigma", 0.5, 10, step=0.5) # in meters
             gridparams["min_dist"] = min_dists
             gridparams["grid_agg"] = ["max", "sum"]
         elif postprocess_mode == "dbscan":
-            params["eps"] = trial.suggest_float("eps", 0.25, 5.0, step=0.25) # max distance between neighbors, in meters
-            params["min_samples"] = trial.suggest_float("min_samples", 0, 10, step=0.1) # min total confidence in cluster
+            params["eps"] = trial.suggest_float("eps", 0.1, 5.0, step=0.1) # max distance between neighbors, in meters
+            params["min_samples"] = trial.suggest_float("min_samples", 0, 0.5, step=0.01) # min total confidence in cluster
         elif postprocess_mode == "kmeans":
             #params["minibatch"] = trial.suggest_categorical("minibatch", [False, True])
             params["minibatch"] = True # regular kmeans is too slow
-            params["n_clusters"] = trial.suggest_int("n_cluster", 10, 120, step=10)
+            params["n_clusters"] = trial.suggest_int("n_cluster", 5, 150, step=5)
         else:
             raise ValueError(f"Unknown postprocess mode {postprocess_mode}")
 
