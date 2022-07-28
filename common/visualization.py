@@ -167,13 +167,13 @@ def plot_NAIP(filename, markers, *, patch_id=None, naip=None, bounds=None):
 
     # plot without markers
     plt.tight_layout()
-    plt.savefig(filename + ".png", dpi=DPI)
+    plt.savefig(str(filename) + ".png", dpi=DPI)
 
     # plot with markers
     plot_markers(markers)
 
     plt.tight_layout()
-    plt.savefig(filename + "_annotated.png", dpi=DPI)
+    plt.savefig(str(filename) + "_annotated.png", dpi=DPI)
 
     plt.clf()
     plt.close()
@@ -210,12 +210,12 @@ def plot_raster(gridvals, gridcoords, filename, *, colorbar_label=None,
 
     # without markers
     plt.tight_layout()
-    plt.savefig(filename + ".png", dpi=DPI)
+    plt.savefig(str(filename) + ".png", dpi=DPI)
 
     # with markers
     plot_markers(markers)
     plt.tight_layout()
-    plt.savefig(filename + "_annotated.png", dpi=DPI)
+    plt.savefig(str(filename) + "_annotated.png", dpi=DPI)
 
     plt.clf()
     plt.close()
