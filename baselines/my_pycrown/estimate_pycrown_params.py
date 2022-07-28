@@ -196,7 +196,7 @@ def evaluate_params(ARGS, raster_dirs):
     method_name = "pycrown_spectral" if ARGS.spectral else "pycrown"
     dirname = "results_" + method_name
     outdir = MY_PYCROWN_DIR.joinpath(dirname)
-    os.makedirs(outdir, exist_ok=True)
+    os.makedirs(outdir.joinpath("plots"), exist_ok=True)
 
     fscore, orig, corr, preds, pmatch_inds = objective(study.best_trial)
     print("Test-set fscore:", fscore)
@@ -208,7 +208,8 @@ def evaluate_params(ARGS, raster_dirs):
     print("Plotting...")
     for p_id, pred in tqdm(list(preds.items())):
         markers = make_marker_dict(gt=test_gt[p_id], preds=pred, pointmatch_inds=pmatch_inds[p_id])
-        filename = outdir.joinpath("plots/" + method_name + "_" + "_".join(p_id) + ".png")
+        patch_name = "_".join(map(str, p_id))
+        filename = outdir.joinpath("plots/" + method_name + "_" + patch_name + ".png")
         plot_NAIP(filename, markers=markers, patch_id=p_id)
 
 

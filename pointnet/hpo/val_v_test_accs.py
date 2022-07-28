@@ -12,6 +12,7 @@ parser.add_argument("--name",required=True)
 args = parser.parse_args()
 name = args.name
 
+dirs = []
 val = []
 test = []
 for path in glob.glob(f"../models/hpo/{name}/{name}_trial*/"):
@@ -24,6 +25,7 @@ for path in glob.glob(f"../models/hpo/{name}/{name}_trial*/"):
             val_data = json.load(f)
         val.append(val_data["metrics"]["fscore"])
         test.append(test_data["metrics"]["fscore"])
+        dirs.append(path)
 
 val = np.array(val)
 test = np.array(test)
@@ -32,6 +34,9 @@ r2 = r2_score(test, val)
 
 print("val, test max:", val.max(), test.max())
 data_max = max(val.max(), test.max())
+
+best = np.argmax(val)
+print("best val:", dirs[best])
 
 plt.plot(np.linspace(0, 1.0), np.linspace(0, 1.0), c="black", label="$y=x$", linestyle="dashed", linewidth=1)
 plt.scatter(val, test, label="fscore", zorder=3, c="green")
