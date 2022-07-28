@@ -37,6 +37,10 @@ def get_study(name, assume_exists):
         name: str
         assume_exists: bool
     """
+    if assume_exists:
+        if not os.path.exists(studypath(name, "study.db")):
+            raise ValueError(f"study {name} does not exist")
+
     os.makedirs(studypath(name), exist_ok=True)
     heartbeat = 5*60 # 5 minutes, in seconds
     storage = optuna.storages.RDBStorage(
@@ -57,7 +61,7 @@ def get_study(name, assume_exists):
     if assume_exists:
         try:
             study = optuna.load_study(
-                study_name=name,
+                study_name=None,
                 storage=storage,
                 sampler=sampler,
             )

@@ -77,7 +77,7 @@ def _ray_rasterize_pts_blur(*args, **kwargs):
     """
     return rasterize_pts_gaussian_blur(*args, **kwargs)
 
-def rasterize_preds(preds, bounds, grid_aggs, is_subdiv=False):
+def rasterize_preds(preds, bounds, grid_aggs, gaussian_sigma, is_subdiv=False):
     """
     args:
         preds: dict mapping patch id to pred pts (must be original CRS, not 0-1 scale)
@@ -104,7 +104,7 @@ def rasterize_preds(preds, bounds, grid_aggs, is_subdiv=False):
     for p_id, pred in preds.items():
         future = _ray_rasterize_pts_blur.remote(
                 bounds[p_id], pred[:,:2], pred[:,2], 
-                abs_sigma=ARGS.gaussian_sigma, mode=grid_aggs,
+                abs_sigma=gaussian_sigma, mode=grid_aggs,
                 resolution=resolution)
         futures.append(future)
         patch_ids.append(p_id)

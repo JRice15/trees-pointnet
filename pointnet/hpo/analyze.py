@@ -28,7 +28,7 @@ def main():
     # load study
     study = get_study(args.name, assume_exists=True)
 
-    df = study.trials_dataframe(["number", "state", "value", "duration", "datetime_start", "datetime_complete"])
+    df = study.trials_dataframe(["number", "state", "value", "duration", "user_attrs", "system_attrs"])
     print("All trials:")
     print(df)
 
@@ -54,6 +54,7 @@ def main():
     print(running, "trials are still running:")
     print(df[df["state"] == "RUNNING"])
 
+    print("plotting")
     optuna.visualization.plot_optimization_history(study) \
         .write_image(studypath(args.name, "optimization_history.png"), scale=2)
     optuna.visualization.plot_param_importances(study) \

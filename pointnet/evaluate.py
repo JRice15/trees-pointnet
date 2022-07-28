@@ -89,16 +89,19 @@ def clustering_postprocessing(pred_dict, algo_initializer, cluster_aggs):
 
 
 
-def peaklocalmax_postprocessing(pred_dict, bounds_dict, grid_aggs, min_dists, min_conf_threshold):
+def peaklocalmax_postprocessing(pred_dict, bounds_dict, grid_aggs, min_dists, 
+        gaussian_sigma, min_conf_threshold):
     """
     args:
         pred_dict
         bounds_dict
+        gaussian_sigma: sigma of std dev of blurring
         grid_aggs: rasterization aggregation modes
         min_dists: list of values to try for min_dists between peaks
         min_conf_threshold: lowest confidence threshold
     """
-    pred_grids, pred_coords = rasterize_preds(pred_dict, bounds_dict, grid_aggs=grid_aggs, is_subdiv=False)
+    pred_grids, pred_coords = rasterize_preds(pred_dict, bounds_dict, gaussian_sigma=gaussian_sigma, 
+                                grid_aggs=grid_aggs, is_subdiv=False)
 
     results = []
     for grid_agg, these_grids in pred_grids.items():
@@ -156,6 +159,7 @@ def postprocess_and_pointmatch(preds_overlapped, gt, bounds, params, gridsearch_
 
     elif postprocess_mode == "peaklocalmax":
         processed_preds = peaklocalmax_postprocessing(preds, bounds,
+                                gaussian_sigma=params["gaussian_sigma"],
                                 grid_aggs=gridsearch_params["grid_agg"],
                                 min_dists=gridsearch_params["min_dist"],
                                 min_conf_threshold=min(gridsearch_params["post_threshold"]))
@@ -350,7 +354,7 @@ def estimate_postproc_params(preds_overlapped_dict, gt_dict, bounds_dict, outdir
     study.enqueue_trial(
         {"postprocess_mode": "raw", "overlap_method": "drop"})
     study.enqueue_trial(
-        {"postprocess_mode": "dbscan", "eps": 1.0, "min_samples": 0.5, "pre_threshold_exp": -3, "overlap_method": "buffer"})
+        {"postprocess_mode": "dbscan", "eps": 2.0, "min_samples": 0.1, "pre_threshold_exp": -3, "overlap_method": "buffer"})
     study.enqueue_trial(
         {"postprocess_mode": "kmeans", "n_cluster": 100, "pre_threshold_exp": -3, "overlap_method": "buffer"})
     study.enqueue_trial(
@@ -360,6 +364,8 @@ def estimate_postproc_params(preds_overlapped_dict, gt_dict, bounds_dict, outdir
         study.enqueue_trial({"postprocess_mode": "dbscan"})
         study.enqueue_trial({"postprocess_mode": "kmeans"})
         study.enqueue_trial({"postprocess_mode": "peaklocalmax"})
+        if i % 2 == 0: # since dbscan has one more parameter, give it a little more trials to figure it out
+            study.enqueue_trial({"postprocess_mode": "dbscan"})
 
     objective = build_postprocessing_objective(
                     preds_overlapped_dict, gt_dict, bounds_dict, 
