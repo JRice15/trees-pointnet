@@ -248,7 +248,7 @@ def build_postprocessing_objective(preds_overlapped, gt, bounds, min_dists, post
             gridparams["grid_agg"] = ["max", "sum"]
         elif postprocess_mode == "dbscan":
             params["eps"] = trial.suggest_float("eps", 0.25, 5.0, step=0.25) # max distance between neighbors, in meters
-            params["min_samples"] = trial.suggest_float("min_samples", 0, 20, step=0.2) # min total confidence in cluster
+            params["min_samples"] = trial.suggest_float("min_samples", 0, 10, step=0.1) # min total confidence in cluster
         elif postprocess_mode == "kmeans":
             #params["minibatch"] = trial.suggest_categorical("minibatch", [False, True])
             params["minibatch"] = True # regular kmeans is too slow
@@ -298,7 +298,13 @@ def generate_predictions(patchgen, model, outdir):
 
     # denormalize data
     print("Denormalizing preds...")
-    preds_subdiv_unnormed = {p_id: patchgen.denormalize_pts(pts, p_id) for p_id,pts in preds_subdiv_normed.items()}
+    preds_subdiv_unnormed = {}
+    for p_id, weighted_pts in preds_subdiv_normed.items():
+        # only denormalize the locs, the confs are something else
+        pts = weighted_pts[...,:2]
+        confs = weighted_pts[...,2:]
+        pts = patchgen.denormalize_pts(pts, p_id)
+        preds_subdiv_unnormed[p_id] = np.concatenate((pts, confs), axis=-1)
     timer.measure("denormalize")
 
     # combine with overlap
@@ -342,7 +348,7 @@ def estimate_postproc_params(preds_overlapped_dict, gt_dict, bounds_dict, outdir
     study.enqueue_trial(
         {"postprocess_mode": "raw", "overlap_method": "buffer"})
     study.enqueue_trial(
-        {"postprocess_mode": "dbscan", "eps": 1.0, "min_samples": 1.0, "pre_threshold_exp": -3, "overlap_method": "buffer"})
+        {"postprocess_mode": "dbscan", "eps": 1.0, "min_samples": 0.5, "pre_threshold_exp": -3, "overlap_method": "buffer"})
     study.enqueue_trial(
         {"postprocess_mode": "kmeans", "n_cluster": 100, "pre_threshold_exp": -3, "overlap_method": "buffer"})
     study.enqueue_trial(

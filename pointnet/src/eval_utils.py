@@ -210,28 +210,28 @@ def viz_predictions(patchgen, outdir, *, X_subdiv, Y_full, Y_subdiv,
     n_ids = len(patch_ids)
     subpatch_ids = sorted(X_subdiv.keys())
 
-    # grab random 10ish examples
-    step_size = max(1, n_ids//10)
-    for p_id in tqdm(patch_ids[::step_size]):
+    ### plot all examples
+    # step_size = max(1, n_ids//10)
+    for p_id in tqdm(patch_ids):
         patch_name = "_".join([str(x) for x in p_id])
         patch_dir = outdir.joinpath(patch_name)
-        # first three subpatch ids
-        these_subpatch_ids = [key for key in subpatch_ids if key[:2] == p_id]
-        for subp_id in these_subpatch_ids[:3]:
-            subpatch_dir = patch_dir.joinpath("subpatches")
+        # # first three subpatch ids
+        # these_subpatch_ids = [key for key in subpatch_ids if key[:2] == p_id]
+        # for subp_id in these_subpatch_ids[:3]:
+        #     subpatch_dir = patch_dir.joinpath("subpatches")
 
-            bounds = patchgen.get_patch_bounds(subp_id)
-            plot_one_example(
-                outdir=subpatch_dir,
-                patch_id=subp_id,
-                X=X_subdiv[subp_id],
-                Y=Y_subdiv[subp_id],
-                pred=preds_subdiv[subp_id] if preds_subdiv is not None else None,
-                # pred_peaks=bounds.filter_pts(pred_peaks[p_id]), # peaks within this subpatch
-                naip=patchgen.get_naip(subp_id),
-                grid_resolution=GRID_RESOLUTION//ARGS.subdivide,
-                bounds=Bounds.zero_to_one(),
-            )
+        #     bounds = patchgen.get_patch_bounds(subp_id)
+        #     plot_one_example(
+        #         outdir=subpatch_dir,
+        #         patch_id=subp_id,
+        #         X=X_subdiv[subp_id],
+        #         Y=Y_subdiv[subp_id],
+        #         pred=preds_subdiv[subp_id] if preds_subdiv is not None else None,
+        #         # pred_peaks=bounds.filter_pts(pred_peaks[p_id]), # peaks within this subpatch
+        #         naip=patchgen.get_naip(subp_id),
+        #         grid_resolution=GRID_RESOLUTION//ARGS.subdivide,
+        #         bounds=Bounds.zero_to_one(),
+        #     )
 
         # plot full-patch data
         plot_one_example(
