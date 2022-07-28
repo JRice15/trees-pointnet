@@ -18,7 +18,7 @@ from common.data_handling import load_naip, get_naip_bounds
 
 
 DPI = 200
-matplotlib.rcParams.update({'font.size': 15})
+matplotlib.rcParams.update({'font.size': 14})
 
 def truncate_colormap(cmap, minval=0.0, maxval=1.0, n=256):
     """
@@ -100,7 +100,7 @@ def plot_markers(marker_dict, legend=True):
         for (kind,correct), pts in marker_dict.items():
             if len(pts):
                 style = MARKER_STYLE_MAP[kind][correct]
-                label = MARKER_LABEL_MAP[kind][correct]
+                label = MARKER_LABEL_MAP[kind][correct] + f" ({len(pts)})" # add count to label
                 plt.scatter(
                     pts[:,0], pts[:,1], 
                     label=label,
