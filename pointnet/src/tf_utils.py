@@ -34,6 +34,23 @@ class MyModelCheckpoint(tf.keras.callbacks.ModelCheckpoint):
         return self.best
 
 
+class TimeLimitCallback(tf.keras.callbacks.ModelCheckpoint):
+
+    def __init__(self, limit_mins=(5*60)):
+        super().__init__()
+        self.limit_mins = limit_mins
+        self.time_start = time.perf_counter()
+
+    def on_epoch_end(self, *args, **kwargs):
+        if self.limit_mins is not None:
+            now = time.perf_counter()
+            elapsed_mins = (now - self.time_start) / 60
+            if elapsed_mins > self.limit_mins:
+                raise RuntimeError("Timeout limit reached")
+
+
+
+
 def load_saved_model(model_dir):
     """
     Load the best model iteration saved by ModelCheckpoint for a particular model configuration

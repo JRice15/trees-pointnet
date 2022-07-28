@@ -112,6 +112,7 @@ lossgrp.add_argument("--ortho-weight",type=float,default=0.001,
 
 # misc
 miscgrp = parser.add_argument_group("misc")
+miscgrp.add_argument("--time-limit",default=4*60,help="max number of minutes to run (default 4 hrs)")
 miscgrp.add_argument("--test",action="store_true",help="run minimal batches and epochs to test functionality")
 miscgrp.add_argument("--noplot",action="store_true",help="no batch plots")
 miscgrp.add_argument("--nolosses",action="store_true",help="eval only: do not compute losses")
@@ -232,7 +233,8 @@ callback_dict = {
         min_lr=1e-6, verbose=1),
     "earlystopping": callbacks.EarlyStopping(verbose=1, patience=ARGS.reducelr_patience+2),
     "modelcheckpoint": MyModelCheckpoint(MODEL_DIR, verbose=1, 
-        epoch_per_save=1, save_best_only=True)
+        epoch_per_save=1, save_best_only=True),
+    "timeout": TimeLimitCallback(limit_mins=ARGS.time_limit),
 }
 
 try:
