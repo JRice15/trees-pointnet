@@ -208,7 +208,7 @@ def evaluate_params(ARGS, raster_dirs):
     print("Plotting...")
     for p_id, pred in tqdm(list(preds.items())):
         markers = make_marker_dict(gt=test_gt[p_id], preds=pred, pointmatch_inds=pmatch_inds[p_id])
-        filename = outdir.joinpath("plots/" + method_name + "_" + "_".join(p_id) + ".png")
+        filename = outdir.joinpath("plots/" + method_name + "_" + "_".join(p_id))
         plot_NAIP(filename, markers=markers, patch_id=p_id)
 
 
