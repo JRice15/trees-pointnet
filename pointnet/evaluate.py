@@ -360,12 +360,16 @@ def estimate_postproc_params(preds_overlapped_dict, gt_dict, bounds_dict, outdir
         timeout=(10*60), # 10 minute timeout
     )
 
+    print(len(study.trials), "completed in initial batch batch")
+
     # second batch, if first are promising
     if study.best_value >= 0.50 and (not ARGS.test):
+        print("promising, continuing...")
         study.optimize(objective,
             n_trials=100, # run 100 more trials, timeout supersedes
             timeout=(25*60), # 25 min timout
         )
+        print(len(study.trials), "completed in total")
 
     study_dir = outdir.joinpath("postprocessing_param_estimation/")
     os.makedirs(study_dir, exist_ok=True)
