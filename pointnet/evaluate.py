@@ -348,19 +348,27 @@ def estimate_postproc_params(preds_overlapped_dict, gt_dict, bounds_dict, outdir
     study.enqueue_trial(
         {"postprocess_mode": "raw", "overlap_method": "buffer"})
     study.enqueue_trial(
+        {"postprocess_mode": "raw", "overlap_method": "drop"})
+    study.enqueue_trial(
         {"postprocess_mode": "dbscan", "eps": 1.0, "min_samples": 0.5, "pre_threshold_exp": -3, "overlap_method": "buffer"})
     study.enqueue_trial(
         {"postprocess_mode": "kmeans", "n_cluster": 100, "pre_threshold_exp": -3, "overlap_method": "buffer"})
     study.enqueue_trial(
         {"postprocess_mode": "peaklocalmax", "gaussian_sigma": ARGS.gaussian_sigma, "pre_threshold_exp": -3, "overlap_method": "buffer"})
+    # force it to try all three methods equally after that (raw has already had all two parameter combinations tried)
+    for i in range(50): # 3*50 future trials, more than is needed
+        study.enqueue_trial({"postprocess_mode": "dbscan"})
+        study.enqueue_trial({"postprocess_mode": "kmeans"})
+        study.enqueue_trial({"postprocess_mode": "peaklocalmax"})
 
     objective = build_postprocessing_objective(
                     preds_overlapped_dict, gt_dict, bounds_dict, 
                     min_dists=ALL_MIN_DISTS, 
                     post_thresholds=ALL_POST_THRESHOLDS)
 
+
     # initial batch of trials
-    n_trials = 4 if ARGS.test else 40
+    n_trials = 5 if ARGS.test else 40
     study.optimize(objective, 
         n_trials=n_trials, # max trials, timeout supersedes
         timeout=(10*60), # 10 minute timeout
