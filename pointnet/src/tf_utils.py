@@ -34,7 +34,7 @@ class MyModelCheckpoint(tf.keras.callbacks.ModelCheckpoint):
         return self.best
 
 
-class TimeLimitCallback(tf.keras.callbacks.ModelCheckpoint):
+class TimeLimitCallback(tf.keras.callbacks.Callback):
 
     def __init__(self, limit_mins=(5*60)):
         super().__init__()
