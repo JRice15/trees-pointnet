@@ -26,7 +26,7 @@ from src import ARGS, DATA_DIR, MODEL_SAVE_FMT, REPO_ROOT, LIDAR_CHANNELS
 from src.losses import get_loss
 from src.models import pointnet
 from src.patch_generator import get_datasets
-from src.tf_utils import MyModelCheckpoint, load_saved_model, output_model
+from src.tf_utils import MyModelCheckpoint, load_saved_model, output_model, TimeLimitCallback
 from src.viz_utils import plot_one_example
 
 from common.data_handling import Bounds, get_all_regions, get_default_dsname
@@ -112,7 +112,7 @@ lossgrp.add_argument("--ortho-weight",type=float,default=0.001,
 
 # misc
 miscgrp = parser.add_argument_group("misc")
-miscgrp.add_argument("--time-limit",default=4*60,help="max number of minutes to run (default 4 hrs)")
+miscgrp.add_argument("--time-limit",default=4*60,type=int,help="max number of minutes to run (default 4 hrs)")
 miscgrp.add_argument("--test",action="store_true",help="run minimal batches and epochs to test functionality")
 miscgrp.add_argument("--noplot",action="store_true",help="no batch plots")
 miscgrp.add_argument("--nolosses",action="store_true",help="eval only: do not compute losses")
