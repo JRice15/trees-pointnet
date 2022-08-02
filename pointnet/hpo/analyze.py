@@ -28,6 +28,8 @@ def main():
     # load study
     study = get_study(args.name, assume_exists=True)
 
+    print("total time:", study.trials_dataframe(["duration"]).sum())
+
     df = study.trials_dataframe(["number", "state", "value", "duration", "user_attrs", "system_attrs"])
     print("All trials:")
     print(df)

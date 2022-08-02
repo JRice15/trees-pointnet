@@ -41,7 +41,8 @@ def make_objective_func(ARGS):
         constant_params = {
             "name": "hpo/{name}/{name}_trial{number}".format(name=ARGS.name, number=trial.number),
             "dsname": ARGS.dsname,
-            "eval-sets": ["val", "test"]
+            "eval-sets": ["val", "test"],
+            "time-limit": ARGS.timeout_mins, # time limit only applies to training; budget 45 mins for evaluation
         }
         constant_flags = [
             # don't compute losses or plots
@@ -89,12 +90,12 @@ def make_objective_func(ARGS):
         except:
             print("run_worker.py recieved exception. waiting for subprocess to terminate...")
             # make sure subprocess dies
-            p.terminate()
+            p.kill()
             p.wait()
             raise # re-raise the error
 
         # should already be dead, but just to double check
-        p.terminate()
+        p.kill()
         p.wait()
         
         print("subprocess finished. reading results...")
@@ -148,7 +149,7 @@ def optuna_worker(ARGS, study):
     condition = NoImprovementStopping(study, ARGS.mintrials, ARGS.earlystop)
 
     # run one step at a time
-    while True:
+    for _ in range(ARGS.maxtrials):
         try:
             study.optimize(
                 objective,
@@ -190,7 +191,8 @@ def main():
     parser.add_argument("--dsname",help="(if not resuming:) name of dataset to use ")
     parser.add_argument("--earlystop",type=int,default=50,help="number of trials with no improvement when earlystopping occurs")
     parser.add_argument("--mintrials",type=int,default=200,help="number of trials for which earlystopping is not allowed to occur")
-    parser.add_argument("--timeout-mins",type=float,default=(60*4),help="timeout for individual trials, in minutes (default 4 hours)")
+    parser.add_argument("--maxtrials",type=int,default=500,help="max number of trials to run with this execution of the script")
+    parser.add_argument("--timeout-mins",type=float,default=(60*4),help="timeout for training trials, in minutes (default 4 hours)")
 
     # misc
     parser.add_argument("--test",action="store_true",help="just run one-epoch trials")

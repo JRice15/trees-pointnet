@@ -38,6 +38,8 @@ class TimeLimitCallback(tf.keras.callbacks.Callback):
 
     def __init__(self, limit_mins=(5*60)):
         super().__init__()
+        if limit_mins is not None:
+            limit_mins = int(limit_mins)
         self.limit_mins = limit_mins
         self.time_start = time.perf_counter()
 
