@@ -102,13 +102,17 @@ class LidarPatchGen(keras.utils.Sequence):
         self.orig_patch_ids = patch_ids
         self.regions = list(set([i[0] for i in self.orig_patch_ids]))
         self.y_counts_only = False
-        self.nattributes = len(LIDAR_CHANNELS)
+        self.nattributes = 3 + len(ARGS.channels) # xyz + spectral
         self.npoints = ARGS.npoints
         self.batch_time = 0
         self.training = training
 
         # initialize the data
         print("preparing dataset", self.name, "...")
+        #   get lidar channel mask
+        self.channel_mask = [True, True, True] + [c in ARGS.channels for c in LIDAR_CHANNELS[3:]]
+        print(" ", np.array(LIDAR_CHANNELS)[self.channel_mask])
+
         self.init_data()
 
         # sort for reproducibility
@@ -134,12 +138,16 @@ class LidarPatchGen(keras.utils.Sequence):
         self.gt_full = load_gt_trees(self.orig_patch_ids)
 
         # load bounds and lidar
+
         self.bounds_full = {}
         lidar_full = {}
         for (region,patch_num) in self.orig_patch_ids:
             self.bounds_full[(region,patch_num)] = get_naip_bounds(region, patch_num)
             lidarfile = LIDAR_DIR.joinpath(region, "lidar_patch_{}.npy".format(patch_num)).as_posix()
             pts = np.load(lidarfile)
+            # get selected channels
+            if not all(self.channel_mask):
+                pts = pts[:,self.channel_mask]
             # clip spurious Z values
             z = pts[:,2]
             pts = pts[(z > Z_MIN_CLIP) & (z <= Z_MAX_CLIP)]
@@ -390,7 +398,10 @@ class LidarPatchGen(keras.utils.Sequence):
         mins = [min_x, min_y, 0]          + [0, 0, 0, 0, -1.0]
         maxs = [max_x, max_y, Z_MAX_CLIP] + [1, 1, 1, 1, 1.0]
 
-        return np.array(mins), np.array(maxs)
+        mins = np.array(mins)[self.channel_mask]
+        maxs = np.array(maxs)[self.channel_mask]
+
+        return mins, maxs
 
 
     def summary(self):

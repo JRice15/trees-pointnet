@@ -26,7 +26,7 @@ from src import ARGS, DATA_DIR, MODEL_SAVE_FMT, REPO_ROOT, LIDAR_CHANNELS
 from src.losses import get_loss
 from src.models import pointnet
 from src.patch_generator import get_datasets
-from src.tf_utils import MyModelCheckpoint, load_saved_model, output_model
+from src.tf_utils import MyModelCheckpoint, load_saved_model, output_model, TimeLimitCallback
 from src.viz_utils import plot_one_example
 
 from common.data_handling import Bounds, get_all_regions, get_default_dsname
@@ -64,6 +64,7 @@ datagrp = parser.add_argument_group("dataset and augmentation")
 datagrp.add_argument("--ragged",action="store_true")
 datagrp.add_argument("--subdivide",type=int,default=3,help="number of times to subdivide standard grids. The side of a grid square is divided N times, resulting in N-squared new grid squares")
 datagrp.add_argument("--regions",default="ALL",nargs="+",help="list of region names, defaults to all available")
+datagrp.add_argument("--channels",default="ALL",nargs="+",help="spectral channels to include. Default R, G, B, NIR, and NDVI")
 datagrp.add_argument("--dsname",help="name of generated dataset to use (required if multiple exist)")
 datagrp.add_argument("--noise-sigma",type=float,default=None,help="add gaussian noise to input points")
 datagrp.add_argument("--handle-small",choices=["drop","fill","repeat"],default="drop",
@@ -112,7 +113,7 @@ lossgrp.add_argument("--ortho-weight",type=float,default=0.001,
 
 # misc
 miscgrp = parser.add_argument_group("misc")
-miscgrp.add_argument("--time-limit",default=4*60,help="max number of minutes to run (default 4 hrs)")
+miscgrp.add_argument("--time-limit",default=4*60,type=int,help="max number of minutes to run (default 4 hrs)")
 miscgrp.add_argument("--test",action="store_true",help="run minimal batches and epochs to test functionality")
 miscgrp.add_argument("--noplot",action="store_true",help="no batch plots")
 miscgrp.add_argument("--nolosses",action="store_true",help="eval only: do not compute losses")
@@ -142,6 +143,9 @@ if ARGS.dsname is None:
 if ARGS.regions == "ALL":
     ARGS.regions = get_all_regions(ARGS.dsname)
 
+if ARGS.channels == "ALL":
+    ARGS.channels = LIDAR_CHANNELS[3:]
+
 # save arguments to params file
 with open(MODEL_DIR.joinpath("params.json"), "w") as f:
     json.dump(vars(ARGS), f, indent=2)
@@ -159,7 +163,7 @@ output_channels_map = {
     "p2p": 3        # x,y,confidence
 }
 
-inpt_shape = (ARGS.npoints, len(LIDAR_CHANNELS))
+inpt_shape = (ARGS.npoints, 3 + len(ARGS.channels))
 
 model = pointnet(
     inpt_shape=inpt_shape,
