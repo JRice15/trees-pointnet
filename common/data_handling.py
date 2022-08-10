@@ -101,6 +101,8 @@ def get_data_splits(sets=("train", "val", "test"), regions=None):
 
     # select desired splits
     splits = [splits[name] for name in sets]
+    # convert to tuples
+    splits = [[tuple(p_id) for p_id in split] for split in splits]
 
     if regions is not None:
         # filter by regions
