@@ -13,7 +13,10 @@ parser.add_argument("--count",default=1,type=int)
 parsed, unknown = parser.parse_known_args()
 for name in unknown:
     if name.startswith("--"):
-        parser.add_argument(name)
+        kwargs = {}
+        if name == "--channels":
+            kwargs["nargs"] = "+"
+        parser.add_argument(name, **kwargs)
 ARGS = parser.parse_args()
 
 study = get_study(ARGS.name, assume_exists=True)
@@ -37,12 +40,13 @@ for key, value in vars(ARGS).items():
     if key in ("name", "basetrial", "count"):
         continue
     key = re.sub(r"_", "-", key)
-    try:
-        dtype = type(params[key])
-        value = dtype(value)
-    except KeyError:
-        value = interp_type(value)
-        print("interpolated type for", key, "to", type(value))
+    if not isinstance(value, list):
+        try:
+            dtype = type(params[key])
+            value = dtype(value)
+        except KeyError:
+            value = interp_type(value)
+            print("interpolated type for", key, "to", type(value))
     params[key] = value
 
 print(params)
