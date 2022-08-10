@@ -178,7 +178,7 @@ def get_naipfile_path(region, patch_num):
     """
     returns: str
     """
-    globname = "{}_*_{}.tif".format(region, patch_num)
+    globname = "{}{}.tif".format(region, patch_num)
     globpath = DATA_DIR.joinpath("NAIP_patches/", region, globname).as_posix()
     found = glob.glob(globpath)
     if len(found) != 1:
