@@ -198,7 +198,7 @@ if not ARGS.noplot:
     print("Generating example batch plots")
     train_viz_dir = MODEL_DIR.joinpath("training/example_batch_viz/")
     train_gen.__getitem__(0) # generate and throw away one batch, to make sure we don't have errors that dont appear the first time around
-    X,Y,ids = train_gen.__getitem__(1, return_ids=True, no_rotate=True)
+    X,Y,ids = train_gen.__getitem__(1, return_ids=True, no_augment=True)
     print("For example batch:")
     print("X max:", tf.reduce_max(X, axis=[0,1]))
     print("X min:", tf.reduce_min(X, axis=[0,1]))

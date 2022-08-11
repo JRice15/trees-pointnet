@@ -234,7 +234,7 @@ class LidarPatchGen(keras.utils.Sequence):
     def __len__(self):
         return self.num_ids // self.batch_size
 
-    def __getitem__(self, idx, return_ids=False, no_rotate=False):
+    def __getitem__(self, idx, return_ids=False, no_augment=False):
         """
         load one batch
         """
@@ -274,13 +274,12 @@ class LidarPatchGen(keras.utils.Sequence):
         #  this shuffles the points within each seperate patch in the same way, but that is random enough for me
         self.random.shuffle(X_batch, axis=1)
 
-        if self.training:
-            if not no_rotate:
-                # augment by a random rotation
-                rot_degrees = self.random.choice([0, 90, 180, 270])
-                X_batch = rotate_pts(X_batch, degrees=rot_degrees)
-                if not self.y_counts_only:
-                    Y_batch = rotate_pts(Y_batch, degrees=rot_degrees)
+        if self.training and (not no_augment):
+            # augment by a random rotation
+            rot_degrees = self.random.choice([0, 90, 180, 270])
+            X_batch = rotate_pts(X_batch, degrees=rot_degrees)
+            if not self.y_counts_only:
+                Y_batch = rotate_pts(Y_batch, degrees=rot_degrees)
             # random gaussian noise
             if ARGS.noise_sigma is not None:
                 # convert meters to 0-1 scale
