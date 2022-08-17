@@ -319,6 +319,15 @@ def generate_predictions(patchgen, model, outdir):
         overlapped_preds[name] = preds_overlapped
     timer.measure("overlap")
 
+    # save predictions
+    if ARGS.save_preds:
+        preds_string_keys = {
+            "_".join(map(str, p_id)): pts for p_id, pts in overlapped_preds["drop"].items()
+        }
+        outfile = outdir.joinpath("raw_preds.npz")
+        np.savez_compressed(outfile.as_posix(), **preds_string_keys)
+        del preds_string_keys
+
     return overlapped_preds, X_subdiv_normed
 
 
@@ -449,7 +458,7 @@ def evaluate_postproc_params(patchgen, outdir, preds_overlapped_dict, X_subdiv_n
         preds_string_keys = {
             "_".join(map(str, p_id)): pts for p_id, pts in results["pts"].items()
         }
-        outfile = outdir.joinpath("raw_preds.npz")
+        outfile = outdir.joinpath("raw_preds_postproc.npz")
         np.savez_compressed(outfile.as_posix(), **preds_string_keys)
         del preds_string_keys
 
