@@ -212,10 +212,11 @@ def plot_raster(gridvals, gridcoords, filename, *, colorbar_label=None,
     plt.tight_layout()
     plt.savefig(str(filename) + ".png", dpi=DPI)
 
-    # with markers
-    plot_markers(markers)
-    plt.tight_layout()
-    plt.savefig(str(filename) + "_annotated.png", dpi=DPI)
+    if markers is not None:
+        # with markers
+        plot_markers(markers)
+        plt.tight_layout()
+        plt.savefig(str(filename) + "_annotated.png", dpi=DPI)
 
     plt.clf()
     plt.close()
