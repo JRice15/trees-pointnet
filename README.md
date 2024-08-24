@@ -1,4 +1,6 @@
-# Urban Trees Pointnet
+# Deep Learning for Urban Tree Detection
+
+This repository provides code for detection of trees in the urban environment from LIDAR and multispectral imagery. The network backbone is a modified PointNet and PointNet2 architecture, as developed by Qi et al. 2017.
 
 ## Setting Up
 
