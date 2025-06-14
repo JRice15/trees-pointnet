@@ -1,11 +1,12 @@
 # Deep Learning for Urban Tree Detection
 
+Code and data for J.R. Rice, G.A. Fricker, & J. Ventura, 2025, ["An end-to-end deep learning solution for automated LiDAR tree detection in the urban environment"](https://doi.org/10.1016/j.ophoto.2025.100092), an adaptation of my M.S. thesis ["Deep Learning for Detecting Trees in the Urban Environment from LiDAR"](https://digitalcommons.calpoly.edu/theses/2569/) supervised by Dr. Jonathan Ventura.
+
 This repository provides code for detection of trees in the urban environment from LIDAR and multispectral imagery. The network backbone is a modified PointNet and PointNet2 architecture, as developed by Qi et al. 2017.
 
 ## Setting Up
 
-Create a conda environment with tensorflow 2.4 (or 2.4-gpu), using the provided
-yml file
+Create a conda environment with tensorflow 2.4 (or 2.4-gpu), using the provided yml file
 
 
 ## How to Run
