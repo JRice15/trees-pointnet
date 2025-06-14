@@ -2,7 +2,9 @@
 
 Code and data for J.R. Rice, G.A. Fricker, & J. Ventura, 2025, ["An end-to-end deep learning solution for automated LiDAR tree detection in the urban environment"](https://doi.org/10.1016/j.ophoto.2025.100092), an adaptation of my M.S. thesis ["Deep Learning for Detecting Trees in the Urban Environment from LiDAR"](https://digitalcommons.calpoly.edu/theses/2569/) supervised by Dr. Jonathan Ventura.
 
-This repository provides code for detection of trees in the urban environment from LIDAR and multispectral imagery. The network backbone is a modified PointNet and PointNet2 architecture, as developed by Qi et al. 2017.
+This repository provides code for detection of trees in the urban environment from LIDAR and multispectral imagery. The network backbone is a modified PointNet and PointNet2 architecture, as developed by [Qi et al. 2017](https://arxiv.org/pdf/1706.02413).
+
+The Pointnet2 Tensorflow implementation (in pointnet/src/pnet2) is adapted from the code kindly made publicly available by David Griffiths: https://github.com/dgriffiths3/pointnet2-tensorflow2
 
 ## Setting Up
 
